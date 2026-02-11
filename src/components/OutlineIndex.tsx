@@ -277,7 +277,7 @@ const DesktopAperture = memo(function DesktopAperture({
             {/* Label — absolute 定位，不撑大触发区域 */}
             <div
               data-label
-              className="absolute right-full mr-2.5 text-[13px] leading-none text-text-200 whitespace-nowrap pointer-events-none"
+              className="absolute right-full mr-2.5 text-[13px] leading-none text-text-200 whitespace-nowrap cursor-pointer"
               style={{ opacity: 0, transform: 'translateX(10px)', visibility: 'hidden' }}
             >
               {entry.title}
