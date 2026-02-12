@@ -1,5 +1,6 @@
 import { memo, useState } from 'react'
 import { RetryIcon, CompactIcon, PatchIcon, ChevronDownIcon, FileIcon } from '../../../components/Icons'
+import { useDelayedRender } from '../../../hooks/useDelayedRender'
 import type { RetryPart, CompactionPart, PatchPart } from '../../../types/message'
 
 // ============================================
@@ -12,6 +13,7 @@ interface RetryPartViewProps {
 
 export const RetryPartView = memo(function RetryPartView({ part }: RetryPartViewProps) {
   const [expanded, setExpanded] = useState(false)
+  const shouldRenderBody = useDelayedRender(expanded)
   const { attempt, error, time } = part
   
   const timeStr = new Date(time.created).toLocaleTimeString()
@@ -37,21 +39,27 @@ export const RetryPartView = memo(function RetryPartView({ part }: RetryPartView
             Retryable
           </span>
         )}
-        <ChevronDownIcon className={`w-4 h-4 text-text-400 transition-transform ${expanded ? 'rotate-180' : ''}`} />
+        <ChevronDownIcon className={`w-4 h-4 text-text-400 transition-transform duration-300 ${expanded ? 'rotate-180' : ''}`} />
       </div>
       
-      {expanded && (
-        <div className="mt-2 pt-2 border-t border-warning-100/20">
-          <p className="text-xs text-text-300 font-mono break-all">
-            {error.data.message}
-          </p>
-          {error.data.statusCode && (
-            <p className="text-[10px] text-text-500 mt-1">
-              Status: {error.data.statusCode}
-            </p>
+      <div className={`grid transition-[grid-template-rows,opacity] duration-300 ease-out ${
+        expanded ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
+      }`}>
+        <div className="overflow-hidden">
+          {shouldRenderBody && (
+            <div className="mt-2 pt-2 border-t border-warning-100/20">
+              <p className="text-xs text-text-300 font-mono break-all">
+                {error.data.message}
+              </p>
+              {error.data.statusCode && (
+                <p className="text-[10px] text-text-500 mt-1">
+                  Status: {error.data.statusCode}
+                </p>
+              )}
+            </div>
           )}
         </div>
-      )}
+      </div>
     </div>
   )
 })
@@ -89,6 +97,7 @@ interface PatchPartViewProps {
 
 export const PatchPartView = memo(function PatchPartView({ part }: PatchPartViewProps) {
   const [expanded, setExpanded] = useState(false)
+  const shouldRenderBody = useDelayedRender(expanded)
   const { hash, files } = part
   const fileCount = files.length
   
@@ -107,19 +116,25 @@ export const PatchPartView = memo(function PatchPartView({ part }: PatchPartView
             {hash.slice(0, 7)}
           </span>
         </div>
-        <ChevronDownIcon className={`w-4 h-4 text-text-400 transition-transform ${expanded ? 'rotate-180' : ''}`} />
+        <ChevronDownIcon className={`w-4 h-4 text-text-400 transition-transform duration-300 ${expanded ? 'rotate-180' : ''}`} />
       </div>
       
-      {expanded && (
-        <div className="px-3 py-2 border-t border-border-200/40 space-y-1">
-          {files.map((file, idx) => (
-            <div key={idx} className="flex items-center gap-2 text-xs">
-              <FileIcon className="w-3 h-3 text-text-500" />
-              <span className="text-text-300 font-mono truncate">{file}</span>
+      <div className={`grid transition-[grid-template-rows,opacity] duration-300 ease-out ${
+        expanded ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
+      }`}>
+        <div className="overflow-hidden">
+          {shouldRenderBody && (
+            <div className="px-3 py-2 border-t border-border-200/40 space-y-1">
+              {files.map((file, idx) => (
+                <div key={idx} className="flex items-center gap-2 text-xs">
+                  <FileIcon className="w-3 h-3 text-text-500" />
+                  <span className="text-text-300 font-mono truncate">{file}</span>
+                </div>
+              ))}
             </div>
-          ))}
+          )}
         </div>
-      )}
+      </div>
     </div>
   )
 })

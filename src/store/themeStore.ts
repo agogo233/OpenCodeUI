@@ -37,6 +37,8 @@ export interface ThemeState {
   customCSS: string
   /** 全局字体大小 (px) */
   fontSize: FontSize
+  /** 是否自动折叠长用户消息 */
+  collapseUserMessages: boolean
 }
 
 // ============================================
@@ -47,6 +49,7 @@ const STORAGE_KEY_PRESET = 'theme-preset'
 const STORAGE_KEY_COLOR_MODE = 'theme-mode'
 const STORAGE_KEY_CUSTOM_CSS = 'theme-custom-css'
 const STORAGE_KEY_FONT_SIZE = 'theme-font-size'
+const STORAGE_KEY_COLLAPSE_USER_MESSAGES = 'collapse-user-messages'
 
 // ============================================
 // DOM Style Element IDs
@@ -68,12 +71,15 @@ class ThemeStore {
     const savedMode = localStorage.getItem(STORAGE_KEY_COLOR_MODE) as ColorMode || 'system'
     const savedCSS = localStorage.getItem(STORAGE_KEY_CUSTOM_CSS) || ''
     const savedFontSize = clampFontSize(Number(localStorage.getItem(STORAGE_KEY_FONT_SIZE)) || DEFAULT_FONT_SIZE)
+    const savedCollapse = localStorage.getItem(STORAGE_KEY_COLLAPSE_USER_MESSAGES)
+    const collapseUserMessages = savedCollapse === null ? true : savedCollapse === 'true'
     
     this.state = {
       presetId: savedPreset,
       colorMode: savedMode,
       customCSS: savedCSS,
       fontSize: savedFontSize,
+      collapseUserMessages,
     }
   }
   
@@ -87,6 +93,7 @@ class ThemeStore {
   get colorMode() { return this.state.colorMode }
   get customCSS() { return this.state.customCSS }
   get fontSize() { return this.state.fontSize }
+  get collapseUserMessages() { return this.state.collapseUserMessages }
   
   /** 获取当前主题预设（内置主题返回对象，自定义返回 undefined） */
   getPreset(): ThemePreset | undefined {
@@ -151,6 +158,13 @@ class ThemeStore {
     this.state = { ...this.state, fontSize: clamped }
     localStorage.setItem(STORAGE_KEY_FONT_SIZE, String(clamped))
     this.applyFontSize()
+    this.emit()
+  }
+  
+  setCollapseUserMessages(enabled: boolean) {
+    if (this.state.collapseUserMessages === enabled) return
+    this.state = { ...this.state, collapseUserMessages: enabled }
+    localStorage.setItem(STORAGE_KEY_COLLAPSE_USER_MESSAGES, String(enabled))
     this.emit()
   }
   

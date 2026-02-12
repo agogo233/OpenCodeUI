@@ -157,6 +157,12 @@ export function useTheme() {
     themeStore.setFontSize(size)
   }, [])
 
+  // ---- Collapse User Messages ----
+  
+  const setCollapseUserMessages = useCallback((enabled: boolean) => {
+    themeStore.setCollapseUserMessages(enabled)
+  }, [])
+
   return {
     // 日夜模式（向后兼容）
     mode: state.colorMode,
@@ -180,5 +186,9 @@ export function useTheme() {
     // 字体大小
     fontSize: state.fontSize,
     setFontSize,
+    
+    // 折叠长用户消息
+    collapseUserMessages: state.collapseUserMessages,
+    setCollapseUserMessages,
   }
 }

@@ -1,6 +1,7 @@
 import { useState, memo } from 'react'
 import { CloseIcon, ChevronDownIcon } from '../../components/Icons'
 import { getAttachmentIcon, hasExpandableContent } from './utils'
+import { useDelayedRender } from '../../hooks/useDelayedRender'
 import type { Attachment } from './types'
 
 interface AttachmentItemProps {
@@ -20,15 +21,22 @@ function AttachmentItemComponent({
 }: AttachmentItemProps) {
   const [isExpanded, setIsExpanded] = useState(false)
   const [imageError, setImageError] = useState(false)
+  const shouldRenderBody = useDelayedRender(isExpanded)
   
   const { Icon, colorClass } = getAttachmentIcon(attachment)
   const canExpand = expandable && hasExpandableContent(attachment)
   
+  // 宽度模型：学习 ReasoningPartView 的做法
+  // 收起时固定宽度，展开时用百分比+max限制（可被 CSS 过渡）
+  // 不用 w-auto（无法过渡），用 w-full（百分比 → 计算像素 → 可过渡）
+  const collapsedWidth = className ? '' : 'w-[140px]'
+  const expandedWidth = 'w-full min-w-[140px] max-w-[440px]'
+  
   return (
     <div 
-      className={`relative group flex flex-col transition-all duration-200 ease-in-out ${
+      className={`relative group flex flex-col overflow-hidden transition-all duration-300 ease-out ${
         className || ''
-      } ${isExpanded ? '!w-auto !min-w-[200px] !max-w-[500px]' : (!className ? 'w-[140px]' : '')}`}
+      } ${isExpanded ? expandedWidth : collapsedWidth}`}
     >
       {/* 标签头部 */}
       <div 
@@ -46,7 +54,7 @@ function AttachmentItemComponent({
           {attachment.displayName}
         </span>
         {canExpand && (
-          <span className={`text-text-400 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`}>
+          <span className={`text-text-400 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`}>
             <ChevronDownIcon size={10} />
           </span>
         )}
@@ -61,19 +69,21 @@ function AttachmentItemComponent({
         )}
       </div>
       
-      {/* 展开的详情面板 - 带动画 */}
+      {/* 展开的详情面板 - grid-rows 动画（和 think tag 同源） */}
       {canExpand && (
         <div 
-          className={`grid transition-[grid-template-rows] duration-200 ease-out ${
+          className={`grid transition-[grid-template-rows] duration-300 ease-out ${
             isExpanded ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
           }`}
         >
           <div className="overflow-hidden">
-            <ExpandedContent 
-              attachment={attachment} 
-              imageError={imageError}
-              onImageError={() => setImageError(true)}
-            />
+            {shouldRenderBody && (
+              <ExpandedContent 
+                attachment={attachment} 
+                imageError={imageError}
+                onImageError={() => setImageError(true)}
+              />
+            )}
           </div>
         </div>
       )}
@@ -139,7 +149,7 @@ function ExpandedContent({ attachment, imageError, onImageError }: ExpandedConte
   }
 
   return (
-    <div className="mt-1 rounded-md bg-bg-200 border border-border-300 overflow-hidden w-full max-w-[500px]">
+    <div className="mt-1 rounded-md bg-bg-200 border border-border-300 overflow-hidden w-full">
       {contentNode}
       
       {/* 元信息 */}

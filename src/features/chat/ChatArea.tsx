@@ -9,7 +9,6 @@ import { messageStore } from '../../store'
 import type { Message } from '../../types/message'
 import {
   VIRTUOSO_START_INDEX,
-  AUTO_SCROLL_THRESHOLD_PX,
   SCROLL_CHECK_INTERVAL_MS,
   SCROLL_RESUME_DELAY_MS,
   AT_BOTTOM_THRESHOLD_PX,
@@ -99,6 +98,8 @@ export const ChatArea = memo(forwardRef<ChatAreaHandle, ChatAreaProps>(({
   // 用户正在滚动的标志 - 滚动期间不触发自动滚动
   const isUserScrollingRef = useRef(false)
   const scrollingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // 用户在流式期间主动向上滚动 - 完全停止自动滚动，直到用户滚回底部
+  const userScrolledAwayRef = useRef(false)
   
   // Session 切换过渡：简单的淡入效果
   // 使用 sessionId 作为 key，切换时会触发组件重新挂载从而产生 CSS 动画
@@ -117,22 +118,15 @@ export const ChatArea = memo(forwardRef<ChatAreaHandle, ChatAreaProps>(({
     if (!isStreaming) return
     
     const scrollInterval = setInterval(() => {
-      // 如果用户正在滚动或被禁用，绝对不自动滚
-      if (isUserScrollingRef.current || suppressScrollRef.current) {
+      // 如果用户正在滚动、被禁用、或用户已主动滚离底部，绝对不自动滚
+      if (isUserScrollingRef.current || suppressScrollRef.current || userScrolledAwayRef.current) {
         return
       }
       
-      const shouldForceScroll = (() => {
-        if (!scrollParent) return false
-        const distanceToBottom = scrollParent.scrollHeight - scrollParent.scrollTop - scrollParent.clientHeight
-        // 关键逻辑：
-        // 1. 如果 Virtuoso 认为在底部，那就滚
-        // 2. 如果 Virtuoso 认为不在底部，但实际距离 < 150px，那说明是打字机导致的"假"脱离底部，强制拉回来
-        // 3. 只有当用户真的往上翻了很多（> 150px），才停止滚动
-        return isUserAtBottomRef.current || distanceToBottom < AUTO_SCROLL_THRESHOLD_PX
-      })()
-
-      if (!shouldForceScroll) return
+      // 只在用户确实在底部时才自动滚动
+      if (!isUserAtBottomRef.current) {
+        return
+      }
       
       // 1. Virtuoso 滚动
       virtuosoRef.current?.scrollToIndex({ 
@@ -163,6 +157,13 @@ export const ChatArea = memo(forwardRef<ChatAreaHandle, ChatAreaProps>(({
     }
   }, [])
   
+  // 流式结束时重置"用户滚离"标志，避免下次发消息时残留
+  useEffect(() => {
+    if (!isStreaming) {
+      userScrolledAwayRef.current = false
+    }
+  }, [isStreaming])
+  
   // firstItemIndex：基于 prependedCount 计算，确保和 messages 同步
   const firstItemIndex = START_INDEX - prependedCount
 
@@ -175,8 +176,8 @@ export const ChatArea = memo(forwardRef<ChatAreaHandle, ChatAreaProps>(({
       })
     },
     scrollToBottomIfAtBottom: () => {
-      // 用户正在滚动、被禁用、或不在底部时，不自动滚动
-      if (isUserScrollingRef.current || suppressScrollRef.current || !isUserAtBottomRef.current) {
+      // 用户正在滚动、被禁用、不在底部、或已主动滚离时，不自动滚动
+      if (isUserScrollingRef.current || suppressScrollRef.current || !isUserAtBottomRef.current || userScrolledAwayRef.current) {
         return
       }
       // 使用 auto 而不是 smooth，减少和用户滚动的冲突
@@ -225,6 +226,10 @@ export const ChatArea = memo(forwardRef<ChatAreaHandle, ChatAreaProps>(({
   // 追踪用户滚动位置
   const handleAtBottomStateChange = useCallback((atBottom: boolean) => {
     isUserAtBottomRef.current = atBottom
+    // 用户滚回底部，重置"滚离"标志，恢复自动滚动
+    if (atBottom) {
+      userScrolledAwayRef.current = false
+    }
   }, [])
   
   // 追踪用户是否正在滚动
@@ -232,6 +237,10 @@ export const ChatArea = memo(forwardRef<ChatAreaHandle, ChatAreaProps>(({
     if (scrolling) {
       // 用户开始滚动，立即禁用自动滚动
       isUserScrollingRef.current = true
+      // 如果正在流式且用户不在底部，标记为"主动滚离"
+      if (isStreaming && !isUserAtBottomRef.current) {
+        userScrolledAwayRef.current = true
+      }
       // 清除之前的 timeout
       if (scrollingTimeoutRef.current) {
         clearTimeout(scrollingTimeoutRef.current)
@@ -242,9 +251,13 @@ export const ChatArea = memo(forwardRef<ChatAreaHandle, ChatAreaProps>(({
       // 给用户足够的缓冲时间
       scrollingTimeoutRef.current = setTimeout(() => {
         isUserScrollingRef.current = false
+        // 再次检查：如果滚动停止时不在底部且正在流式，确保标记滚离
+        if (isStreaming && !isUserAtBottomRef.current) {
+          userScrolledAwayRef.current = true
+        }
       }, SCROLL_RESUME_DELAY_MS)
     }
-  }, [])
+  }, [isStreaming])
 
   // 消息项渲染 - 带 ref 注册
   const renderMessage = useCallback((msg: Message) => {

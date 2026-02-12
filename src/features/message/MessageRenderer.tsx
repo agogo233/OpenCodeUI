@@ -1,8 +1,8 @@
-import { memo, useState } from 'react'
+import { memo, useState, useRef, useEffect, useMemo } from 'react'
 import { ChevronDownIcon, ChevronRightIcon, UndoIcon } from '../../components/Icons'
-import { useEffect, useMemo } from 'react'
 import { CopyButton } from '../../components/ui'
 import { useDelayedRender } from '../../hooks'
+import { useTheme } from '../../hooks/useTheme'
 import {
   TextPartView,
   ReasoningPartView,
@@ -50,6 +50,71 @@ export const MessageRenderer = memo(function MessageRenderer({ message, onUndo, 
 })
 
 // ============================================
+// Collapsible User Text
+// ============================================
+
+/** 折叠阈值：超过此高度(px)时才折叠，大约 8 行 */
+const COLLAPSE_HEIGHT_THRESHOLD = 184
+
+const CollapsibleUserText = memo(function CollapsibleUserText({ text, collapseEnabled }: { text: string; collapseEnabled: boolean }) {
+  const contentRef = useRef<HTMLParagraphElement>(null)
+  const [isOverflow, setIsOverflow] = useState(false)
+  const [expanded, setExpanded] = useState(false)
+  const [fullHeight, setFullHeight] = useState(0)
+  
+  useEffect(() => {
+    const el = contentRef.current
+    if (!el || !collapseEnabled) {
+      setIsOverflow(false)
+      return
+    }
+    // 检测内容是否超出阈值
+    const check = () => {
+      const h = el.scrollHeight
+      setFullHeight(h)
+      setIsOverflow(h > COLLAPSE_HEIGHT_THRESHOLD)
+    }
+    check()
+    // 字体加载后可能改变高度
+    if (document.fonts?.ready) {
+      document.fonts.ready.then(check)
+    }
+  }, [text, collapseEnabled])
+  
+  const showCollapse = collapseEnabled && isOverflow
+  const isCollapsed = showCollapse && !expanded
+  
+  return (
+    <div className="px-4 py-2.5 bg-bg-300 rounded-2xl max-w-full">
+      <div className="relative">
+        <p
+          ref={contentRef}
+          className="whitespace-pre-wrap break-words text-sm text-text-100 leading-relaxed overflow-hidden transition-[max-height] duration-300 ease-in-out"
+          style={showCollapse ? { maxHeight: isCollapsed ? `${COLLAPSE_HEIGHT_THRESHOLD}px` : `${fullHeight}px` } : undefined}
+        >
+          {text}
+        </p>
+        {/* 底部渐变遮罩 */}
+        <div 
+          className={`absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-bg-300 to-transparent pointer-events-none transition-opacity duration-300 ${
+            isCollapsed ? 'opacity-100' : 'opacity-0'
+          }`}
+          style={!showCollapse ? { display: 'none' } : undefined}
+        />
+      </div>
+      {showCollapse && (
+        <button
+          onClick={() => setExpanded(!expanded)}
+          className="mt-1 text-xs text-text-400 hover:text-text-200 transition-colors"
+        >
+          {expanded ? 'Show less' : 'Show more'}
+        </button>
+      )}
+    </div>
+  )
+})
+
+// ============================================
 // User Message View
 // ============================================
 
@@ -62,6 +127,8 @@ interface UserMessageViewProps {
 const UserMessageView = memo(function UserMessageView({ message, onUndo, canUndo }: UserMessageViewProps) {
   const { parts, info } = message
   const [showSystemContext, setShowSystemContext] = useState(false)
+  const shouldRenderSystemContext = useDelayedRender(showSystemContext)
+  const { collapseUserMessages } = useTheme()
   
   // 分离不同类型的 parts
   const textParts = parts.filter((p): p is TextPart => p.type === 'text' && !p.synthetic)
@@ -77,11 +144,7 @@ const UserMessageView = memo(function UserMessageView({ message, onUndo, canUndo
       <div className="flex flex-col gap-1 items-end w-full">
         {/* 消息文本 */}
         {messageText && (
-          <div className="px-4 py-2.5 bg-bg-300 rounded-2xl max-w-full">
-            <p className="whitespace-pre-wrap break-words text-sm text-text-100 leading-relaxed">
-              {messageText}
-            </p>
-          </div>
+          <CollapsibleUserText text={messageText} collapseEnabled={collapseUserMessages} />
         )}
         
         {/* 用户附件 */}
@@ -104,18 +167,24 @@ const UserMessageView = memo(function UserMessageView({ message, onUndo, canUndo
               className="flex items-center gap-1 text-xs text-text-400 hover:text-text-300 transition-colors py-1 px-2 rounded hover:bg-bg-200"
             >
               <span>{showSystemContext ? 'Hide' : 'Show'} system context ({syntheticParts.length})</span>
-              <span>
-              {showSystemContext ? <ChevronDownIcon size={10} /> : <ChevronRightIcon size={10} />}
-            </span>
+              <span className={`transition-transform duration-300 ${showSystemContext ? 'rotate-180' : ''}`}>
+                <ChevronDownIcon size={10} />
+              </span>
             </button>
             
-            {showSystemContext && (
-              <div className="pt-2 flex flex-wrap gap-2 justify-end">
-                {syntheticParts.map(part => (
-                  <SyntheticTextPartView key={part.id} part={part} />
-                ))}
+            <div className={`grid w-full transition-[grid-template-rows,opacity] duration-300 ease-out ${
+              showSystemContext ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
+            }`}>
+              <div className="overflow-hidden">
+                {shouldRenderSystemContext && (
+                  <div className="pt-2 flex flex-wrap gap-2 justify-end">
+                    {syntheticParts.map(part => (
+                      <SyntheticTextPartView key={part.id} part={part} />
+                    ))}
+                  </div>
+                )}
               </div>
-            )}
+            </div>
           </div>
         )}
 

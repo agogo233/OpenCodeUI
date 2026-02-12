@@ -5,7 +5,7 @@ import {
   SunIcon, MoonIcon, SystemIcon, MaximizeIcon, MinimizeIcon, 
   PathAutoIcon, PathUnixIcon, PathWindowsIcon,
   GlobeIcon, PlusIcon, TrashIcon, CheckIcon, WifiIcon, WifiOffIcon, SpinnerIcon, KeyIcon,
-  SettingsIcon, KeyboardIcon, CloseIcon, BellIcon, BoltIcon
+  SettingsIcon, KeyboardIcon, CloseIcon, BellIcon, BoltIcon, CompactIcon
 } from '../../components/Icons'
 import { usePathMode, useServerStore, useIsMobile, useNotification } from '../../hooks'
 import { autoApproveStore } from '../../store'
@@ -372,12 +372,19 @@ function GeneralSettings() {
   const { pathMode, setPathMode, effectiveStyle, detectedStyle, isAutoMode } = usePathMode()
   const [autoApprove, setAutoApprove] = useState(autoApproveStore.enabled)
   const { enabled: notificationsEnabled, setEnabled: setNotificationsEnabled, supported: notificationsSupported, permission: notificationPermission } = useNotification()
+  const [collapseUserMessages, setCollapseUserMessages] = useState(themeStore.collapseUserMessages)
 
   const handleAutoApprove = () => {
     const v = !autoApprove
     setAutoApprove(v)
     autoApproveStore.setEnabled(v)
     if (!v) autoApproveStore.clearAllRules()
+  }
+
+  const handleCollapseToggle = () => {
+    const v = !collapseUserMessages
+    setCollapseUserMessages(v)
+    themeStore.setCollapseUserMessages(v)
   }
 
   return (
@@ -425,6 +432,14 @@ function GeneralSettings() {
           />
         </SettingRow>
       )}
+      <SettingRow
+        label="Collapse Long Messages"
+        description="Auto-collapse lengthy user messages"
+        icon={<CompactIcon size={14} />}
+        onClick={handleCollapseToggle}
+      >
+        <Toggle enabled={collapseUserMessages} onChange={handleCollapseToggle} />
+      </SettingRow>
     </div>
   )
 }
