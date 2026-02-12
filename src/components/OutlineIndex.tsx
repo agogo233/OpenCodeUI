@@ -48,7 +48,10 @@ const MARGIN_MAX = 14
 // ============================================
 
 function messageHasContent(msg: Message): boolean {
-  if (msg.parts.length === 0) return true
+  if (msg.parts.length === 0) {
+    if (msg.info.role === 'assistant' && 'error' in msg.info && msg.info.error) return false
+    return true
+  }
   return msg.parts.some(part => {
     switch (part.type) {
       case 'text':

@@ -215,7 +215,7 @@ const TaskHeader = memo(function TaskHeader({
       {sessionId && (
         <button
           onClick={handleOpenInNewTab}
-          className="flex-shrink-0 sm:opacity-0 sm:group-hover:opacity-100 p-1 text-text-500 hover:text-accent-main-100 transition-all"
+          className="flex-shrink-0 p-1 text-text-500 hover:text-accent-main-100 transition-all"
           title="Open in new tab"
         >
           <ExternalLinkIcon size={12} />

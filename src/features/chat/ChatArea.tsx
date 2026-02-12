@@ -31,6 +31,8 @@ interface ChatAreaProps {
   canUndo?: boolean
   registerMessage?: (id: string, element: HTMLElement | null) => void
   isWideMode?: boolean
+  /** 底部留白高度（输入框实际高度），0 则用默认值 */
+  bottomPadding?: number
   onVisibleMessageIdsChange?: (ids: string[]) => void
 }
 
@@ -48,7 +50,11 @@ export type ChatAreaHandle = {
 
 // 检查消息是否有可见内容
 function messageHasContent(msg: Message): boolean {
-  if (msg.parts.length === 0) return true
+  if (msg.parts.length === 0) {
+    // 被中止或出错且从未产生内容的 assistant 消息，不显示
+    if (msg.info.role === 'assistant' && 'error' in msg.info && msg.info.error) return false
+    return true
+  }
   return msg.parts.some(part => {
     switch (part.type) {
       case 'text':
@@ -80,6 +86,7 @@ export const ChatArea = memo(forwardRef<ChatAreaHandle, ChatAreaProps>(({
   canUndo,
   registerMessage,
   isWideMode = false,
+  bottomPadding = 0,
   onVisibleMessageIdsChange,
 }, ref) => {
   const virtuosoRef = useRef<VirtuosoHandle>(null)
@@ -300,7 +307,7 @@ export const ChatArea = memo(forwardRef<ChatAreaHandle, ChatAreaProps>(({
             overscan={{ main: VIRTUOSO_OVERSCAN_PX, reverse: VIRTUOSO_OVERSCAN_PX }}
             components={{
               Header: () => <div className="h-20" />,
-              Footer: () => <div className="h-64" />
+              Footer: () => <div style={{ height: bottomPadding > 0 ? bottomPadding + 16 : 256 }} />
             }}
             rangeChanged={(range) => {
               if (!onVisibleMessageIdsChange) return

@@ -58,6 +58,24 @@ function App() {
   const [visibleMessageIds, setVisibleMessageIds] = useState<string[]>([])
 
   // ============================================
+  // Input Box Height (动态测量，用于 ChatArea 底部留白)
+  // ============================================
+  const [inputBoxHeight, setInputBoxHeight] = useState(0)
+  const inputBoxWrapperRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const el = inputBoxWrapperRef.current
+    if (!el) return
+    const ro = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        setInputBoxHeight(entry.contentRect.height)
+      }
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+
+  // ============================================
   // Wide Mode
   // ============================================
   const [isWideMode, setIsWideMode] = useState(() => {
@@ -376,6 +394,7 @@ function App() {
                 canUndo={canUndo}
                 registerMessage={registerMessage}
                 isWideMode={isWideMode}
+                bottomPadding={inputBoxHeight}
                 onVisibleMessageIdsChange={(ids) => {
                   handleVisibleMessageIdsChange(ids)
                   setVisibleMessageIds(ids)
@@ -391,7 +410,7 @@ function App() {
             />
 
             {/* Floating Input Box */}
-            <div className="absolute bottom-0 left-0 right-0 z-10 pointer-events-none">
+            <div ref={inputBoxWrapperRef} className="absolute bottom-0 left-0 right-0 z-10 pointer-events-none">
               {/* Double-Esc cancel hint */}
               {showCancelHint && (
                 <div className="flex justify-center mb-2 pointer-events-none">
