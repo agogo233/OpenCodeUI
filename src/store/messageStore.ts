@@ -689,6 +689,28 @@ class MessageStore {
   }
 
   /**
+   * 清空所有 session 数据（服务器切换时调用）
+   */
+  clearAll() {
+    this.currentSessionId = null
+    this.sessions.clear()
+    this.sessionAccessTime.clear()
+    this.hydratedMessageIds.clear()
+    this.persistedMessageKeys.clear()
+    this.hydratedMessageKeys.clear()
+    this.visibleMessagesCache = null
+    this.visibleMessagesCacheSessionId = null
+    this.visibleMessagesCacheRevertId = null
+    this.visibleMessagesCacheLength = 0
+    if (this.rafId !== null) {
+      cancelAnimationFrame(this.rafId)
+      this.rafId = null
+    }
+    this.pendingNotify = false
+    this.notifyImmediate()
+  }
+
+  /**
    * 清空 session（用于新建对话）
    */
   clearSession(sessionId: string) {

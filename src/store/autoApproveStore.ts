@@ -3,6 +3,8 @@
 // 前端自动批准规则存储，只存内存，刷新即清空
 // ============================================
 
+import { serverStorage } from '../utils/perServerStorage'
+
 /**
  * 自动批准规则
  */
@@ -41,11 +43,25 @@ class AutoApproveStore {
   constructor() {
     // 从 localStorage 读取开关状态
     try {
-      const stored = localStorage.getItem(this.STORAGE_KEY)
+      const stored = serverStorage.get(this.STORAGE_KEY)
       this._enabled = stored === 'true'
     } catch {
       this._enabled = false
     }
+  }
+  
+  /**
+   * 重新从 storage 加载开关状态（服务器切换时调用）
+   */
+  reloadFromStorage(): void {
+    try {
+      const stored = serverStorage.get(this.STORAGE_KEY)
+      this._enabled = stored === 'true'
+    } catch {
+      this._enabled = false
+    }
+    // 切换服务器时也清空所有规则
+    this.rulesMap.clear()
   }
   
   /**
@@ -61,7 +77,7 @@ class AutoApproveStore {
   setEnabled(value: boolean): void {
     this._enabled = value
     try {
-      localStorage.setItem(this.STORAGE_KEY, String(value))
+      serverStorage.set(this.STORAGE_KEY, String(value))
     } catch {
       // ignore
     }

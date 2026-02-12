@@ -43,6 +43,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const searchTimerRef = useRef<number | null>(null)
   const currentDirectoryRef = useRef(currentDirectory)
   const isLoadingMoreRef = useRef(false)  // 防止并发 loadMore
+  const fetchSessionsRef = useRef<() => Promise<void>>(() => Promise.resolve())
   
   // 保持 ref 同步
   useEffect(() => {
@@ -102,6 +103,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     }
   }, [currentDirectory, search])
 
+  // 保持 fetchSessions ref 同步（用于 SSE onReconnected 回调）
+  fetchSessionsRef.current = fetchSessions
+
   // 监听 directory 和 search 变化
   useEffect(() => {
     if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
@@ -144,6 +148,14 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       onTodoUpdated: (data) => {
         // 更新 todoStore
         todoStore.setTodos(data.sessionID, data.todos)
+      },
+      onReconnected: () => {
+        // SSE 重连后（包括切换服务器触发的重连）
+        // 先清空旧数据，避免显示上一个服务器的 session
+        setSessions([])
+        setCurrentSessionId(null)
+        // 重新加载 session 列表
+        fetchSessionsRef.current()
       },
     })
 

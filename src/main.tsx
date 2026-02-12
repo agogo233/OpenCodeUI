@@ -4,10 +4,38 @@ import './index.css'
 import App from './App.tsx'
 import { DirectoryProvider, SessionProvider } from './contexts'
 import { themeStore } from './store/themeStore'
+import { serverStore } from './store/serverStore'
+import { messageStore } from './store/messageStore'
+import { childSessionStore } from './store/childSessionStore'
+import { todoStore } from './store/todoStore'
+import { messageCacheStore } from './store/messageCacheStore'
+import { autoApproveStore } from './store/autoApproveStore'
+import { reconnectSSE } from './api/events'
+import { resetPathModeCache } from './utils/directoryUtils'
 import { isTauri } from './utils/tauri'
 
 // 初始化主题系统（在 React 渲染前注入 CSS 变量，避免闪烁）
 themeStore.init()
+
+// 注册 server 切换 → 清理所有 server-specific 状态 + SSE 重连
+serverStore.onServerChange(() => {
+  // 1. 清空内存中的 session/消息数据
+  messageStore.clearAll()
+  childSessionStore.clearAll()
+  todoStore.clearAll()
+  
+  // 2. 清空 IndexedDB 消息缓存
+  void messageCacheStore.clearAll()
+  
+  // 3. 重置路径模式缓存（不同服务器可能是不同操作系统）
+  resetPathModeCache()
+  
+  // 4. 重新加载 auto-approve 开关状态（从新服务器的 storage key 读取）
+  autoApproveStore.reloadFromStorage()
+  
+  // 5. 重连 SSE（会自动连到新服务器）
+  reconnectSSE()
+})
 
 // Tauri 原生 app 初始化
 if (isTauri()) {

@@ -82,6 +82,16 @@ class TodoStore {
   }
 
   /**
+   * 清空所有数据（服务器切换时调用）
+   */
+  clearAll() {
+    this.sessions.clear()
+    this.statsCache.clear()
+    this.version++
+    this.notify()
+  }
+
+  /**
    * 获取 todos 统计信息（缓存版本）
    */
   getStats(sessionId: string): TodoStats {

@@ -7,8 +7,9 @@ import {
   GlobeIcon, PlusIcon, TrashIcon, CheckIcon, WifiIcon, WifiOffIcon, SpinnerIcon, KeyIcon,
   SettingsIcon, KeyboardIcon, CloseIcon, BellIcon, BoltIcon, CompactIcon
 } from '../../components/Icons'
-import { usePathMode, useServerStore, useIsMobile, useNotification } from '../../hooks'
-import { autoApproveStore } from '../../store'
+import { usePathMode, useServerStore, useIsMobile, useNotification, useRouter } from '../../hooks'
+import { autoApproveStore, messageStore } from '../../store'
+import { reconnectSSE } from '../../api/events'
 import { themeStore } from '../../store/themeStore'
 import { KeybindingsSection } from './KeybindingsSection'
 import type { ThemeMode } from '../../hooks'
@@ -611,24 +612,50 @@ function AddServerForm({ onAdd, onCancel }: {
 function ServersSettings() {
   const [addingServer, setAddingServer] = useState(false)
   const { servers, activeServer, addServer, removeServer, setActiveServer, checkHealth, checkAllHealth, getHealth } = useServerStore()
+  const { navigateHome, sessionId: routeSessionId } = useRouter()
   
   useEffect(() => { checkAllHealth() }, [checkAllHealth])
+
+  // 切换服务器：设置 active + 清理当前 session + 导航回首页
+  const handleSelectServer = useCallback((id: string) => {
+    if (activeServer?.id === id) return // 没变，不做事
+    
+    // 清理当前 session 的 store 状态
+    if (routeSessionId) {
+      messageStore.clearSession(routeSessionId)
+    }
+    
+    setActiveServer(id) // 内部触发 serverChangeListeners → reconnectSSE()
+    navigateHome()
+  }, [activeServer?.id, routeSessionId, setActiveServer, navigateHome])
+
+  // 手动重连 SSE（不切换服务器）
+  const handleReconnect = useCallback(() => {
+    reconnectSSE()
+  }, [])
 
   return (
     <div>
       <div className="flex items-center justify-between mb-3">
         <SectionLabel>Connections</SectionLabel>
-        {!addingServer && (
-          <button onClick={() => setAddingServer(true)}
-            className="flex items-center gap-1 text-[11px] text-accent-main-100 hover:text-accent-main-200">
-            <PlusIcon size={10} /> Add
+        <div className="flex items-center gap-2">
+          <button onClick={handleReconnect}
+            className="flex items-center gap-1 text-[11px] text-text-300 hover:text-text-100"
+            title="Force reconnect SSE">
+            <WifiIcon size={10} /> Reconnect
           </button>
-        )}
+          {!addingServer && (
+            <button onClick={() => setAddingServer(true)}
+              className="flex items-center gap-1 text-[11px] text-accent-main-100 hover:text-accent-main-200">
+              <PlusIcon size={10} /> Add
+            </button>
+          )}
+        </div>
       </div>
       <div className="space-y-1.5">
         {servers.map(s => (
           <ServerItem key={s.id} server={s} health={getHealth(s.id)} isActive={activeServer?.id === s.id}
-            onSelect={() => setActiveServer(s.id)} onDelete={() => removeServer(s.id)} onCheckHealth={() => checkHealth(s.id)} />
+            onSelect={() => handleSelectServer(s.id)} onDelete={() => removeServer(s.id)} onCheckHealth={() => checkHealth(s.id)} />
         ))}
         {addingServer && (
           <AddServerForm

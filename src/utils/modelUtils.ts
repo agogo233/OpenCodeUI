@@ -5,6 +5,7 @@
  */
 
 import type { ModelInfo } from '../api'
+import { serverStorage } from './perServerStorage'
 
 // ============================================
 // 模型唯一标识
@@ -62,7 +63,7 @@ interface ModelVariantPrefs {
  */
 export function getModelUsageStats(): ModelUsageStats {
   try {
-    const stored = localStorage.getItem(STORAGE_KEY)
+    const stored = serverStorage.get(STORAGE_KEY)
     return stored ? JSON.parse(stored) : {}
   } catch {
     return {}
@@ -84,7 +85,7 @@ export function recordModelUsage(model: ModelInfo): void {
   stats[key].lastUsed = Date.now()
   
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(stats))
+    serverStorage.set(STORAGE_KEY, JSON.stringify(stats))
   } catch (e) {
     console.warn('Failed to save model usage stats:', e)
   }
@@ -108,7 +109,7 @@ export function getModelUsageCount(model: ModelInfo): number {
  */
 export function getModelVariantPrefs(): ModelVariantPrefs {
   try {
-    const stored = localStorage.getItem(VARIANT_STORAGE_KEY)
+    const stored = serverStorage.get(VARIANT_STORAGE_KEY)
     return stored ? JSON.parse(stored) : {}
   } catch {
     return {}
@@ -128,7 +129,7 @@ export function saveModelVariantPref(modelKey: string, variant: string | undefin
   }
   
   try {
-    localStorage.setItem(VARIANT_STORAGE_KEY, JSON.stringify(prefs))
+    serverStorage.set(VARIANT_STORAGE_KEY, JSON.stringify(prefs))
   } catch (e) {
     console.warn('Failed to save model variant pref:', e)
   }

@@ -3,6 +3,22 @@
 // ============================================
 
 import { API_BASE_URL } from '../constants'
+import { isTauri } from '../utils/tauri'
+
+// Tauri plugin-http fetch 缓存（避免重复 dynamic import）
+let _tauriFetch: typeof globalThis.fetch | null = null
+let _tauriFetchLoading: Promise<typeof globalThis.fetch> | null = null
+
+async function getUnifiedFetch(): Promise<typeof globalThis.fetch> {
+  if (!isTauri()) return globalThis.fetch
+  if (_tauriFetch) return _tauriFetch
+  if (_tauriFetchLoading) return _tauriFetchLoading
+  _tauriFetchLoading = import('@tauri-apps/plugin-http').then(mod => {
+    _tauriFetch = mod.fetch as unknown as typeof globalThis.fetch
+    return _tauriFetch
+  })
+  return _tauriFetchLoading
+}
 
 /**
  * 服务器认证信息
@@ -48,6 +64,9 @@ class ServerStore {
   private activeServerId: string | null = null
   private healthMap = new Map<string, ServerHealth>()
   private listeners: Set<Listener> = new Set()
+  
+  // server 切换监听器（用于触发 SSE 重连等副作用，避免循环依赖）
+  private serverChangeListeners: Set<(newServerId: string) => void> = new Set()
   
   // 快照缓存 (用于 useSyncExternalStore)
   private _serversSnapshot: ServerConfig[] = []
@@ -124,6 +143,15 @@ class ServerStore {
     return () => this.listeners.delete(listener)
   }
   
+  /**
+   * 注册 server 切换监听器（用于触发 SSE 重连等副作用）
+   * 返回取消注册函数
+   */
+  onServerChange(fn: (newServerId: string) => void): () => void {
+    this.serverChangeListeners.add(fn)
+    return () => this.serverChangeListeners.delete(fn)
+  }
+  
   private notify(): void {
     this.updateSnapshots()
     this.listeners.forEach(l => l())
@@ -154,6 +182,14 @@ class ServerStore {
    */
   getActiveServer(): ServerConfig | null {
     return this._activeServerSnapshot
+  }
+  
+  /**
+   * 获取当前活动服务器 ID（用于 per-server storage 等场景）
+   * 返回 'local' 作为默认值，保证永远有值
+   */
+  getActiveServerId(): string {
+    return this.activeServerId ?? this.DEFAULT_SERVER_ID
   }
   
   /**
@@ -256,13 +292,21 @@ class ServerStore {
   
   /**
    * 设置活动服务器
+   * 如果实际切换了服务器，会通知 serverChangeListeners（用于 SSE 重连等）
    */
   setActiveServer(id: string): boolean {
     if (!this.servers.some(s => s.id === id)) return false
     
+    const changed = this.activeServerId !== id
     this.activeServerId = id
     this.saveToStorage()
     this.notify()
+    
+    // 实际切换了服务器，通知外部（SSE 重连等）
+    if (changed) {
+      this.serverChangeListeners.forEach(fn => fn(id))
+    }
+    
     return true
   }
   
@@ -294,7 +338,8 @@ class ServerStore {
         headers['Authorization'] = makeBasicAuthHeader(server.auth)
       }
       
-      const response = await fetch(`${server.url}/global/health`, {
+      const f = await getUnifiedFetch()
+      const response = await f(`${server.url}/global/health`, {
         method: 'GET',
         signal: controller.signal,
         headers,

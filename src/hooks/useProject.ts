@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { getCurrentProject, getProjects, type ApiProject } from '../api'
 import { apiErrorHandler } from '../utils'
+import { serverStorage } from '../utils/perServerStorage'
 
 export interface UseProjectResult {
   // 当前选中的 project
@@ -40,7 +41,7 @@ export function useProject(): UseProjectResult {
       setProjects(all)
 
       // 检查 localStorage 中是否有保存的选择
-      const savedProjectId = localStorage.getItem(STORAGE_KEY)
+      const savedProjectId = serverStorage.get(STORAGE_KEY)
       
       if (savedProjectId) {
         // 尝试找到保存的项目
@@ -50,7 +51,7 @@ export function useProject(): UseProjectResult {
         } else {
           // 保存的项目不存在了，用当前项目
           setCurrentProject(current)
-          localStorage.removeItem(STORAGE_KEY)
+          serverStorage.remove(STORAGE_KEY)
         }
       } else {
         // 没有保存的，用当前项目
@@ -74,7 +75,7 @@ export function useProject(): UseProjectResult {
     const project = projects.find(p => p.id === projectId)
     if (project) {
       setCurrentProject(project)
-      localStorage.setItem(STORAGE_KEY, projectId)
+      serverStorage.set(STORAGE_KEY, projectId)
     }
   }, [projects])
 

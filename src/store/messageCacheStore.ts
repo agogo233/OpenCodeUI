@@ -271,6 +271,27 @@ export class MessageCacheStore {
     }
   }
 
+  /**
+   * 清空所有缓存（服务器切换时调用）
+   */
+  async clearAll(): Promise<void> {
+    try {
+      const db = await this.getDb()
+      const tx = db.transaction(STORE_NAME, 'readwrite')
+      const store = tx.objectStore(STORE_NAME)
+      store.clear()
+      await new Promise<void>((resolve, reject) => {
+        tx.oncomplete = () => resolve()
+        tx.onerror = () => reject(tx.error)
+        tx.onabort = () => reject(tx.error)
+      })
+    } catch (error) {
+      if (import.meta.env.DEV) {
+        console.warn('[MessageCacheStore] Failed to clear all cache', error)
+      }
+    }
+  }
+
   async clearSession(sessionId: string): Promise<void> {
     try {
       const db = await this.getDb()

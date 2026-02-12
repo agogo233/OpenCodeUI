@@ -553,6 +553,45 @@ function handleEventForSubscriber(
 // ============================================
 
 /**
+ * 强制重连 SSE（用于切换服务器等场景）
+ * 断开当前连接 → 重置状态 → 立即重连（新 URL 由 getApiBaseUrl() 动态解析）
+ */
+export function reconnectSSE() {
+  if (allSubscribers.size === 0) return // 没有订阅者不需要重连
+  
+  if (import.meta.env.DEV) {
+    console.log('[SSE] reconnectSSE() called, forcing reconnect to new server...')
+  }
+
+  // 断开现有连接
+  if (heartbeatTimer) clearTimeout(heartbeatTimer)
+  if (reconnectTimer) clearTimeout(reconnectTimer)
+  reconnectTimer = null
+  
+  if (isTauri()) {
+    import('@tauri-apps/api/core').then(({ invoke }) => {
+      invoke('sse_disconnect').catch(() => {})
+    }).catch(() => {})
+  }
+  if (singletonController) {
+    singletonController.abort()
+    singletonController = null
+  }
+  isConnecting = false
+
+  // 重置重连计数，但保留 hasConnectedBefore=true 以便触发 onReconnected
+  hasConnectedBefore = true
+  updateConnectionState({
+    state: 'disconnected',
+    reconnectAttempt: 0,
+    error: undefined,
+  })
+
+  // 立即重连（getApiBaseUrl() 会读取新的 activeServer）
+  connectSingleton()
+}
+
+/**
  * 订阅 SSE 事件（单例模式，多个订阅者共享一个连接）
  */
 export function subscribeToEvents(callbacks: EventCallbacks): () => void {

@@ -176,6 +176,15 @@ class ChildSessionStore {
   // ============================================
 
   /**
+   * 清空所有数据（服务器切换时调用）
+   */
+  clearAll() {
+    this.childrenByParent.clear()
+    this.sessionInfo.clear()
+    this.notify()
+  }
+
+  /**
    * 清理某个父 session 的所有子 session 记录
    */
   clearChildren(parentId: string) {

@@ -9,6 +9,8 @@
 // 3. 路径比较：统一规范化后比较（正斜杠 + 小写 + 无末尾斜杠）
 //
 
+import { serverStorage } from './perServerStorage'
+
 // ============================================
 // Path Mode Configuration
 // ============================================
@@ -31,6 +33,15 @@ const STORAGE_KEY_DETECTED_STYLE = 'opencode-detected-path-style'
 
 let _pathMode: PathMode | null = null
 let _detectedStyle: DetectedPathStyle | null = null
+
+/**
+ * 重置路径模式缓存（服务器切换时调用）
+ * 下次 getPathMode / getDetectedPathStyle 会从 serverStorage 重新读取
+ */
+export function resetPathModeCache(): void {
+  _pathMode = null
+  _detectedStyle = null
+}
 
 // Path mode change listeners
 type PathModeListener = (mode: PathMode, effectiveStyle: DetectedPathStyle) => void
@@ -59,7 +70,7 @@ function notifyListeners(): void {
 export function getPathMode(): PathMode {
   if (_pathMode === null) {
     try {
-      const saved = localStorage.getItem(STORAGE_KEY_PATH_MODE)
+      const saved = serverStorage.get(STORAGE_KEY_PATH_MODE)
       if (saved === 'unix' || saved === 'windows') {
         _pathMode = saved
       } else {
@@ -78,7 +89,7 @@ export function getPathMode(): PathMode {
 export function setPathMode(mode: PathMode): void {
   _pathMode = mode
   try {
-    localStorage.setItem(STORAGE_KEY_PATH_MODE, mode)
+    serverStorage.set(STORAGE_KEY_PATH_MODE, mode)
   } catch {
     // ignore
   }
@@ -91,7 +102,7 @@ export function setPathMode(mode: PathMode): void {
 export function getDetectedPathStyle(): DetectedPathStyle {
   if (_detectedStyle === null) {
     try {
-      const saved = localStorage.getItem(STORAGE_KEY_DETECTED_STYLE)
+      const saved = serverStorage.get(STORAGE_KEY_DETECTED_STYLE)
       _detectedStyle = (saved === 'windows') ? 'windows' : 'unix'
     } catch {
       _detectedStyle = 'unix'
@@ -107,7 +118,7 @@ export function setDetectedPathStyle(style: DetectedPathStyle): void {
   const previousStyle = _detectedStyle
   _detectedStyle = style
   try {
-    localStorage.setItem(STORAGE_KEY_DETECTED_STYLE, style)
+    serverStorage.set(STORAGE_KEY_DETECTED_STYLE, style)
   } catch {
     // ignore
   }

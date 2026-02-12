@@ -5,6 +5,7 @@
 import { useState, useCallback, useEffect } from 'react'
 import type { ModelInfo } from '../api'
 import { getModelKey, findModelByKey, saveModelVariantPref, getModelVariantPref } from '../utils/modelUtils'
+import { serverStorage } from '../utils/perServerStorage'
 import { STORAGE_KEY_SELECTED_MODEL } from '../constants'
 
 interface UseModelSelectionOptions {
@@ -22,7 +23,7 @@ interface UseModelSelectionReturn {
 
 export function useModelSelection({ models }: UseModelSelectionOptions): UseModelSelectionReturn {
   const [selectedModelKey, setSelectedModelKey] = useState<string | null>(() => {
-    return localStorage.getItem(STORAGE_KEY_SELECTED_MODEL)
+    return serverStorage.get(STORAGE_KEY_SELECTED_MODEL)
   })
   const [selectedVariant, setSelectedVariant] = useState<string | undefined>(undefined)
 
@@ -37,7 +38,7 @@ export function useModelSelection({ models }: UseModelSelectionOptions): UseMode
     
     // 切换模型
     setSelectedModelKey(modelKey)
-    localStorage.setItem(STORAGE_KEY_SELECTED_MODEL, modelKey)
+    serverStorage.set(STORAGE_KEY_SELECTED_MODEL, modelKey)
     
     // 恢复新模型的 variant 偏好
     const savedVariant = getModelVariantPref(modelKey)

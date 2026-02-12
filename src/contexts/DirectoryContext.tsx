@@ -5,8 +5,9 @@
 import { createContext, useContext, useState, useCallback, useEffect, useMemo, type ReactNode } from 'react'
 import { getPath, type ApiPath } from '../api'
 import { useRouter } from '../hooks/useRouter'
-import { handleError, normalizeToForwardSlash, getDirectoryName, isSameDirectory } from '../utils'
+import { handleError, normalizeToForwardSlash, getDirectoryName, isSameDirectory, serverStorage } from '../utils'
 import { layoutStore, useLayoutStore } from '../store/layoutStore'
+import { serverStore } from '../store/serverStore'
 
 export interface SavedDirectory {
   path: string
@@ -51,38 +52,38 @@ export function DirectoryProvider({ children }: { children: ReactNode }) {
   const { sidebarExpanded } = useLayoutStore()
   
   const [savedDirectories, setSavedDirectories] = useState<SavedDirectory[]>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY_SAVED)
-      return saved ? JSON.parse(saved) : []
-    } catch {
-      return []
-    }
+    return serverStorage.getJSON<SavedDirectory[]>(STORAGE_KEY_SAVED) ?? []
   })
 
   const [recentProjects, setRecentProjects] = useState<RecentProjects>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY_RECENT)
-      return saved ? JSON.parse(saved) : {}
-    } catch {
-      return {}
-    }
+    return serverStorage.getJSON<RecentProjects>(STORAGE_KEY_RECENT) ?? {}
   })
   
   const [pathInfo, setPathInfo] = useState<ApiPath | null>(null)
+
+  // 服务器切换时，重新从 serverStorage 读取（key 前缀已变）
+  useEffect(() => {
+    return serverStore.onServerChange(() => {
+      setSavedDirectories(serverStorage.getJSON<SavedDirectory[]>(STORAGE_KEY_SAVED) ?? [])
+      setRecentProjects(serverStorage.getJSON<RecentProjects>(STORAGE_KEY_RECENT) ?? {})
+      setPathInfo(null) // 重置，等待重新加载
+      setUrlDirectory(undefined) // 清除当前目录选择
+    })
+  }, [setUrlDirectory])
 
   // 加载路径信息
   useEffect(() => {
     getPath().then(setPathInfo).catch(handleError('get path info', 'api'))
   }, [])
 
-  // 保存 savedDirectories 到 localStorage
+  // 保存 savedDirectories 到 per-server storage
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY_SAVED, JSON.stringify(savedDirectories))
+    serverStorage.setJSON(STORAGE_KEY_SAVED, savedDirectories)
   }, [savedDirectories])
 
-  // 保存 recentProjects 到 localStorage
+  // 保存 recentProjects 到 per-server storage
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY_RECENT, JSON.stringify(recentProjects))
+    serverStorage.setJSON(STORAGE_KEY_RECENT, recentProjects)
   }, [recentProjects])
 
   // 设置当前目录（更新 URL + 记录最近使用）
