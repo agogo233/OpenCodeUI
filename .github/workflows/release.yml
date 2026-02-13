@@ -85,15 +85,27 @@ jobs:
         shell: bash
         run: |
           mkdir -p release-artifacts
+          BUNDLE_DIR="src-tauri/target/release/bundle"
+          if [[ "${{ matrix.os }}" == "macos" ]]; then
+            BUNDLE_DIR="src-tauri/target/${{ matrix.arch }}-apple-darwin/release/bundle"
+          fi
           
           # Find and copy build assets to a flat directory
           if [[ "${{ matrix.os }}" == "windows" ]]; then
-            find src-tauri/target/release/bundle/nsis -name "*.exe" -exec cp {} release-artifacts/ \;
+            if [[ -d "$BUNDLE_DIR/nsis" ]]; then
+              find "$BUNDLE_DIR/nsis" -name "*.exe" -exec cp {} release-artifacts/ \;
+            fi
           elif [[ "${{ matrix.os }}" == "macos" ]]; then
-            find src-tauri/target/release/bundle/dmg -name "*.dmg" -exec cp {} release-artifacts/ \;
+            if [[ -d "$BUNDLE_DIR/dmg" ]]; then
+              find "$BUNDLE_DIR/dmg" -name "*.dmg" -exec cp {} release-artifacts/ \;
+            fi
           elif [[ "${{ matrix.os }}" == "linux" ]]; then
-            find src-tauri/target/release/bundle/deb -name "*.deb" -exec cp {} release-artifacts/ \;
-            find src-tauri/target/release/bundle/appimage -name "*.AppImage" -exec cp {} release-artifacts/ \;
+            if [[ -d "$BUNDLE_DIR/deb" ]]; then
+              find "$BUNDLE_DIR/deb" -name "*.deb" -exec cp {} release-artifacts/ \;
+            fi
+            if [[ -d "$BUNDLE_DIR/appimage" ]]; then
+              find "$BUNDLE_DIR/appimage" -name "*.AppImage" -exec cp {} release-artifacts/ \;
+            fi
           fi
           
           echo "Artifacts to upload:"
@@ -103,7 +115,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: artifacts-desktop-${{ matrix.os }}-${{ matrix.arch }}
-          path: release-artifacts/*
+          path: release-artifacts
+          if-no-files-found: warn
           retention-days: 1
 
   # ============================================

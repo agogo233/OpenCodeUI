@@ -209,8 +209,8 @@ export const Sidebar = memo(function Sidebar({
           onTouchMove={handleSidebarTouchMove}
           onTouchEnd={handleSidebarTouchEnd}
           className={`
-            fixed inset-y-0 left-0 z-40 
-            flex flex-col bg-bg-100 shadow-xl pt-[var(--safe-area-inset-top)]
+            fixed left-0 z-40 
+            flex flex-col bg-bg-100 shadow-xl
             ${isSwiping.current ? '' : 'transition-transform duration-300 ease-out'}
             ${isOpen ? 'translate-x-0' : '-translate-x-full'}
           `}
@@ -219,6 +219,8 @@ export const Sidebar = memo(function Sidebar({
             transform: isOpen 
               ? `translateX(${Math.min(0, swipeX)}px)` 
               : `translateX(-100%)`,
+            top: 'var(--safe-area-inset-top)',
+            height: 'calc(100% - var(--safe-area-inset-top))',
           }}
         >
           {/* 和桌面端展开时一样的内容 */}
@@ -260,7 +262,7 @@ export const Sidebar = memo(function Sidebar({
         ref={sidebarRef}
         style={{ width: isOpen ? `${width}px` : `${RAIL_WIDTH}px` }}
         className={`
-          relative flex flex-col h-full bg-bg-100 overflow-hidden shrink-0 pt-[var(--safe-area-inset-top)]
+          relative flex flex-col h-full bg-bg-100 overflow-hidden shrink-0
           border-r border-border-200/50
           ${isResizing ? 'transition-none' : 'transition-[width] duration-300 ease-out'}
         `}

@@ -15,6 +15,7 @@
   --safe-area-inset-bottom: env(safe-area-inset-bottom, 0px);
   --safe-area-inset-left: env(safe-area-inset-left, 0px);
   --safe-area-inset-right: env(safe-area-inset-right, 0px);
+  --keyboard-inset-bottom: 0px;
 }
 
 /* 支持 dvh 的浏览器使用动态视口高度 */
@@ -47,6 +48,10 @@ html, body, #root {
   /* padding-top: var(--safe-area-inset-top);  <-- Removed: Do not apply globally */
   padding-left: var(--safe-area-inset-left);
   padding-right: var(--safe-area-inset-right);
+}
+
+.keyboard-inset-adjust {
+  transform: translateY(calc(-1 * var(--keyboard-inset-bottom, 0px)));
 }
 
 @font-face {

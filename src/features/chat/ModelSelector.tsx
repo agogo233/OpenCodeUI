@@ -245,10 +245,11 @@ export const ModelSelector = memo(forwardRef<ModelSelectorHandle, ModelSelectorP
 
       <div 
         className={`z-50 transition-all duration-200 ease-out 
-          fixed top-[58px] left-1/2 -translate-x-1/2 w-[90vw] max-w-[380px] origin-top
+          fixed left-1/2 -translate-x-1/2 w-[90vw] max-w-[380px] origin-top
           sm:absolute sm:top-full sm:left-0 sm:translate-x-0 sm:w-[380px] sm:origin-top-left sm:mt-1
           ${isOpen ? 'opacity-100 scale-100' : 'opacity-0 scale-95 pointer-events-none'}
         `}
+        style={{ top: 'calc(58px + var(--safe-area-inset-top))' }}
         onKeyDown={handleKeyDown}
       >
         <div className="bg-bg-000 border border-border-200 shadow-xl rounded-lg overflow-hidden flex flex-col max-h-[600px]">

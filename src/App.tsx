@@ -75,6 +75,34 @@ function App() {
     return () => ro.disconnect()
   }, [])
 
+  useEffect(() => {
+    const root = document.documentElement
+    const updateKeyboardInset = () => {
+      const viewport = window.visualViewport
+      if (!viewport) {
+        root.style.setProperty('--keyboard-inset-bottom', '0px')
+        return
+      }
+      const inset = Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop)
+      root.style.setProperty('--keyboard-inset-bottom', `${Math.round(inset)}px`)
+    }
+
+    updateKeyboardInset()
+    window.addEventListener('resize', updateKeyboardInset)
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', updateKeyboardInset)
+      window.visualViewport.addEventListener('scroll', updateKeyboardInset)
+    }
+
+    return () => {
+      window.removeEventListener('resize', updateKeyboardInset)
+      if (window.visualViewport) {
+        window.visualViewport.removeEventListener('resize', updateKeyboardInset)
+        window.visualViewport.removeEventListener('scroll', updateKeyboardInset)
+      }
+    }
+  }, [])
+
   // ============================================
   // Wide Mode
   // ============================================
@@ -342,7 +370,7 @@ function App() {
   } : undefined
 
   return (
-    <div className="relative h-[var(--app-height)] flex bg-bg-100 overflow-hidden">
+    <div className="relative h-[var(--app-height)] flex bg-bg-100 overflow-hidden" style={{ paddingTop: 'var(--safe-area-inset-top)' }}>
       {/* Sidebar */}
       <Sidebar
         isOpen={sidebarExpanded}
@@ -410,7 +438,7 @@ function App() {
             />
 
             {/* Floating Input Box */}
-            <div ref={inputBoxWrapperRef} className="absolute bottom-0 left-0 right-0 z-10 pointer-events-none">
+            <div ref={inputBoxWrapperRef} className="absolute bottom-0 left-0 right-0 z-10 pointer-events-none" style={{ transform: 'translateY(calc(-1 * var(--keyboard-inset-bottom, 0px)))' }}>
               {/* Double-Esc cancel hint */}
               {showCancelHint && (
                 <div className="flex justify-center mb-2 pointer-events-none">

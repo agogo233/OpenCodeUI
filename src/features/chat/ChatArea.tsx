@@ -320,7 +320,15 @@ export const ChatArea = memo(forwardRef<ChatAreaHandle, ChatAreaProps>(({
             overscan={{ main: VIRTUOSO_OVERSCAN_PX, reverse: VIRTUOSO_OVERSCAN_PX }}
             components={{
               Header: () => <div className="h-20" />,
-              Footer: () => <div style={{ height: bottomPadding > 0 ? bottomPadding + 16 : 256 }} />
+              Footer: () => (
+                <div
+                  style={{
+                    height: bottomPadding > 0
+                      ? `calc(${bottomPadding + 16}px + var(--keyboard-inset-bottom, 0px))`
+                      : 'calc(256px + var(--keyboard-inset-bottom, 0px))'
+                  }}
+                />
+              )
             }}
             rangeChanged={(range) => {
               if (!onVisibleMessageIdsChange) return

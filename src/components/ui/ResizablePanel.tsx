@@ -210,6 +210,10 @@ export const ResizablePanel = memo(function ResizablePanel({
       ? 'fixed inset-0 z-[100] w-full shadow-2xl'
       : 'fixed bottom-0 left-0 right-0 z-[100] h-[40vh] shadow-2xl rounded-t-xl border-t border-border-200'
 
+    const mobileInsetStyle = position === 'right'
+      ? { top: 'var(--safe-area-inset-top)', height: 'calc(100% - var(--safe-area-inset-top))' }
+      : undefined
+
     return (
       <>
         {/* Mobile Backdrop */}
@@ -229,6 +233,7 @@ export const ResizablePanel = memo(function ResizablePanel({
             transition-transform ${ANIMATION_DURATION} ${ANIMATION_EASE}
             ${transformClass}
           `}
+          style={mobileInsetStyle}
         >
           {/* Mobile Handle (Bottom only) */}
           {position === 'bottom' && (
