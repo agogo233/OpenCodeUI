@@ -111,6 +111,9 @@ export const ChatArea = memo(forwardRef<ChatAreaHandle, ChatAreaProps>(({
   const scrollingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   // 用户在流式期间主动向上滚动 - 完全停止自动滚动，直到用户滚回底部
   const userScrolledAwayRef = useRef(false)
+  // 程序触发的滚动标志 - 用于区分用户手动滚动和 scrollToIndex 触发的滚动
+  const programmaticScrollRef = useRef(false)
+  const programmaticScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   
   // Session 切换过渡：简单的淡入效果
   // 使用 sessionId 作为 key，切换时会触发组件重新挂载从而产生 CSS 动画
@@ -133,6 +136,28 @@ export const ChatArea = memo(forwardRef<ChatAreaHandle, ChatAreaProps>(({
     scrollParent.addEventListener('scroll', handleScroll, { passive: true })
     return () => scrollParent.removeEventListener('scroll', handleScroll)
   }, [scrollParent])
+  
+  // 监听用户直接交互事件（wheel/touch），确保第一时间标记用户主动滚动
+  // 这比 Virtuoso 的 isScrolling 回调更及时
+  useEffect(() => {
+    if (!scrollParent || !isStreaming) return
+    
+    const markUserScrolling = () => {
+      // 用户主动触发了滚动操作
+      isUserScrollingRef.current = true
+      // 如果不在底部，标记为滚离
+      if (!isUserAtBottomRef.current) {
+        userScrolledAwayRef.current = true
+      }
+    }
+    
+    scrollParent.addEventListener('wheel', markUserScrolling, { passive: true })
+    scrollParent.addEventListener('touchstart', markUserScrolling, { passive: true })
+    return () => {
+      scrollParent.removeEventListener('wheel', markUserScrolling)
+      scrollParent.removeEventListener('touchstart', markUserScrolling)
+    }
+  }, [scrollParent, isStreaming])
   
   // 包装 onLoadMore，追踪加载状态（带最小展示时间防止闪烁）
   const handleLoadMore = useCallback(async () => {
@@ -171,31 +196,36 @@ export const ChatArea = memo(forwardRef<ChatAreaHandle, ChatAreaProps>(({
         return
       }
       
-      // 1. Virtuoso 滚动
+      // 标记为程序触发的滚动，防止 handleIsScrolling 误判
+      programmaticScrollRef.current = true
+      if (programmaticScrollTimerRef.current) {
+        clearTimeout(programmaticScrollTimerRef.current)
+      }
+      programmaticScrollTimerRef.current = setTimeout(() => {
+        programmaticScrollRef.current = false
+      }, 150) // 给 Virtuoso 足够时间完成滚动
+      
+      // 只用 Virtuoso 滚动，不强制 DOM 滚动
       virtuosoRef.current?.scrollToIndex({ 
         index: visibleMessagesCountRef.current - 1, 
         align: 'end', 
         behavior: 'auto' 
       })
-      
-      // 2. 强制 DOM 滚动补充
-      if (scrollParent) {
-        const distanceToBottom = scrollParent.scrollHeight - scrollParent.scrollTop - scrollParent.clientHeight
-        if (distanceToBottom > 10) { 
-           scrollParent.scrollTop = scrollParent.scrollHeight
-        }
-      }
-    }, SCROLL_CHECK_INTERVAL_MS)  // 加快检查频率
+    }, SCROLL_CHECK_INTERVAL_MS)
     
     return () => clearInterval(scrollInterval)
-  }, [isStreaming, scrollParent])
+  }, [isStreaming])
   
-  // 清理 scrollingTimeoutRef 防止内存泄漏
+  // 清理 timeout refs 防止内存泄漏
   useEffect(() => {
     return () => {
       if (scrollingTimeoutRef.current) {
         clearTimeout(scrollingTimeoutRef.current)
         scrollingTimeoutRef.current = null
+      }
+      if (programmaticScrollTimerRef.current) {
+        clearTimeout(programmaticScrollTimerRef.current)
+        programmaticScrollTimerRef.current = null
       }
     }
   }, [])
@@ -278,6 +308,9 @@ export const ChatArea = memo(forwardRef<ChatAreaHandle, ChatAreaProps>(({
   
   // 追踪用户是否正在滚动
   const handleIsScrolling = useCallback((scrolling: boolean) => {
+    // 如果是程序触发的滚动（scrollToIndex），忽略
+    if (programmaticScrollRef.current) return
+    
     if (scrolling) {
       // 用户开始滚动，立即禁用自动滚动
       isUserScrollingRef.current = true
@@ -291,7 +324,7 @@ export const ChatArea = memo(forwardRef<ChatAreaHandle, ChatAreaProps>(({
         scrollingTimeoutRef.current = null
       }
     } else {
-      // 滚动停止后延迟 500ms 才允许自动滚动
+      // 滚动停止后延迟才允许自动滚动
       // 给用户足够的缓冲时间
       scrollingTimeoutRef.current = setTimeout(() => {
         isUserScrollingRef.current = false

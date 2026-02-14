@@ -13,7 +13,7 @@ export const VIRTUOSO_START_INDEX = 1000000
 export const AUTO_SCROLL_THRESHOLD_PX = 150
 
 /** 滚动检查间隔 */
-export const SCROLL_CHECK_INTERVAL_MS = 50
+export const SCROLL_CHECK_INTERVAL_MS = 100
 
 /** 滚动恢复延迟 */
 export const SCROLL_RESUME_DELAY_MS = 500

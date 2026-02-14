@@ -53,8 +53,23 @@ export function useSessionManager({
     const existingState = messageStore.getSessionState(sid)
     const hasExistingMessages = existingState && existingState.messages.length > 0
     
-    // 如果已经有消息且正在 streaming，跳过加载避免覆盖 SSE 数据
+    // 如果已经有消息且正在 streaming，不能覆盖消息，但仍需加载元数据
     if (hasExistingMessages && existingState.isStreaming) {
+      // 异步加载 session 元数据（不阻塞）
+      const dir = directoryRef.current
+      Promise.all([
+        getSession(sid, dir).catch(() => null),
+        getSessionMessages(sid, INITIAL_MESSAGE_LIMIT, dir).catch(() => []),
+      ]).then(([sessionInfo, apiMessages]) => {
+        messageStore.updateSessionMetadata(sid, {
+          hasMoreHistory: apiMessages.length >= INITIAL_MESSAGE_LIMIT,
+          directory: sessionInfo?.directory ?? dir ?? '',
+          loadState: 'loaded',
+          shareUrl: sessionInfo?.share?.url,
+        })
+      }).catch(() => {
+        // 元数据加载失败不影响 streaming，静默忽略
+      })
       loadingRef.current = false
       onLoadComplete?.()
       return

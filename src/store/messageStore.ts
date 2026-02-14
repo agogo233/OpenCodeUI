@@ -573,6 +573,27 @@ class MessageStore {
   }
 
   /**
+   * 更新 session 元数据（不覆盖消息）
+   * 用于切换到正在 streaming 的 session 时，仍需加载 hasMoreHistory/directory 等
+   */
+  updateSessionMetadata(sessionId: string, options: {
+    hasMoreHistory?: boolean
+    directory?: string
+    loadState?: SessionState['loadState']
+    shareUrl?: string
+  }) {
+    const state = this.sessions.get(sessionId)
+    if (!state) return
+
+    if (options.hasMoreHistory !== undefined) state.hasMoreHistory = options.hasMoreHistory
+    if (options.directory !== undefined) state.directory = options.directory
+    if (options.loadState !== undefined) state.loadState = options.loadState
+    if (options.shareUrl !== undefined) state.shareUrl = options.shareUrl
+
+    this.notify()
+  }
+
+  /**
    * 设置 session 加载状态
    */
   setLoadState(sessionId: string, loadState: SessionState['loadState']) {
