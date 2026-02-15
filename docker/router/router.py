@@ -280,309 +280,357 @@ def get_routes():
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>OpenCode Routes</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Routes - OpenCode</title>
   <style>
     :root {
-      --bg-000: 150 10% 99%;
-      --bg-100: 150 12% 96%;
-      --bg-200: 150 12% 93%;
-      --bg-300: 150 10% 89%;
-      --text-100: 170 15% 15%;
-      --text-200: 170 10% 40%;
-      --text-300: 170 8% 55%;
-      --text-400: 170 8% 70%;
-      --accent-main-100: 165 45% 42%;
-      --accent-main-200: 165 50% 48%;
-      --border-100: 160 10% 86%;
-      --border-200: 160 10% 82%;
-      --oncolor-100: 0 0% 100%;
+      --bg-0: #fafbfc; --bg-1: #f3f5f7; --bg-2: #e8ecef;
+      --bg-card: #ffffff; --bg-hover: #f7f9fa;
+      --text-1: #1a2332; --text-2: #4a5568; --text-3: #8694a7;
+      --accent: #3b82f6; --accent-hover: #2563eb; --accent-soft: #eff6ff;
+      --green: #10b981; --green-soft: #ecfdf5;
+      --border: #e2e8f0; --border-focus: #93c5fd;
+      --shadow: 0 1px 3px rgba(0,0,0,.06), 0 1px 2px rgba(0,0,0,.04);
+      --shadow-lg: 0 4px 12px rgba(0,0,0,.08);
+      --radius: 10px; --radius-lg: 14px;
+      --mono: 'SF Mono', 'Cascadia Code', 'Fira Code', 'JetBrains Mono', monospace;
+      --sans: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif;
     }
-
-    @media (prefers-color-scheme: dark) {
-      :root {
-        --bg-000: 210 20% 18%;
-        --bg-100: 210 20% 14%;
-        --bg-200: 210 20% 11%;
-        --bg-300: 210 20% 9%;
-        --text-100: 210 15% 92%;
-        --text-200: 210 10% 70%;
-        --text-300: 210 8% 55%;
-        --text-400: 210 8% 40%;
-        --accent-main-100: 165 50% 55%;
-        --accent-main-200: 165 55% 65%;
-        --border-100: 210 15% 22%;
-        --border-200: 210 15% 26%;
-        --oncolor-100: 0 0% 100%;
-      }
-    }
-
+    @media (prefers-color-scheme: dark) { :root {
+      --bg-0: #0f1419; --bg-1: #161b22; --bg-2: #1c2333;
+      --bg-card: #1c2333; --bg-hover: #232b3a;
+      --text-1: #e6edf3; --text-2: #8b949e; --text-3: #545d68;
+      --accent: #58a6ff; --accent-hover: #79c0ff; --accent-soft: #161b22;
+      --green: #3fb950; --green-soft: #0d1117;
+      --border: #30363d; --border-focus: #388bfd;
+      --shadow: 0 1px 3px rgba(0,0,0,.3); --shadow-lg: 0 4px 12px rgba(0,0,0,.4);
+    }}
     html[data-theme="light"] {
-      --bg-000: 150 10% 99%;
-      --bg-100: 150 12% 96%;
-      --bg-200: 150 12% 93%;
-      --bg-300: 150 10% 89%;
-      --text-100: 170 15% 15%;
-      --text-200: 170 10% 40%;
-      --text-300: 170 8% 55%;
-      --text-400: 170 8% 70%;
-      --accent-main-100: 165 45% 42%;
-      --accent-main-200: 165 50% 48%;
-      --border-100: 160 10% 86%;
-      --border-200: 160 10% 82%;
-      --oncolor-100: 0 0% 100%;
+      --bg-0: #fafbfc; --bg-1: #f3f5f7; --bg-2: #e8ecef;
+      --bg-card: #ffffff; --bg-hover: #f7f9fa;
+      --text-1: #1a2332; --text-2: #4a5568; --text-3: #8694a7;
+      --accent: #3b82f6; --accent-hover: #2563eb; --accent-soft: #eff6ff;
+      --green: #10b981; --green-soft: #ecfdf5;
+      --border: #e2e8f0; --border-focus: #93c5fd;
+      --shadow: 0 1px 3px rgba(0,0,0,.06), 0 1px 2px rgba(0,0,0,.04);
+      --shadow-lg: 0 4px 12px rgba(0,0,0,.08);
     }
-
     html[data-theme="dark"] {
-      --bg-000: 210 20% 18%;
-      --bg-100: 210 20% 14%;
-      --bg-200: 210 20% 11%;
-      --bg-300: 210 20% 9%;
-      --text-100: 210 15% 92%;
-      --text-200: 210 10% 70%;
-      --text-300: 210 8% 55%;
-      --text-400: 210 8% 40%;
-      --accent-main-100: 165 50% 55%;
-      --accent-main-200: 165 55% 65%;
-      --border-100: 210 15% 22%;
-      --border-200: 210 15% 26%;
-      --oncolor-100: 0 0% 100%;
+      --bg-0: #0f1419; --bg-1: #161b22; --bg-2: #1c2333;
+      --bg-card: #1c2333; --bg-hover: #232b3a;
+      --text-1: #e6edf3; --text-2: #8b949e; --text-3: #545d68;
+      --accent: #58a6ff; --accent-hover: #79c0ff; --accent-soft: #161b22;
+      --green: #3fb950; --green-soft: #0d1117;
+      --border: #30363d; --border-focus: #388bfd;
+      --shadow: 0 1px 3px rgba(0,0,0,.3); --shadow-lg: 0 4px 12px rgba(0,0,0,.4);
     }
 
-    * { box-sizing: border-box; margin: 0; }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     body {
-      font-family: 'Inter', system-ui, -apple-system, sans-serif;
-      background: hsl(var(--bg-100));
-      color: hsl(var(--text-100));
+      font-family: var(--sans);
+      background: var(--bg-0);
+      color: var(--text-1);
       min-height: 100vh;
+      min-height: 100dvh;
+      -webkit-font-smoothing: antialiased;
     }
 
     .page {
-      max-width: 720px;
+      max-width: 640px;
       margin: 0 auto;
-      padding: 48px 20px;
+      padding: 40px 16px 60px;
     }
 
+    /* ---- Header ---- */
     .header {
       display: flex;
-      align-items: center;
+      align-items: flex-start;
       justify-content: space-between;
-      margin-bottom: 32px;
+      gap: 12px;
+      margin-bottom: 24px;
     }
-
+    .header-left { flex: 1; min-width: 0; }
     .title {
-      font-size: 20px;
-      font-weight: 600;
-      letter-spacing: -0.01em;
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      line-height: 1.2;
     }
-
-    .count {
-      font-size: 13px;
-      color: hsl(var(--text-300));
+    .status {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 6px;
+      font-size: 12px;
+      color: var(--text-3);
+      line-height: 1;
     }
-
-    .actions {
+    .status-dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--green);
+      flex-shrink: 0;
+    }
+    .header-actions {
       display: flex;
-      gap: 8px;
+      align-items: center;
+      gap: 4px;
+      flex-shrink: 0;
     }
 
-    .btn {
-      height: 32px;
-      padding: 0 12px;
+    /* ---- Icon buttons ---- */
+    .icon-btn {
+      width: 34px; height: 34px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid var(--border);
       border-radius: 8px;
-      font-size: 13px;
-      font-weight: 500;
+      background: var(--bg-card);
+      color: var(--text-2);
       cursor: pointer;
-      border: none;
-      transition: all 150ms;
+      transition: all 120ms ease;
+      flex-shrink: 0;
     }
+    .icon-btn:hover { background: var(--bg-hover); color: var(--text-1); border-color: var(--border-focus); }
+    .icon-btn:active { transform: scale(.93); }
+    .icon-btn svg { width: 16px; height: 16px; }
 
-    .btn:active { transform: scale(0.95); }
-
-    .btn-primary {
-      background: hsl(var(--accent-main-100));
-      color: hsl(var(--oncolor-100));
+    /* ---- Search ---- */
+    .search-wrap {
+      position: relative;
+      margin-bottom: 16px;
     }
-
-    .btn-primary:hover {
-      background: hsl(var(--accent-main-200));
+    .search-icon {
+      position: absolute;
+      left: 11px; top: 50%; transform: translateY(-50%);
+      width: 15px; height: 15px;
+      color: var(--text-3);
+      pointer-events: none;
     }
-
-    .btn-ghost {
-      background: transparent;
-      color: hsl(var(--text-300));
-      border: 1px solid hsl(var(--border-200));
-    }
-
-    .btn-ghost:hover {
-      color: hsl(var(--text-200));
-      background: hsl(var(--bg-200));
-    }
-
     .search {
       width: 100%;
-      height: 36px;
-      padding: 0 12px;
-      border-radius: 8px;
-      border: 1px solid hsl(var(--border-100));
-      background: hsl(var(--bg-000));
-      color: hsl(var(--text-100));
+      height: 38px;
+      padding: 0 12px 0 34px;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      background: var(--bg-card);
+      color: var(--text-1);
       font-size: 13px;
+      font-family: var(--sans);
       outline: none;
-      margin-bottom: 16px;
-      transition: border-color 150ms;
+      transition: border-color 150ms, box-shadow 150ms;
+    }
+    .search::placeholder { color: var(--text-3); }
+    .search:focus {
+      border-color: var(--border-focus);
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent);
     }
 
-    .search::placeholder { color: hsl(var(--text-400)); }
-    .search:focus { border-color: hsl(var(--accent-main-100)); }
-
+    /* ---- Card list ---- */
     .list {
       display: flex;
       flex-direction: column;
-      gap: 1px;
-      background: hsl(var(--border-100));
-      border: 1px solid hsl(var(--border-100));
-      border-radius: 12px;
-      overflow: hidden;
+      gap: 8px;
     }
 
-    .row {
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 14px 16px;
+      box-shadow: var(--shadow);
+      transition: box-shadow 150ms, border-color 150ms;
+      cursor: pointer;
+    }
+    .card:hover {
+      box-shadow: var(--shadow-lg);
+      border-color: var(--border-focus);
+    }
+    .card-top {
       display: flex;
       align-items: center;
-      gap: 16px;
-      padding: 12px 16px;
-      background: hsl(var(--bg-000));
-      transition: background 100ms;
+      gap: 10px;
     }
+    .port-badge {
+      display: inline-flex;
+      align-items: center;
+      height: 24px;
+      padding: 0 8px;
+      border-radius: 6px;
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-family: var(--mono);
+      font-size: 12px;
+      font-weight: 600;
+      flex-shrink: 0;
+      letter-spacing: .01em;
+    }
+    .card-time {
+      font-size: 11px;
+      color: var(--text-3);
+      margin-left: auto;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .card-url {
+      display: block;
+      margin-top: 8px;
+      font-family: var(--mono);
+      font-size: 12px;
+      line-height: 1.5;
+      color: var(--text-2);
+      word-break: break-all;
+      user-select: all;
+    }
+    .card-feedback {
+      display: none;
+      margin-top: 6px;
+      font-size: 11px;
+      color: var(--green);
+      line-height: 1;
+    }
+    .card-feedback.show { display: block; }
 
-    .row:hover { background: hsl(var(--bg-200)); }
-
-    .port {
-      font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    /* ---- Empty state ---- */
+    .empty {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 56px 24px;
+      text-align: center;
+      border: 1px dashed var(--border);
+      border-radius: var(--radius-lg);
+      background: var(--bg-card);
+    }
+    .empty-icon {
+      width: 40px; height: 40px;
+      color: var(--text-3);
+      opacity: .5;
+      margin-bottom: 16px;
+    }
+    .empty-title {
       font-size: 14px;
       font-weight: 600;
-      color: hsl(var(--accent-main-100));
-      min-width: 52px;
+      color: var(--text-2);
+      margin-bottom: 4px;
     }
-
-    .url {
-      flex: 1;
-      font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    .empty-hint {
       font-size: 12px;
-      color: hsl(var(--text-200));
-      word-break: break-all;
-      line-height: 1.4;
+      color: var(--text-3);
+      line-height: 1.5;
     }
 
-    .time {
-      font-size: 12px;
-      color: hsl(var(--text-400));
-      white-space: nowrap;
-    }
-
-    .copy {
-      height: 28px;
-      padding: 0 10px;
-      border-radius: 6px;
+    /* ---- Toast ---- */
+    .toast {
+      position: fixed;
+      bottom: 24px; left: 50%; transform: translateX(-50%) translateY(80px);
+      padding: 8px 16px;
+      border-radius: 8px;
+      background: var(--text-1);
+      color: var(--bg-0);
       font-size: 12px;
       font-weight: 500;
-      cursor: pointer;
-      border: 1px solid hsl(var(--border-200));
-      background: transparent;
-      color: hsl(var(--text-300));
-      transition: all 150ms;
-      white-space: nowrap;
+      box-shadow: var(--shadow-lg);
+      opacity: 0;
+      pointer-events: none;
+      transition: all 250ms cubic-bezier(.4,0,.2,1);
+      z-index: 100;
+    }
+    .toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
     }
 
-    .copy:hover {
-      background: hsl(var(--bg-200));
-      color: hsl(var(--text-200));
-    }
-
-    .copy:active { transform: scale(0.95); }
-
-    .empty {
-      padding: 40px 20px;
-      text-align: center;
-      color: hsl(var(--text-400));
-      font-size: 14px;
-      background: hsl(var(--bg-000));
-      border: 1px solid hsl(var(--border-100));
-      border-radius: 12px;
-    }
-
-    .empty-hint {
-      margin-top: 8px;
-      font-size: 12px;
-      color: hsl(var(--text-400));
-    }
-
-    @media (max-width: 600px) {
-      .row { flex-wrap: wrap; gap: 8px; }
-      .time { display: none; }
-      .url { min-width: 100%; order: 3; }
+    /* ---- Mobile ---- */
+    @media (max-width: 480px) {
+      .page { padding: 24px 12px 48px; }
+      .title { font-size: 18px; }
+      .card { padding: 12px 14px; }
+      .card-time { font-size: 10px; }
+      .card-url { font-size: 11px; }
     }
   </style>
 </head>
 <body>
   <div class="page">
     <div class="header">
-      <div>
+      <div class="header-left">
         <div class="title">Routes</div>
-        <div class="count" id="count"></div>
+        <div class="status">
+          <span class="status-dot"></span>
+          <span id="count">0 active</span>
+        </div>
       </div>
-      <div class="actions">
-        <button class="btn btn-ghost" id="themeToggle">Theme</button>
-        <button class="btn btn-ghost" id="copyAll">Copy all</button>
-        <button class="btn btn-primary" id="refresh">Refresh</button>
+      <div class="header-actions">
+        <button class="icon-btn" id="themeToggle" title="Toggle theme">
+          <svg id="themeIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+          </svg>
+        </button>
+        <button class="icon-btn" id="copyAll" title="Copy all URLs">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+          </svg>
+        </button>
+        <button class="icon-btn" id="refresh" title="Refresh">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+          </svg>
+        </button>
       </div>
     </div>
 
-    <input class="search" id="filter" placeholder="Filter by port or token..." />
+    <div class="search-wrap">
+      <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+      </svg>
+      <input class="search" id="filter" placeholder="Filter by port or URL..." />
+    </div>
 
     <section id="content"></section>
+    <div class="toast" id="toast"></div>
   </div>
 
   <script>
-    const content = document.getElementById('content')
-    const countEl = document.getElementById('count')
-    const filterInput = document.getElementById('filter')
-    const refreshBtn = document.getElementById('refresh')
-    const copyAllBtn = document.getElementById('copyAll')
-    const themeToggle = document.getElementById('themeToggle')
+    const $ = id => document.getElementById(id)
+    const content = $('content'), countEl = $('count')
+    const filterInput = $('filter'), toastEl = $('toast')
 
-    function applyTheme(theme) {
-      if (!theme || theme === 'auto') {
-        document.documentElement.removeAttribute('data-theme')
-        return
-      }
-      document.documentElement.setAttribute('data-theme', theme)
+    // ---- Toast ----
+    let toastTimer
+    function toast(msg) {
+      clearTimeout(toastTimer)
+      toastEl.textContent = msg
+      toastEl.classList.add('show')
+      toastTimer = setTimeout(() => toastEl.classList.remove('show'), 1800)
     }
 
-    function nextTheme(current) {
-      if (current === 'light') return 'dark'
-      if (current === 'dark') return 'auto'
-      return 'light'
+    // ---- Theme ----
+    const sunIcon = '<circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>'
+    const moonIcon = '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>'
+    const autoIcon = '<circle cx="12" cy="12" r="10"/><path d="M12 2a10 10 0 0 1 0 20z" fill="currentColor"/>'
+
+    function applyTheme(t) {
+      if (!t || t === 'auto') document.documentElement.removeAttribute('data-theme')
+      else document.documentElement.setAttribute('data-theme', t)
+      const icon = t === 'dark' ? moonIcon : t === 'light' ? sunIcon : autoIcon
+      $('themeIcon').innerHTML = icon
+      $('themeToggle').title = 'Theme: ' + (t || 'auto')
     }
-
-    function syncThemeLabel(theme) {
-      const label = theme === 'light' ? 'Light' : theme === 'dark' ? 'Dark' : 'Auto'
-      themeToggle.textContent = 'Theme: ' + label
-    }
-
-    const savedTheme = localStorage.getItem('routes-theme') || 'auto'
-    applyTheme(savedTheme)
-    syncThemeLabel(savedTheme)
-
-    themeToggle.addEventListener('click', () => {
-      const current = localStorage.getItem('routes-theme') || 'auto'
-      const next = nextTheme(current)
+    function cycleTheme() {
+      const m = { light: 'dark', dark: 'auto', auto: 'light' }
+      const cur = localStorage.getItem('routes-theme') || 'auto'
+      const next = m[cur] || 'light'
       localStorage.setItem('routes-theme', next)
       applyTheme(next)
-      syncThemeLabel(next)
-    })
+    }
+    applyTheme(localStorage.getItem('routes-theme') || 'auto')
+    $('themeToggle').addEventListener('click', cycleTheme)
 
+    // ---- Helpers ----
     function ago(ts) {
       if (!ts) return ''
       const s = Math.floor(Date.now() / 1000 - ts)
@@ -591,71 +639,82 @@ def get_routes():
       if (s < 86400) return Math.floor(s / 3600) + 'h ago'
       return Math.floor(s / 86400) + 'd ago'
     }
-
-    function publicUrl(r) {
-      if (r.publicUrl) return r.publicUrl
-      return location.origin + '/p/' + r.token + '/'
+    function getUrl(r) {
+      return r.publicUrl || (location.origin + '/p/' + r.token + '/')
     }
 
+    // ---- Render ----
     function render(routes) {
       countEl.textContent = routes.length + ' active'
 
       if (!routes.length) {
-        content.innerHTML = '<div class="empty">No active routes<div class="empty-hint">Start a dev server in the container to see it here</div></div>'
+        content.innerHTML = `
+          <div class="empty">
+            <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>
+            </svg>
+            <div class="empty-title">No active routes</div>
+            <div class="empty-hint">Start a dev server in the backend container<br/>and it will appear here automatically</div>
+          </div>`
         return
       }
 
-      const rows = routes.map(r => {
-        const url = publicUrl(r)
-        return `<div class="row">
-          <span class="port">${r.port}</span>
-          <span class="url">${url}</span>
-          <span class="time">${ago(r.createdAt)}</span>
-          <button class="copy" data-url="${url}">Copy</button>
+      const cards = routes.map(r => {
+        const url = getUrl(r)
+        return `<div class="card" data-url="${url}">
+          <div class="card-top">
+            <span class="port-badge">${r.port}</span>
+            <span class="card-time">${ago(r.createdAt)}</span>
+          </div>
+          <code class="card-url">${url}</code>
+          <div class="card-feedback">Copied to clipboard</div>
         </div>`
       })
 
-      content.innerHTML = '<div class="list">' + rows.join('') + '</div>'
+      content.innerHTML = '<div class="list">' + cards.join('') + '</div>'
 
-      content.querySelectorAll('.copy').forEach(btn => {
-        btn.addEventListener('click', async () => {
-          await navigator.clipboard.writeText(btn.dataset.url)
-          btn.textContent = 'Copied'
-          setTimeout(() => btn.textContent = 'Copy', 1200)
+      content.querySelectorAll('.card').forEach(card => {
+        card.addEventListener('click', async () => {
+          try {
+            await navigator.clipboard.writeText(card.dataset.url)
+            const fb = card.querySelector('.card-feedback')
+            fb.classList.add('show')
+            toast('Copied')
+            setTimeout(() => fb.classList.remove('show'), 1500)
+          } catch(e) {}
         })
       })
     }
 
+    // ---- Data ----
     let currentData = __INITIAL_DATA__
 
     function applyFilter() {
       const q = filterInput.value.trim().toLowerCase()
       const routes = (currentData.routes || []).filter(r =>
-        !q || r.token.toLowerCase().includes(q) || String(r.port).includes(q)
+        !q || r.token.toLowerCase().includes(q) || String(r.port).includes(q) || getUrl(r).toLowerCase().includes(q)
       )
       render(routes)
     }
 
     async function load() {
-      countEl.textContent = 'loading...'
       try {
         const res = await fetch('/routes?format=json', { cache: 'no-store', credentials: 'same-origin' })
         if (!res.ok) { countEl.textContent = 'error ' + res.status; return }
         currentData = await res.json()
         applyFilter()
       } catch (e) {
-        countEl.textContent = 'failed: ' + e.message
+        countEl.textContent = 'offline'
       }
     }
 
-    refreshBtn.addEventListener('click', load)
+    $('refresh').addEventListener('click', () => { load(); toast('Refreshing...') })
     filterInput.addEventListener('input', applyFilter)
-    copyAllBtn.addEventListener('click', async () => {
-      const urls = (currentData.routes || []).map(publicUrl).join('\\n')
+    $('copyAll').addEventListener('click', async () => {
+      const urls = (currentData.routes || []).map(getUrl).join('\\n')
       if (urls) {
         await navigator.clipboard.writeText(urls)
-        copyAllBtn.textContent = 'Copied'
-        setTimeout(() => copyAllBtn.textContent = 'Copy all', 1200)
+        toast('All URLs copied')
       }
     })
 
