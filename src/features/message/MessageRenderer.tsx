@@ -256,7 +256,7 @@ const AssistantMessageView = memo(function AssistantMessageView({ message, onEns
     <div className="flex flex-col gap-2 w-full group">
 
 
-      {renderItems.map((item: RenderItem) => {
+      {renderItems.map((item: RenderItem, index: number) => {
         if (item.type === 'tool-group') {
           return (
             <ToolGroup 
@@ -277,14 +277,18 @@ const AssistantMessageView = memo(function AssistantMessageView({ message, onEns
                 isStreaming={isStreaming}
               />
             )
-          case 'reasoning':
+          case 'reasoning': {
+            // 只有当该 reasoning 是最后一个渲染项时，才可能仍在流式输出
+            // 如果后面已经有新的 part（text/tool 等），说明思考已经结束
+            const isLastItem = index === renderItems.length - 1
             return (
               <ReasoningPartView 
                 key={part.id} 
                 part={part as ReasoningPart}
-                isStreaming={isStreaming}
+                isStreaming={isStreaming && isLastItem}
               />
             )
+          }
           case 'step-finish':
             return (
               <StepFinishPartView 
