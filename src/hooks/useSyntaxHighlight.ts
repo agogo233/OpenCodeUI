@@ -69,8 +69,9 @@ const htmlCache = new LRUCache<string>(120)
 const tokensCache = new LRUCache<any[][]>(80)
 
 // 代码长度限制 - 超过此长度跳过高亮
-const MAX_CODE_LENGTH = 50000 // 50KB
-const MAX_LINES_FOR_HIGHLIGHT = 1000
+// 配合虚拟滚动，高亮本身开销不大，放宽限制
+const MAX_CODE_LENGTH = 500000 // 500KB
+const MAX_LINES_FOR_HIGHLIGHT = 20000
 
 // 生成缓存 key
 function getCacheKey(code: string, lang: string, theme: string): string {

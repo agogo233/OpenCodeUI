@@ -477,15 +477,15 @@ function FilePreview({ path, content, isLoading, error, onClose, isResizing = fa
       }
     }
     
-    // 如果有 patch，优先显示 diff
-    if (content.patch && content.patch.hunks.length > 0) {
-      return {
-        type: 'diff' as const,
-        hunks: content.patch.hunks,
-      }
-    }
+    // diff 渲染交给 Changes 面板，Files 预览只显示文件内容
+    // if (content.patch && content.patch.hunks.length > 0) {
+    //   return {
+    //     type: 'diff' as const,
+    //     hunks: content.patch.hunks,
+    //   }
+    // }
     
-    // 否则显示普通内容
+    // 显示文件内容
     return {
       type: 'text' as const,
       text: content.content,
@@ -499,11 +499,12 @@ function FilePreview({ path, content, isLoading, error, onClose, isResizing = fa
         <div className="flex items-center gap-2 min-w-0">
           <FileIcon size={12} className="text-text-400 shrink-0" />
           <span className="text-[11px] font-mono text-text-200 truncate">{fileName}</span>
-          {content?.diff && (
+          {/* Modified 标签暂不在 Files 预览显示 */}
+          {/* {content?.diff && (
             <span className="text-[9px] px-1.5 py-0.5 bg-warning-100/20 text-warning-100 rounded font-medium shrink-0">
               Modified
             </span>
-          )}
+          )} */}
         </div>
         <div className="flex items-center gap-0.5 shrink-0">
           {/* 下载按钮 */}
@@ -556,8 +557,9 @@ function FilePreview({ path, content, isLoading, error, onClose, isResizing = fa
             fileName={fileName}
             isResizing={isResizing}
           />
-        ) : displayContent?.type === 'diff' ? (
-          <DiffPreview hunks={displayContent.hunks} isResizing={isResizing} />
+        // diff 渲染已移至 Changes 面板
+        // ) : displayContent?.type === 'diff' ? (
+        //   <DiffPreview hunks={displayContent.hunks} isResizing={isResizing} />
         ) : displayContent?.type === 'text' ? (
           <CodePreview code={displayContent.text} language={language || 'text'} isResizing={isResizing} />
         ) : (
@@ -877,7 +879,8 @@ interface DiffPreviewProps {
   isResizing?: boolean
 }
 
-function DiffPreview({ hunks, isResizing = false }: DiffPreviewProps) {
+// 当前未在 Files 预览中使用，保留供 Changes 面板等复用
+export function DiffPreview({ hunks, isResizing = false }: DiffPreviewProps) {
   return (
     <div 
       className={`font-mono text-[11px] leading-relaxed ${isResizing ? 'whitespace-pre overflow-hidden' : ''}`} 
