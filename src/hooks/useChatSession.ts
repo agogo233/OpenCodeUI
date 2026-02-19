@@ -13,6 +13,7 @@ import {
   getPendingPermissions, getPendingQuestions,
   getSessionChildren,
   executeCommand,
+  summarizeSession,
   updateSession,
   type ApiSession,
   type ApiAgent, type Attachment, type ModelInfo,
@@ -402,11 +403,20 @@ export function useChatSession({ chatAreaRef, currentModel, refetchModels }: Use
         navigateToSession(sessionId)
       }
       
+      if (command === 'compact') {
+        if (!currentModel) {
+          handleError('execute command', new Error('No model selected'))
+          return
+        }
+        await summarizeSession(sessionId, { providerID: currentModel.providerId, modelID: currentModel.id }, effectiveDirectory)
+        return
+      }
+      
       await executeCommand(sessionId, command, args, effectiveDirectory)
     } catch (err) {
       handleError('execute command', err)
     }
-  }, [routeSessionId, effectiveDirectory, createSession, navigateToSession])
+  }, [routeSessionId, effectiveDirectory, createSession, navigateToSession, currentModel])
 
   // Undo with animation
   const handleUndoWithAnimation = useCallback(async (userMessageId: string) => {

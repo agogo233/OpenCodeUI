@@ -11,20 +11,19 @@ export interface Command {
   keybind?: string
 }
 
-/**
- * 获取可用命令列表
- */
+// Builtin commands handled by dedicated endpoints, not returned by GET /command.
+// Mirrors the official web app's hardcoded command registrations.
+// See: sst/opencode packages/app/src/pages/session.tsx — "session.compact"
+const BUILTIN_COMMANDS: Command[] = [
+  { name: 'compact', description: 'Compact session by summarizing conversation history' },
+]
+
 export async function getCommands(directory?: string): Promise<Command[]> {
-  return get<Command[]>('/command', { directory: formatPathForApi(directory) })
+  const apiCommands = await get<Command[]>('/command', { directory: formatPathForApi(directory) })
+  const apiNames = new Set(apiCommands.map(c => c.name))
+  return [...apiCommands, ...BUILTIN_COMMANDS.filter(c => !apiNames.has(c.name))]
 }
 
-/**
- * POST /session/{sessionID}/command - 执行斜杠命令
- * @param sessionId Session ID
- * @param command 命令名（不含 /，如 "help"）
- * @param args 命令参数
- * @param directory 工作目录
- */
 export async function executeCommand(
   sessionId: string,
   command: string,
