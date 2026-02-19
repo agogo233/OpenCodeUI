@@ -19,7 +19,12 @@ const BUILTIN_COMMANDS: Command[] = [
 ]
 
 export async function getCommands(directory?: string): Promise<Command[]> {
-  const apiCommands = await get<Command[]>('/command', { directory: formatPathForApi(directory) })
+  let apiCommands: Command[] = []
+  try {
+    apiCommands = await get<Command[]>('/command', { directory: formatPathForApi(directory) })
+  } catch {
+    // Backend unreachable — builtins still available
+  }
   const apiNames = new Set(apiCommands.map(c => c.name))
   return [...apiCommands, ...BUILTIN_COMMANDS.filter(c => !apiNames.has(c.name))]
 }
