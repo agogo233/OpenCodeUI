@@ -12,6 +12,43 @@ import { getThemePreset, themeColorsToCSSVars, builtinThemes, DEFAULT_THEME_ID }
 import type { ThemePreset, ThemeColors } from '../themes'
 
 // ============================================
+// Color Conversion Utility
+// ============================================
+
+/**
+ * 将浏览器 getComputedStyle 返回的任意格式颜色字符串转为 #RRGGBB 十六进制
+ * 
+ * 现代 Chromium WebView 可能返回多种格式：
+ * - rgb(29, 36, 50)   — 逗号分隔
+ * - rgb(29 36 50)     — 空格分隔 (CSS Color Level 4)
+ * - color(srgb 0.11 0.14 0.20) — sRGB 函数
+ * - oklch(...)        — OKLab 色彩空间
+ * 
+ * 利用 Canvas 2D 做万能转换，让浏览器自己解析任何合法 CSS 颜色
+ */
+function computedColorToHex(cssColor: string): string | null {
+  try {
+    const ctx = document.createElement('canvas').getContext('2d')
+    if (!ctx) return null
+    ctx.fillStyle = cssColor
+    // ctx.fillStyle 会被浏览器标准化为 #rrggbb 或 rgba(...) 格式
+    const normalized = ctx.fillStyle
+    if (normalized.startsWith('#')) return normalized
+    // 如果返回 rgba/rgb 格式，提取数值转 hex
+    const match = normalized.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/)
+    if (match) {
+      const r = parseInt(match[1], 10)
+      const g = parseInt(match[2], 10)
+      const b = parseInt(match[3], 10)
+      return `#${((1 << 24) | (r << 16) | (g << 8) | b).toString(16).slice(1)}`
+    }
+    return null
+  } catch {
+    return null
+  }
+}
+
+// ============================================
 // Types
 // ============================================
 
@@ -219,14 +256,19 @@ class ThemeStore {
     // 5. 更新 meta theme-color
     requestAnimationFrame(() => {
       const bg = getComputedStyle(root).getPropertyValue('--color-bg-100').trim()
-      if (bg) {
-        const meta = document.querySelector('meta[name="theme-color"]')
-        if (meta) meta.setAttribute('content', bg)
-      }
+      if (!bg) return
+
+      // 将计算后的颜色统一转为 HEX 格式，避免不同浏览器/WebView 返回
+      // 不同格式（rgb, oklch, color(srgb ...)）导致 Android 原生端解析失败或色差
+      const hex = computedColorToHex(bg)
+      if (!hex) return
+
+      const meta = document.querySelector('meta[name="theme-color"]')
+      if (meta) meta.setAttribute('content', hex)
 
       const androidBridge = (window as unknown as { __opencode_android?: { setSystemBars?: (mode: string, bg: string) => void } }).__opencode_android
-      if (androidBridge?.setSystemBars && bg) {
-        androidBridge.setSystemBars(resolvedMode, bg)
+      if (androidBridge?.setSystemBars) {
+        androidBridge.setSystemBars(resolvedMode, hex)
       }
     })
   }

@@ -105,11 +105,18 @@ class MainActivity : TauriActivity() {
 
   private fun syncSystemBars(rootView: View) {
     val webView = cachedWebView ?: findWebView(rootView) ?: return
+    // 在 JS 端用 Canvas 2D 将 getComputedStyle 返回的任意格式颜色
+    // 统一转为 #rrggbb hex，避免不同 WebView 版本返回不同格式
+    // (rgb 逗号/空格分隔, color(srgb ...), oklch(...) 等)
     val js = """
       (function() {
         var mode = document.documentElement.getAttribute('data-mode') || 'system';
-        var bg = getComputedStyle(document.documentElement).getPropertyValue('--color-bg-100').trim();
-        return JSON.stringify({ mode: mode, bg: bg });
+        var raw = getComputedStyle(document.documentElement).getPropertyValue('--color-bg-100').trim();
+        if (!raw) return JSON.stringify({ mode: mode, bg: '' });
+        var c = document.createElement('canvas').getContext('2d');
+        c.fillStyle = raw;
+        var hex = c.fillStyle;
+        return JSON.stringify({ mode: mode, bg: hex });
       })();
     """.trimIndent()
     webView.evaluateJavascript(js) { result ->
@@ -176,27 +183,41 @@ class MainActivity : TauriActivity() {
   private fun parseCssColor(value: String): Int? {
     val v = value.trim()
     if (v.isEmpty()) return null
-    if (v.startsWith("rgb")) {
-      val nums = v.substringAfter('(').substringBefore(')')
-        .split(',')
-        .map { it.trim() }
-      if (nums.size < 3) return null
-      val r = nums[0].toFloatOrNull() ?: return null
-      val g = nums[1].toFloatOrNull() ?: return null
-      val b = nums[2].toFloatOrNull() ?: return null
-      return Color.rgb(r.toInt(), g.toInt(), b.toInt())
+
+    // 优先处理 #hex 格式（JS 端已统一转为此格式）
+    if (v.startsWith("#")) {
+      return try {
+        Color.parseColor(v)
+      } catch (_: Exception) {
+        null
+      }
     }
+
+    // 兼容处理 rgb/rgba — 同时支持逗号分隔和空格分隔
+    if (v.startsWith("rgb")) {
+      val inner = v.substringAfter('(').substringBefore(')')
+      // 提取所有数字（整数或浮点）
+      val nums = Regex("""\d+\.?\d*""").findAll(inner).map { it.value }.toList()
+      if (nums.size < 3) return null
+      val r = nums[0].toFloatOrNull()?.toInt()?.coerceIn(0, 255) ?: return null
+      val g = nums[1].toFloatOrNull()?.toInt()?.coerceIn(0, 255) ?: return null
+      val b = nums[2].toFloatOrNull()?.toInt()?.coerceIn(0, 255) ?: return null
+      return Color.rgb(r, g, b)
+    }
+
+    // 兼容处理 hsl/hsla — 同时支持逗号分隔和空格分隔
     if (v.startsWith("hsl")) {
-      val parts = v.substringAfter('(').substringBefore(')')
+      val inner = v.substringAfter('(').substringBefore(')')
         .replace("%", "")
-        .split(Regex("[ ,/]+"))
-        .filter { it.isNotEmpty() }
+      val parts = Regex("""\d+\.?\d*""").findAll(inner).map { it.value }.toList()
       if (parts.size < 3) return null
       val h = parts[0].toFloatOrNull() ?: return null
       val s = (parts[1].toFloatOrNull() ?: return null) / 100f
       val l = (parts[2].toFloatOrNull() ?: return null) / 100f
       return hslToColor(h, s, l)
     }
+
+    // 最后尝试 Color.parseColor (支持 named colors 等)
     return try {
       Color.parseColor(v)
     } catch (_: Exception) {
