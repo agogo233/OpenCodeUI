@@ -615,7 +615,7 @@ function InputBoxComponent({
           <div 
             ref={inputContainerRef}
             data-input-box
-            className={`bg-bg-000 rounded-2xl relative z-30 transition-all focus-within:outline-none shadow-2xl shadow-black/5 ${
+            className={`bg-bg-000 rounded-2xl relative z-30 transition-all focus-within:outline-none shadow-lg shadow-black/5 ${
               isStreaming 
                 ? 'border border-accent-main-100/50 animate-border-pulse' 
                 : 'border border-border-200/50'
