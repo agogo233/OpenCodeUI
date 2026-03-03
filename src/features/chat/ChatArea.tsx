@@ -342,6 +342,28 @@ export const ChatArea = memo(forwardRef<ChatAreaHandle, ChatAreaProps>(({
   const visibleMessagesCountRef = useRef(visibleMessages.length)
   visibleMessagesCountRef.current = visibleMessages.length
 
+  // 用 ref 追踪最新的消息列表和回调，供 handleRangeChanged 稳定引用
+  const visibleMessagesRef = useRef(visibleMessages)
+  visibleMessagesRef.current = visibleMessages
+  const onVisibleMessageIdsChangeRef = useRef(onVisibleMessageIdsChange)
+  onVisibleMessageIdsChangeRef.current = onVisibleMessageIdsChange
+
+  // 稳定的 rangeChanged 回调 —— 不随 visibleMessages 变化重建，
+  // 避免 Virtuoso 因为 rangeChanged 引用变化做额外工作
+  const handleRangeChanged = useCallback((range: { startIndex: number; endIndex: number }) => {
+    const cb = onVisibleMessageIdsChangeRef.current
+    if (!cb) return
+    const msgs = visibleMessagesRef.current
+    const start = Math.max(0, range.startIndex - MESSAGE_PREFETCH_BUFFER)
+    const end = Math.min(msgs.length - 1, range.endIndex + MESSAGE_PREFETCH_BUFFER)
+    const ids: string[] = []
+    for (let i = start; i <= end; i++) {
+      const id = msgs[i]?.info.id
+      if (id) ids.push(id)
+    }
+    cb(ids)
+  }, [])
+
   // 以可见消息为准追踪 prepend 数，避免 tool 合并导致的索引漂移
   useEffect(() => {
     const firstId = visibleMessages[0]?.info.id ?? null
@@ -713,17 +735,7 @@ export const ChatArea = memo(forwardRef<ChatAreaHandle, ChatAreaProps>(({
             skipAnimationFrameInResizeObserver
             overscan={{ main: VIRTUOSO_OVERSCAN_PX, reverse: VIRTUOSO_OVERSCAN_PX }}
             components={virtuosoComponents}
-            rangeChanged={(range) => {
-              if (!onVisibleMessageIdsChange) return
-              const start = Math.max(0, range.startIndex - MESSAGE_PREFETCH_BUFFER)
-              const end = Math.min(visibleMessages.length - 1, range.endIndex + MESSAGE_PREFETCH_BUFFER)
-              const ids: string[] = []
-              for (let i = start; i <= end; i++) {
-                const id = visibleMessages[i]?.info.id
-                if (id) ids.push(id)
-              }
-              onVisibleMessageIdsChange(ids)
-            }}
+            rangeChanged={handleRangeChanged}
             itemContent={(_, msg) => renderMessage(msg)}
           />
         )}

@@ -58,9 +58,27 @@ function App() {
 
   // ============================================
   // Visible Message IDs (for outline index)
+  // 用 ref 存最新值，只在内容真正变化时才 setState，
+  // 避免滚动时 rangeChanged 高频创建新数组引用导致 OutlineIndex 无意义 re-render
   // ============================================
   const [visibleMessageIds, setVisibleMessageIds] = useState<string[]>([])
+  const visibleMessageIdsRef = useRef<string[]>([])
+  const setVisibleMessageIdsStable = useCallback((ids: string[]) => {
+    const prev = visibleMessageIdsRef.current
+    // 浅比较：长度不同 或 任何元素不同 才更新
+    if (prev.length === ids.length && prev.every((id, i) => id === ids[i])) return
+    visibleMessageIdsRef.current = ids
+    setVisibleMessageIds(ids)
+  }, [])
   const [isAtBottom, setIsAtBottom] = useState(true)
+
+  // 稳定引用：OutlineIndex 的 scrollToMessageId 回调
+  const handleOutlineScrollToMessage = useCallback((messageId: string) => {
+    chatAreaRef.current?.scrollToMessageId(messageId)
+  }, [])
+
+  // 稳定引用：可见消息 ID 变化回调（ref 在 useChatSession 之后赋值）
+  const handleVisibleMessageIdsChangeRef = useRef<((ids: string[]) => void) | null>(null)
 
   // ============================================
   // Input Box Height (动态测量，用于 ChatArea 底部留白)
@@ -207,6 +225,13 @@ function App() {
     handleCopyLastResponse,
     restoreAgentFromMessage,
   } = useChatSession({ chatAreaRef, currentModel, refetchModels })
+
+  // 赋值 ref（需在 useChatSession 之后，因为 handleVisibleMessageIdsChange 来自该 hook）
+  handleVisibleMessageIdsChangeRef.current = handleVisibleMessageIdsChange
+  const handleVisibleIdsChange = useCallback((ids: string[]) => {
+    handleVisibleMessageIdsChangeRef.current?.(ids)
+    setVisibleMessageIdsStable(ids)
+  }, [setVisibleMessageIdsStable])
 
   // ============================================
   // Agent Change with Model Sync
@@ -537,10 +562,7 @@ function App() {
                 isWideMode={isWideMode}
                 retryStatus={retryStatus}
                 bottomPadding={inputBoxHeight}
-                onVisibleMessageIdsChange={(ids) => {
-                  handleVisibleMessageIdsChange(ids)
-                  setVisibleMessageIds(ids)
-                }}
+                onVisibleMessageIdsChange={handleVisibleIdsChange}
                 onAtBottomChange={setIsAtBottom}
               />
             </div>
@@ -548,7 +570,7 @@ function App() {
             {/* Outline Index - 消息目录索引 */}
             <OutlineIndex
               messages={messages}
-              onScrollToMessageId={(messageId) => chatAreaRef.current?.scrollToMessageId(messageId)}
+              onScrollToMessageId={handleOutlineScrollToMessage}
               visibleMessageIds={visibleMessageIds}
             />
 
