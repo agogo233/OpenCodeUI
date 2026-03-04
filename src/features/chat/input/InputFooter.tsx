@@ -65,7 +65,7 @@ export const InputFooter = memo(function InputFooter({ sessionId, onNewChat, inp
   // 始终渲染同一个容器 div，避免 mount/unmount 导致高度跳变
   return (
     <div
-      className="flex items-center justify-center gap-2 pt-2 text-[11px] leading-none text-text-500 relative"
+      className="flex items-center justify-center gap-2 pt-1 text-[11px] leading-none text-text-500 relative"
       ref={popoverRef}
     >
       {!hasTodos ? (
