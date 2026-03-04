@@ -5,14 +5,13 @@ import { SlashCommandMenu, type SlashCommandMenuHandle } from '../slash-command'
 import { InputToolbar } from './input/InputToolbar'
 import { InputFooter } from './input/InputFooter'
 import { UndoStatus } from './input/UndoStatus'
-import { useImageCompressor } from '../../hooks/useImageCompressor'
 import { keybindingStore, matchesKeybinding } from '../../store/keybindingStore'
 import { useMessages } from '../../store/messageStore'
 import { getMessageText, type FilePart, type AgentPart } from '../../types/message'
 import { useIsMobile } from '../../hooks'
 import { ArrowDownIcon, ArrowUpIcon, PermissionListIcon, QuestionIcon } from '../../components/Icons'
 import type { ApiAgent } from '../../api/client'
-import type { ModelInfo } from '../../api'
+import type { ModelInfo, FileCapabilities } from '../../api'
 import type { Command } from '../../api/command'
 
 // ============================================
@@ -43,7 +42,8 @@ export interface InputBoxProps {
   variants?: string[]
   selectedVariant?: string
   onVariantChange?: (variant: string | undefined) => void
-  supportsImages?: boolean
+  supportsImages?: boolean       // 保留向后兼容（deprecated，优先用 fileCapabilities）
+  fileCapabilities?: FileCapabilities
   // Model（移动端 InputToolbar 用）
   models?: ModelInfo[]
   selectedModelKey?: string | null
@@ -87,6 +87,7 @@ function InputBoxComponent({
   selectedVariant,
   onVariantChange,
   supportsImages = false,
+  fileCapabilities: fileCapabilitiesProp,
   models = [],
   selectedModelKey = null,
   onModelChange,
@@ -107,6 +108,17 @@ function InputBoxComponent({
   collapsedPermission,
   collapsedQuestion,
 }: InputBoxProps) {
+  // 合并文件能力：优先用 fileCapabilities，回退到 supportsImages
+  const fileCaps: FileCapabilities = useMemo(() => fileCapabilitiesProp ?? {
+    image: supportsImages,
+    pdf: false,
+    audio: false,
+    video: false,
+  }, [fileCapabilitiesProp, supportsImages])
+
+  // 是否有任何文件附件能力
+  const supportsAnyFile = fileCaps.image || fileCaps.pdf || fileCaps.audio || fileCaps.video
+
   // 文本状态
   const [text, setText] = useState('')
   // 附件状态（图片、文件、文件夹、agent）
@@ -121,6 +133,10 @@ function InputBoxComponent({
   const [slashOpen, setSlashOpen] = useState(false)
   const [slashQuery, setSlashQuery] = useState('')
   const [slashStartIndex, setSlashStartIndex] = useState(-1)
+
+  // 拖拽状态
+  const [isDragging, setIsDragging] = useState(false)
+  const dragCounterRef = useRef(0)
   
   // 响应式 placeholder
   const isMobile = useIsMobile()
@@ -649,50 +665,30 @@ function InputBoxComponent({
     textareaRef.current?.focus()
   }, [])
 
-  // 图片压缩器（使用 Web Worker）
-  const { compress, needsCompression } = useImageCompressor()
-
-  // 图片上传（使用 Web Worker 压缩，避免阻塞主线程）
-  const handleImageUpload = useCallback(async (files: FileList | null) => {
-    if (!files || !supportsImages) return
+  // 通用文件上传 — 根据模型能力判断是否接受
+  const handleFileUpload = useCallback(async (files: FileList | null) => {
+    if (!files || !supportsAnyFile) return
     
     for (const file of Array.from(files)) {
-      if (!file.type.startsWith('image/')) continue
+      // 按 MIME 类型检查模型能力
+      if (!isFileSupported(file.type, fileCaps)) continue
       
       try {
-        let dataUrl: string
-        let mimeType: string
-        
-        // 小图片直接使用，大图片用 Worker 压缩
-        if (!needsCompression(file)) {
-          // 小于 500KB，直接读取
-          dataUrl = await new Promise<string>((resolve, reject) => {
-            const reader = new FileReader()
-            reader.onload = (e) => resolve(e.target?.result as string)
-            reader.onerror = reject
-            reader.readAsDataURL(file)
-          })
-          mimeType = file.type
-        } else {
-          // 使用 Worker 压缩
-          const result = await compress(file)
-          dataUrl = result.dataUrl
-          mimeType = result.mimeType
-        }
+        const dataUrl = await readFileAsDataUrl(file)
         
         const attachment: Attachment = {
           id: crypto.randomUUID(),
           type: 'file',
           displayName: file.name,
           url: dataUrl,
-          mime: mimeType,
+          mime: file.type,
         }
         setAttachments(prev => [...prev, attachment])
       } catch (err) {
-        console.warn('[InputBox] Failed to process image:', err)
+        console.warn('[InputBox] Failed to process file:', err)
       }
     }
-  }, [supportsImages, compress, needsCompression])
+  }, [supportsAnyFile, fileCaps])
 
   // 删除附件
   const handleRemoveAttachment = useCallback((id: string) => {
@@ -710,10 +706,9 @@ function InputBoxComponent({
     setAttachments(prev => prev.filter(a => a.id !== id))
   }, [attachments, text])
 
-  // 粘贴处理
+  // 粘贴处理 — 根据模型能力过滤可粘贴的文件类型
   const handlePaste = useCallback((e: React.ClipboardEvent) => {
-    // 处理图片粘贴
-    if (supportsImages) {
+    if (supportsAnyFile) {
       const items = e.clipboardData?.items
       const files: File[] = []
       
@@ -721,25 +716,57 @@ function InputBoxComponent({
         for (let i = 0; i < items.length; i++) {
           if (items[i].kind === 'file') {
             const file = items[i].getAsFile()
-            if (file) files.push(file)
+            if (file && isFileSupported(file.type, fileCaps)) files.push(file)
           }
         }
       }
       
       if (files.length > 0) {
-        const imageFiles = files.filter(f => f.type.startsWith('image/'))
-        if (imageFiles.length > 0) {
-          e.preventDefault()
-          const dt = new DataTransfer()
-          imageFiles.forEach(f => dt.items.add(f))
-          handleImageUpload(dt.files)
-          return
-        }
+        e.preventDefault()
+        const dt = new DataTransfer()
+        files.forEach(f => dt.items.add(f))
+        handleFileUpload(dt.files)
+        return
       }
     }
     
     // 文本粘贴：让 textarea 默认处理（天然支持换行和 undo）
-  }, [supportsImages, handleImageUpload])
+  }, [supportsAnyFile, fileCaps, handleFileUpload])
+
+  // 拖拽文件到输入框
+  const handleDragEnter = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    dragCounterRef.current++
+    // 只在有文件类型的拖拽时高亮
+    if (supportsAnyFile && e.dataTransfer.types.includes('Files')) {
+      setIsDragging(true)
+    }
+  }, [supportsAnyFile])
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+  }, [])
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    dragCounterRef.current--
+    if (dragCounterRef.current === 0) {
+      setIsDragging(false)
+    }
+  }, [])
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    dragCounterRef.current = 0
+    setIsDragging(false)
+    if (supportsAnyFile && e.dataTransfer.files.length > 0) {
+      handleFileUpload(e.dataTransfer.files)
+    }
+  }, [supportsAnyFile, handleFileUpload])
 
   // 滚动同步（备用，overlay 内部也监听了 scroll）
   const handleScroll = useCallback(() => {
@@ -849,12 +876,24 @@ function InputBoxComponent({
               <div 
                 ref={inputContainerRef}
                 data-input-box
+                onDragEnter={handleDragEnter}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
                 className={`bg-bg-000 rounded-2xl relative z-30 transition-all focus-within:outline-none shadow-lg shadow-black/5 ${
-                  isStreaming 
-                    ? 'border border-accent-main-100/50 animate-border-pulse' 
-                    : 'border border-border-200/50'
+                  isDragging
+                    ? 'border border-accent-main-100 ring-2 ring-accent-main-100/30'
+                    : isStreaming 
+                      ? 'border border-accent-main-100/50 animate-border-pulse' 
+                      : 'border border-border-200/50'
                 }`}
               >
+                {/* Drop overlay */}
+                {isDragging && (
+                  <div className="absolute inset-0 z-50 rounded-2xl bg-accent-main-100/5 backdrop-blur-[1px] flex items-center justify-center pointer-events-none">
+                    <span className="text-sm text-accent-main-100 font-medium">Drop files here</span>
+                  </div>
+                )}
                 {/* @ Mention Menu */}
                 <MentionMenu
                   ref={mentionMenuRef}
@@ -924,8 +963,8 @@ function InputBoxComponent({
                       variants={variants}
                       selectedVariant={selectedVariant}
                       onVariantChange={onVariantChange}
-                      supportsImages={supportsImages}
-                      onImageUpload={handleImageUpload}
+                      fileCapabilities={fileCaps}
+                      onFileUpload={handleFileUpload}
                       isStreaming={isStreaming}
                       onAbort={onAbort}
                       canSend={canSend || false} 
@@ -983,6 +1022,29 @@ function detectSlashTrigger(text: string, cursorPos: number): { query: string; s
   }
   
   return { query, startIndex: 0 }
+}
+
+// ============================================
+// File helpers
+// ============================================
+
+/** 检查文件 MIME 类型是否被当前模型能力支持 */
+function isFileSupported(mime: string, caps: FileCapabilities): boolean {
+  if (mime.startsWith('image/')) return caps.image
+  if (mime === 'application/pdf') return caps.pdf
+  if (mime.startsWith('audio/')) return caps.audio
+  if (mime.startsWith('video/')) return caps.video
+  return false
+}
+
+/** 读取文件为 data URL */
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = (e) => resolve(e.target?.result as string)
+    reader.onerror = reject
+    reader.readAsDataURL(file)
+  })
 }
 
 // ============================================

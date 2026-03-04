@@ -19,6 +19,7 @@ import {
   MinimizeIcon,
   ShareIcon,
 } from '../../../components/Icons'
+import { CircularProgress } from '../../../components/CircularProgress'
 import { useDirectory, useSessionStats, formatTokens, formatCost, useKeybindingLabel } from '../../../hooks'
 import type { ThemeMode } from '../../../hooks'
 import { useSessionContext } from '../../../contexts/SessionContext'
@@ -693,26 +694,26 @@ function ActiveSessionItem({ entry, resolvedSession, isSelected, onSelect }: Act
         }`} title={displayTitle}>
           {displayTitle}
         </p>
-        <div className="flex items-center mt-0.5 h-4 min-w-0 overflow-hidden text-[10px] text-text-400 gap-1">
-          <span className={`shrink-0 ${statusConfig.color}`}>
+        <div className="flex items-center mt-0.5 h-4 min-w-0 overflow-hidden text-[10px] text-text-400 gap-1 whitespace-nowrap">
+          <span className={`shrink-0 whitespace-nowrap ${statusConfig.color}`}>
             {statusConfig.label}
           </span>
           {pending?.description && (
             <>
-              <span className="opacity-30">·</span>
-              <span className="truncate opacity-60">{pending.description}</span>
+              <span className="opacity-30 shrink-0">·</span>
+              <span className="truncate min-w-0 flex-1 opacity-60">{pending.description}</span>
             </>
           )}
           {isRetry && entry.status.type === 'retry' && (
             <>
-              <span className="opacity-30">·</span>
-              <span className="text-text-400 opacity-60">attempt {entry.status.attempt}</span>
+              <span className="opacity-30 shrink-0">·</span>
+              <span className="text-text-400 opacity-60 shrink-0 whitespace-nowrap">attempt {entry.status.attempt}</span>
             </>
           )}
           {directory && (
             <>
               <span className="opacity-30 shrink-0">·</span>
-              <span className="truncate opacity-50" title={directory}>
+              <span className="truncate min-w-0 flex-1 opacity-50" title={directory}>
                 {directory.replace(/\\/g, '/').split('/').filter(Boolean).pop()}
               </span>
             </>
@@ -854,11 +855,7 @@ function StatusIndicator({
   connectionState: string
   size?: number 
 }) {
-  const strokeWidth = 3 // 加粗
-  const radius = (size - strokeWidth) / 2
-  const circumference = 2 * Math.PI * radius
   const clampedPercent = Math.min(Math.max(percent, 0), 100)
-  const offset = circumference - (clampedPercent / 100) * circumference
   
   // 进度颜色
   const progressColor = clampedPercent === 0 ? 'text-text-500' :
@@ -874,36 +871,13 @@ function StatusIndicator({
 
   return (
     <div className="relative shrink-0" style={{ width: size, height: size }}>
-      <svg 
-        className="-rotate-90" 
-        width={size} 
-        height={size} 
-        viewBox={`0 0 ${size} ${size}`}
-      >
-        {/* 背景轨道 - 确保和进度条一样粗 */}
-        <circle
-          className="text-bg-300"
-          strokeWidth={strokeWidth}
-          stroke="currentColor"
-          fill="transparent"
-          r={radius}
-          cx={size / 2}
-          cy={size / 2}
-        />
-        {/* 进度弧 */}
-        <circle
-          className={`${progressColor} transition-all duration-500 ease-out`}
-          strokeWidth={strokeWidth}
-          strokeDasharray={circumference}
-          strokeDashoffset={offset}
-          strokeLinecap="round"
-          stroke="currentColor"
-          fill="transparent"
-          r={radius}
-          cx={size / 2}
-          cy={size / 2}
-        />
-      </svg>
+      <CircularProgress
+        progress={clampedPercent / 100}
+        size={size}
+        strokeWidth={3}
+        trackClassName="text-bg-300"
+        progressClassName={progressColor}
+      />
       
       {/* 右下角状态点 - 带背景边框以突出显示 */}
       <div 
