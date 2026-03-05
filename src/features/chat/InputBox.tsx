@@ -10,7 +10,6 @@ import { useMessages } from '../../store/messageStore'
 import { getMessageText, type FilePart, type AgentPart } from '../../types/message'
 import { useIsMobile } from '../../hooks'
 import { ArrowDownIcon, ArrowUpIcon, PermissionListIcon, QuestionIcon } from '../../components/Icons'
-import { isTauri, extToMime } from '../../utils/tauri'
 import type { ApiAgent } from '../../api/client'
 import type { ModelInfo, FileCapabilities } from '../../api'
 import type { Command } from '../../api/command'
@@ -739,7 +738,7 @@ function InputBoxComponent({
     e.preventDefault()
     e.stopPropagation()
     dragCounterRef.current++
-    // 自定义拖拽（来自 FileExplorer）或原生文件拖拽都高亮
+    // 内部拖拽（FileExplorer）或原生文件拖拽都高亮
     if (e.dataTransfer.types.includes('application/opencode-file') ||
         (supportsAnyFile && e.dataTransfer.types.includes('Files'))) {
       setIsDragging(true)
@@ -760,142 +759,75 @@ function InputBoxComponent({
     }
   }, [])
 
+  // 将拖入的文件信息插入为 @mention 附件
+  const insertDraggedFile = useCallback((fileInfo: {
+    type: 'file' | 'folder'
+    path: string
+    absolute: string
+    name: string
+  }) => {
+    const relativePath = normalizePath(fileInfo.path)
+    const mentionText = `@${relativePath}`
+    const cursorPos = textareaRef.current?.selectionStart ?? text.length
+
+    // 在光标位置插入 @mention 文本
+    const beforeCursor = text.slice(0, cursorPos)
+    const afterCursor = text.slice(cursorPos)
+    // 如果光标前不是空格或空文本，插入空格分隔
+    const needSpaceBefore = beforeCursor.length > 0 && !beforeCursor.endsWith(' ') && !beforeCursor.endsWith('\n')
+    const prefix = needSpaceBefore ? ' ' : ''
+    const newText = beforeCursor + prefix + mentionText + ' ' + afterCursor
+    const mentionStart = cursorPos + prefix.length
+
+    // 创建附件
+    const attachment: Attachment = {
+      id: crypto.randomUUID(),
+      type: fileInfo.type,
+      displayName: fileInfo.name,
+      relativePath,
+      url: toFileUrl(fileInfo.absolute),
+      mime: fileInfo.type === 'file' ? 'text/plain' : undefined,
+      textRange: {
+        value: mentionText,
+        start: mentionStart,
+        end: mentionStart + mentionText.length,
+      },
+    }
+
+    setText(newText)
+    setAttachments(prev => [...prev, attachment])
+
+    // 聚焦并移动光标到 @mention 之后
+    requestAnimationFrame(() => {
+      if (!textareaRef.current) return
+      const newCursorPos = mentionStart + mentionText.length + 1
+      textareaRef.current.setSelectionRange(newCursorPos, newCursorPos)
+      textareaRef.current.focus()
+    })
+  }, [text])
+
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault()
     e.stopPropagation()
     dragCounterRef.current = 0
     setIsDragging(false)
 
-    // 优先处理来自 FileExplorer 的自定义拖拽
+    // 来自 FileExplorer 的内部拖拽（自定义 data type）
     const opencodeData = e.dataTransfer.getData('application/opencode-file')
     if (opencodeData) {
       try {
-        const fileInfo = JSON.parse(opencodeData) as {
-          type: 'file' | 'folder'
-          path: string      // 相对路径
-          absolute: string   // 绝对路径
-          name: string
-        }
-
-        const relativePath = normalizePath(fileInfo.path)
-        const mentionText = `@${relativePath}`
-        const cursorPos = textareaRef.current?.selectionStart ?? text.length
-
-        // 在光标位置插入 @mention 文本
-        const beforeCursor = text.slice(0, cursorPos)
-        const afterCursor = text.slice(cursorPos)
-        // 如果光标前不是空格或空文本，插入空格分隔
-        const needSpaceBefore = beforeCursor.length > 0 && !beforeCursor.endsWith(' ') && !beforeCursor.endsWith('\n')
-        const prefix = needSpaceBefore ? ' ' : ''
-        const newText = beforeCursor + prefix + mentionText + ' ' + afterCursor
-        const mentionStart = cursorPos + prefix.length
-
-        // 创建附件
-        const attachment: Attachment = {
-          id: crypto.randomUUID(),
-          type: fileInfo.type,
-          displayName: fileInfo.name,
-          relativePath,
-          url: toFileUrl(fileInfo.absolute),
-          mime: fileInfo.type === 'file' ? 'text/plain' : undefined,
-          textRange: {
-            value: mentionText,
-            start: mentionStart,
-            end: mentionStart + mentionText.length,
-          },
-        }
-
-        setText(newText)
-        setAttachments(prev => [...prev, attachment])
-
-        // 聚焦并移动光标到 @mention 之后
-        requestAnimationFrame(() => {
-          if (!textareaRef.current) return
-          const newCursorPos = mentionStart + mentionText.length + 1
-          textareaRef.current.setSelectionRange(newCursorPos, newCursorPos)
-          textareaRef.current.focus()
-        })
+        insertDraggedFile(JSON.parse(opencodeData))
       } catch (err) {
         console.warn('[InputBox] Failed to parse opencode-file drag data:', err)
       }
       return
     }
 
-    // 原生文件拖拽
+    // 原生文件拖拽（从操作系统拖入）
     if (supportsAnyFile && e.dataTransfer.files.length > 0) {
       handleFileUpload(e.dataTransfer.files)
     }
-  }, [supportsAnyFile, handleFileUpload, text])
-
-  // Tauri 原生 drag-drop 事件（Tauri 默认拦截 WebView 的 HTML5 drag/drop）
-  // Tauri 的 drag-drop 是 window 级别事件，坐标是物理像素且受 DPI/标题栏偏移影响，
-  // 和 DOM getBoundingClientRect 对不上，所以不做区域判断 —— 拖到窗口任意位置即可 drop。
-  const handleFileUploadRef = useRef(handleFileUpload)
-  handleFileUploadRef.current = handleFileUpload
-
-  useEffect(() => {
-    if (!isTauri() || !supportsAnyFile) return
-
-    let unlisten: (() => void) | null = null
-    let cancelled = false
-    // 防止 Tauri 事件重复触发（已知 bug tauri-apps/tauri#14134）
-    let processingDrop = false
-
-    ;(async () => {
-      const { getCurrentWebview } = await import('@tauri-apps/api/webview')
-      const { readFile } = await import('@tauri-apps/plugin-fs')
-
-      if (cancelled) return
-
-      unlisten = await getCurrentWebview().onDragDropEvent(async (event) => {
-        if (cancelled) return
-        const { type } = event.payload
-
-        if (type === 'enter' || type === 'over') {
-          setIsDragging(true)
-        } else if (type === 'leave') {
-          setIsDragging(false)
-        } else if (type === 'drop') {
-          setIsDragging(false)
-
-          if (processingDrop) return
-          processingDrop = true
-
-          try {
-            const { paths } = event.payload
-            if (!paths || paths.length === 0) return
-
-            const files: File[] = []
-            for (const filePath of paths) {
-              try {
-                const fileName = filePath.split(/[\\/]/).pop() || 'file'
-                const ext = fileName.split('.').pop()?.toLowerCase() || ''
-                const mime = extToMime(ext)
-                const data = await readFile(filePath)
-                files.push(new File([data], fileName, { type: mime }))
-              } catch (err) {
-                console.warn('[InputBox] Tauri readFile failed:', filePath, err)
-              }
-            }
-
-            if (files.length > 0) {
-              const dt = new DataTransfer()
-              files.forEach(f => dt.items.add(f))
-              handleFileUploadRef.current(dt.files)
-            }
-          } finally {
-            setTimeout(() => { processingDrop = false }, 500)
-          }
-        }
-      })
-    })()
-
-    return () => {
-      cancelled = true
-      unlisten?.()
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [supportsAnyFile])
+  }, [supportsAnyFile, handleFileUpload, insertDraggedFile])
 
   // 滚动同步（备用，overlay 内部也监听了 scroll）
   const handleScroll = useCallback(() => {

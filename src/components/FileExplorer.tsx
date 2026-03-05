@@ -356,13 +356,13 @@ const FileTreeItem = memo(function FileTreeItem({
 
   // 拖拽到输入框实现 @mention
   const handleDragStart = useCallback((e: DragEvent<HTMLButtonElement>) => {
-    const data = JSON.stringify({
-      type: isDirectory ? 'folder' : 'file',
+    const fileData = {
+      type: (isDirectory ? 'folder' : 'file') as 'file' | 'folder',
       path: node.path,        // 相对路径
       absolute: node.absolute, // 绝对路径
       name: node.name,
-    })
-    e.dataTransfer.setData('application/opencode-file', data)
+    }
+    e.dataTransfer.setData('application/opencode-file', JSON.stringify(fileData))
     e.dataTransfer.effectAllowed = 'copy'
   }, [node.path, node.absolute, node.name, isDirectory])
 
