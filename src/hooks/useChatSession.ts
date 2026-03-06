@@ -23,7 +23,6 @@ import { createErrorHandler } from '../utils'
 import { serverStorage } from '../utils/perServerStorage'
 import { 
   PERMISSION_POLL_INTERVAL_MS,
-  INITIAL_SCROLL_DELAY_MS,
   UNDO_SCROLL_DELAY_MS,
   AUTO_SCROLL_SUPPRESS_DURATION_MS,
   STORAGE_KEY_SELECTED_AGENT,
@@ -119,11 +118,6 @@ export function useChatSession({ chatAreaRef, currentModel, refetchModels }: Use
   } = useSessionManager({
     sessionId: routeSessionId,
     directory: currentDirectory,
-    onLoadComplete: () => {
-      setTimeout(() => {
-        chatAreaRef.current?.scrollToBottom(true)
-      }, INITIAL_SCROLL_DELAY_MS)
-    },
   })
 
   // Permission handling

@@ -219,6 +219,7 @@ export const ChatArea = memo(forwardRef<ChatAreaHandle, ChatAreaProps>(({
   // 程序触发的滚动标志 - 用于区分用户手动滚动和 scrollToIndex 触发的滚动
   const programmaticScrollRef = useRef(false)
   const programmaticScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const initialScrollSessionRef = useRef<string | null>(null)
   
   // Session 切换：追踪上一个 sessionId，用于检测切换并触发滚动+动画
   const prevSessionIdRef = useRef(sessionId)
@@ -245,6 +246,27 @@ export const ChatArea = memo(forwardRef<ChatAreaHandle, ChatAreaProps>(({
       noMoreHintTimerRef.current = null
     }, 1200)
   }, [])
+
+  const markProgrammaticScroll = useCallback((duration = 220) => {
+    programmaticScrollRef.current = true
+    if (programmaticScrollTimerRef.current) {
+      clearTimeout(programmaticScrollTimerRef.current)
+    }
+    programmaticScrollTimerRef.current = setTimeout(() => {
+      programmaticScrollRef.current = false
+      programmaticScrollTimerRef.current = null
+    }, duration)
+  }, [])
+
+  const scrollToIndexProgrammatically = useCallback((options: {
+    index: number
+    align: 'start' | 'center' | 'end'
+    behavior: 'auto' | 'smooth'
+  }) => {
+    if (options.index < 0) return
+    markProgrammaticScroll(options.behavior === 'smooth' ? 700 : 220)
+    virtuosoRef.current?.scrollToIndex(options)
+  }, [markProgrammaticScroll])
   
   // 监听 scrollParent 滚动，追踪是否在顶部附近
   useEffect(() => {
@@ -434,24 +456,16 @@ export const ChatArea = memo(forwardRef<ChatAreaHandle, ChatAreaProps>(({
       }
       
       // 标记为程序触发的滚动，防止 handleIsScrolling 误判
-      programmaticScrollRef.current = true
-      if (programmaticScrollTimerRef.current) {
-        clearTimeout(programmaticScrollTimerRef.current)
-      }
-      programmaticScrollTimerRef.current = setTimeout(() => {
-        programmaticScrollRef.current = false
-      }, 150) // 给 Virtuoso 足够时间完成滚动
-      
       // 只用 Virtuoso 滚动，不强制 DOM 滚动
-      virtuosoRef.current?.scrollToIndex({ 
-        index: visibleMessagesCountRef.current - 1, 
-        align: 'end', 
-        behavior: 'auto' 
+      scrollToIndexProgrammatically({
+        index: visibleMessagesCountRef.current - 1,
+        align: 'end',
+        behavior: 'auto'
       })
     }, SCROLL_CHECK_INTERVAL_MS)
     
     return () => clearInterval(scrollInterval)
-  }, [isStreaming])
+  }, [isStreaming, scrollToIndexProgrammatically])
   
   // 清理 timeout refs 防止内存泄漏
   useEffect(() => {
@@ -483,6 +497,20 @@ export const ChatArea = memo(forwardRef<ChatAreaHandle, ChatAreaProps>(({
   useEffect(() => {
     if (sessionId === prevSessionIdRef.current) return
     prevSessionIdRef.current = sessionId
+    initialScrollSessionRef.current = null
+    isUserAtBottomRef.current = true
+    isUserScrollingRef.current = false
+    userScrolledAwayRef.current = false
+    suppressScrollRef.current = false
+    if (scrollingTimeoutRef.current) {
+      clearTimeout(scrollingTimeoutRef.current)
+      scrollingTimeoutRef.current = null
+    }
+    if (programmaticScrollTimerRef.current) {
+      clearTimeout(programmaticScrollTimerRef.current)
+      programmaticScrollTimerRef.current = null
+    }
+    programmaticScrollRef.current = false
     
     // 触发淡入动画：移除再添加 animate-fade-in class
     if (scrollParent) {
@@ -491,17 +519,39 @@ export const ChatArea = memo(forwardRef<ChatAreaHandle, ChatAreaProps>(({
       void scrollParent.offsetWidth
       scrollParent.classList.add('animate-fade-in')
     }
-    
-    // 滚动到底部 —— 使用 requestAnimationFrame 确保 Virtuoso 已处理新数据
-    // 不需要 setTimeout，因为 Virtuoso 没有被重新挂载，只是数据更新了
-    requestAnimationFrame(() => {
-      virtuosoRef.current?.scrollToIndex({
-        index: visibleMessagesCountRef.current - 1,
-        align: 'end',
-        behavior: 'auto',
+  }, [sessionId, scrollParent])
+
+  // 刷新/切 session 加载中时，先清掉浏览器可能恢复的旧 scrollTop
+  useEffect(() => {
+    if (!sessionId || !scrollParent) return
+    if (loadState !== 'loading') return
+    scrollParent.scrollTop = 0
+  }, [sessionId, scrollParent, loadState])
+
+  // session 初始显示时只做一次定位，覆盖浏览器/virtuoso 的历史位置残留
+  useEffect(() => {
+    if (!sessionId || !scrollParent) return
+    if (loadState !== 'loaded') return
+    if (visibleMessagesCountRef.current === 0) return
+    if (initialScrollSessionRef.current === sessionId) return
+
+    initialScrollSessionRef.current = sessionId
+    let raf2 = 0
+    const raf1 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(() => {
+        scrollToIndexProgrammatically({
+          index: visibleMessagesCountRef.current - 1,
+          align: 'end',
+          behavior: 'auto',
+        })
       })
     })
-  }, [sessionId, scrollParent])
+
+    return () => {
+      cancelAnimationFrame(raf1)
+      if (raf2) cancelAnimationFrame(raf2)
+    }
+  }, [sessionId, scrollParent, loadState, visibleMessages.length, scrollToIndexProgrammatically])
   
   // firstItemIndex：基于可见消息 prepend 计数，避免合并后错位
   const firstItemIndex = START_INDEX - virtualPrependedCount
@@ -510,10 +560,10 @@ export const ChatArea = memo(forwardRef<ChatAreaHandle, ChatAreaProps>(({
 
   useImperativeHandle(ref, () => ({
     scrollToBottom: (instant = false) => {
-      virtuosoRef.current?.scrollToIndex({ 
-        index: visibleMessages.length - 1, 
-        align: 'end', 
-        behavior: instant ? 'auto' : 'smooth' 
+      scrollToIndexProgrammatically({
+        index: visibleMessagesCountRef.current - 1,
+        align: 'end',
+        behavior: instant ? 'auto' : 'smooth'
       })
     },
     scrollToBottomIfAtBottom: () => {
@@ -522,20 +572,20 @@ export const ChatArea = memo(forwardRef<ChatAreaHandle, ChatAreaProps>(({
         return
       }
       // 使用 auto 而不是 smooth，减少和用户滚动的冲突
-      virtuosoRef.current?.scrollToIndex({ 
-        index: visibleMessagesCountRef.current - 1, 
-        align: 'end', 
-        behavior: 'auto' 
+      scrollToIndexProgrammatically({
+        index: visibleMessagesCountRef.current - 1,
+        align: 'end',
+        behavior: 'auto'
       })
     },
     scrollToLastMessage: () => {
       // 滚动到最后一条消息，显示在视口上部（用于 Undo 后）
       const count = visibleMessagesCountRef.current
       if (count > 0) {
-        virtuosoRef.current?.scrollToIndex({ 
-          index: count - 1, 
-          align: 'start', 
-          behavior: 'auto' 
+        scrollToIndexProgrammatically({
+          index: count - 1,
+          align: 'start',
+          behavior: 'auto'
         })
       }
     },
@@ -551,7 +601,7 @@ export const ChatArea = memo(forwardRef<ChatAreaHandle, ChatAreaProps>(({
         suppressScrollRef.current = true
         setTimeout(() => { suppressScrollRef.current = false }, 1000)
         
-        virtuosoRef.current?.scrollToIndex({
+        scrollToIndexProgrammatically({
           index,
           align: 'start',
           behavior: 'smooth',
@@ -559,19 +609,19 @@ export const ChatArea = memo(forwardRef<ChatAreaHandle, ChatAreaProps>(({
       }
     },
     scrollToMessageId: (messageId: string) => {
-      const index = visibleMessages.findIndex(m => m.info.id === messageId)
+      const index = visibleMessagesRef.current.findIndex(m => m.info.id === messageId)
       if (index < 0) return
 
       suppressScrollRef.current = true
       setTimeout(() => { suppressScrollRef.current = false }, 1000)
 
-      virtuosoRef.current?.scrollToIndex({
+      scrollToIndexProgrammatically({
         index,
         align: 'start',
         behavior: 'smooth',
       })
     },
-  }))
+  }), [scrollToIndexProgrammatically])
   
   // followOutput: 完全禁用，改用手动控制
   // Virtuoso 的 followOutput 会在每次数据变化时触发，太频繁了
