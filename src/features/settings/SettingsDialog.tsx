@@ -39,6 +39,8 @@ import type { ThemeMode } from '../../hooks'
 import type { PathMode } from '../../utils/directoryUtils'
 import type { ServerConfig, ServerHealth } from '../../store/serverStore'
 
+const APP_VERSION_LABEL = `OpenCodeUI v${__APP_VERSION__}`
+
 // ============================================
 // Types
 // ============================================
@@ -1067,7 +1069,7 @@ function ServerItem({
       case 'checking':
         return 'Checking...'
       case 'online':
-        return `Online (${health.latency}ms)${health.version ? ` v${health.version}` : ''}`
+        return `Online (${health.latency}ms)${health.version ? ` · OpenCode v${health.version}` : ''}`
       case 'unauthorized':
         return 'Invalid credentials'
       case 'offline':
@@ -1575,7 +1577,7 @@ export function SettingsDialog({
           <div className="flex items-center justify-between px-4 py-3 border-b border-border-100/50 shrink-0">
             <div>
               <div className="text-sm font-semibold text-text-100">Settings</div>
-              <div className="text-[11px] text-text-400 mt-0.5">{activeTabMeta.label}</div>
+              <div className="text-[11px] text-text-400 mt-0.5">{APP_VERSION_LABEL}</div>
             </div>
             <button
               onClick={onClose}
@@ -1652,7 +1654,7 @@ export function SettingsDialog({
             ))}
           </div>
 
-          <div className="mt-auto pt-3 px-3 text-[10px] text-text-400">v0.1.0</div>
+          <div className="mt-auto pt-3 px-3 text-[10px] text-text-400">{APP_VERSION_LABEL}</div>
         </nav>
 
         {/* Right Content */}
