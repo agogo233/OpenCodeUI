@@ -22,7 +22,6 @@ import { getMessageText } from '../types/message'
 import { createErrorHandler } from '../utils'
 import { serverStorage } from '../utils/perServerStorage'
 import { 
-  PERMISSION_POLL_INTERVAL_MS,
   UNDO_SCROLL_DELAY_MS,
   AUTO_SCROLL_SUPPRESS_DURATION_MS,
   STORAGE_KEY_SELECTED_AGENT,
@@ -249,19 +248,6 @@ export function useChatSession({ chatAreaRef, currentModel, refetchModels }: Use
     messageStore.evictMessageParts(routeSessionId, ids)
   }, [routeSessionId])
   
-  // Poll pending permissions
-  useEffect(() => {
-    if (!routeSessionId || !isStreaming) return
-    
-    refreshPendingRequests(sessionFamily, effectiveDirectory)
-    
-    const interval = setInterval(() => {
-      refreshPendingRequests(sessionFamily, effectiveDirectory)
-    }, PERMISSION_POLL_INTERVAL_MS)
-    
-    return () => clearInterval(interval)
-  }, [routeSessionId, isStreaming, effectiveDirectory, sessionFamily, refreshPendingRequests])
-
   // Load agents
   useEffect(() => {
     getSelectableAgents(currentDirectory)

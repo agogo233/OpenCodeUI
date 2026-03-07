@@ -14,6 +14,7 @@ import {
   type PermissionReply,
   type QuestionAnswer,
 } from '../api'
+import { activeSessionStore } from '../store'
 import { permissionErrorHandler } from '../utils'
 
 export interface UsePermissionHandlerResult {
@@ -27,7 +28,7 @@ export interface UsePermissionHandlerResult {
   handlePermissionReply: (requestId: string, reply: PermissionReply, directory?: string) => Promise<boolean>
   handleQuestionReply: (requestId: string, answers: QuestionAnswer[], directory?: string) => Promise<boolean>
   handleQuestionReject: (requestId: string, directory?: string) => Promise<boolean>
-  // Refresh (poll for pending requests) - 支持单个或多个 session IDs
+  // Refresh (fallback sync for pending requests) - 支持单个或多个 session IDs
   refreshPendingRequests: (sessionIds?: string | string[], directory?: string) => Promise<void>
   // Reset
   resetPendingRequests: () => void
@@ -88,6 +89,7 @@ export function usePermissionHandler(): UsePermissionHandlerResult {
       
       // 成功后从列表移除
       setPendingPermissionRequests(prev => prev.filter(r => r.id !== requestId))
+      activeSessionStore.resolvePendingRequest(requestId)
       return true
     } catch (error) {
       permissionErrorHandler('reply after retries', error)
@@ -95,6 +97,7 @@ export function usePermissionHandler(): UsePermissionHandlerResult {
       // 即使失败也从列表移除，避免卡住 UI
       // 用户可以通过刷新重新获取
       setPendingPermissionRequests(prev => prev.filter(r => r.id !== requestId))
+      activeSessionStore.resolvePendingRequest(requestId)
       return false
     } finally {
       replyingIdsRef.current.delete(requestId)
@@ -118,10 +121,12 @@ export function usePermissionHandler(): UsePermissionHandlerResult {
     try {
       await withRetry(() => replyQuestion(requestId, answers, directory))
       setPendingQuestionRequests(prev => prev.filter(r => r.id !== requestId))
+      activeSessionStore.resolvePendingRequest(requestId)
       return true
     } catch (error) {
       permissionErrorHandler('question reply after retries', error)
       setPendingQuestionRequests(prev => prev.filter(r => r.id !== requestId))
+      activeSessionStore.resolvePendingRequest(requestId)
       return false
     } finally {
       replyingIdsRef.current.delete(requestId)
@@ -143,10 +148,12 @@ export function usePermissionHandler(): UsePermissionHandlerResult {
     try {
       await withRetry(() => rejectQuestion(requestId, directory))
       setPendingQuestionRequests(prev => prev.filter(r => r.id !== requestId))
+      activeSessionStore.resolvePendingRequest(requestId)
       return true
     } catch (error) {
       permissionErrorHandler('question reject after retries', error)
       setPendingQuestionRequests(prev => prev.filter(r => r.id !== requestId))
+      activeSessionStore.resolvePendingRequest(requestId)
       return false
     } finally {
       replyingIdsRef.current.delete(requestId)
@@ -177,13 +184,13 @@ export function usePermissionHandler(): UsePermissionHandlerResult {
       // 用 sessionFamily 过滤，然后直接替换本地状态（与 session 加载时一致）
       setPendingPermissionRequests(
         familySet.size > 0
-          ? allPermissions.filter(p => familySet.has(p.sessionID))
-          : allPermissions
+          ? allPermissions.filter(p => familySet.has(p.sessionID) && !replyingIdsRef.current.has(p.id))
+          : allPermissions.filter(p => !replyingIdsRef.current.has(p.id))
       )
       setPendingQuestionRequests(
         familySet.size > 0
-          ? allQuestions.filter(q => familySet.has(q.sessionID))
-          : allQuestions
+          ? allQuestions.filter(q => familySet.has(q.sessionID) && !replyingIdsRef.current.has(q.id))
+          : allQuestions.filter(q => !replyingIdsRef.current.has(q.id))
       )
     } catch (error) {
       permissionErrorHandler('refresh pending requests', error)
