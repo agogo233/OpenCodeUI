@@ -10,13 +10,16 @@ export interface Command {
   name: string
   description?: string
   keybind?: string
+  source: 'frontend' | 'api'
 }
 
-// Builtin commands handled by dedicated endpoints, not returned by GET /command.
-// Mirrors the official web app's hardcoded command registrations.
-// See: sst/opencode packages/app/src/pages/session.tsx — "session.compact"
-const BUILTIN_COMMANDS: Command[] = [
-  { name: 'compact', description: 'Compact session by summarizing conversation history' },
+type ApiCommand = Omit<Command, 'source'>
+
+// Frontend-added slash commands that do not come from GET /command.
+// These are executed locally or via dedicated session actions.
+const FRONTEND_COMMANDS: Command[] = [
+  { name: 'new', description: 'Create a new chat session', source: 'frontend' },
+  { name: 'compact', description: 'Compact session by summarizing conversation history', source: 'frontend' },
 ]
 
 const COMMAND_CACHE_TTL_MS = 10_000
@@ -29,14 +32,15 @@ function getCommandCacheKey(directory?: string): string {
 }
 
 async function fetchCommands(directory?: string): Promise<Command[]> {
-  let apiCommands: Command[] = []
+  let apiCommands: ApiCommand[] = []
   try {
-    apiCommands = await get<Command[]>('/command', { directory: formatPathForApi(directory) })
+    apiCommands = await get<ApiCommand[]>('/command', { directory: formatPathForApi(directory) })
   } catch {
-    // Backend unreachable — builtins still available
+    // Backend unreachable — frontend commands still available
   }
-  const apiNames = new Set(apiCommands.map(c => c.name))
-  return [...apiCommands, ...BUILTIN_COMMANDS.filter(c => !apiNames.has(c.name))]
+  const commandsFromApi: Command[] = apiCommands.map(command => ({ ...command, source: 'api' }))
+  const apiNames = new Set(commandsFromApi.map(c => c.name))
+  return [...commandsFromApi, ...FRONTEND_COMMANDS.filter(c => !apiNames.has(c.name))]
 }
 
 export async function getCommands(directory?: string): Promise<Command[]> {

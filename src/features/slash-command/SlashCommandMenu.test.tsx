@@ -4,8 +4,8 @@ import { SlashCommandMenu } from './SlashCommandMenu'
 
 vi.mock('../../api/command', () => ({
   getCommands: vi.fn().mockResolvedValue([
-    { name: 'compact', description: 'Compact session' },
-    { name: 'explain', description: 'Explain code' },
+    { name: 'compact', description: 'Compact session', source: 'frontend' },
+    { name: 'explain', description: 'Explain code', source: 'api' },
   ]),
 }))
 

@@ -663,6 +663,16 @@ function InputBoxComponent({
   // / Slash Command 选择处理 - 类似 @ mention
   const handleSlashSelect = useCallback(
     (command: Command) => {
+      if (command.source === 'frontend') {
+        onCommand?.(`/${command.name}`)
+        setText('')
+        setAttachments([])
+        setSlashOpen(false)
+        onClearRevert?.()
+        requestAnimationFrame(() => textareaRef.current?.focus())
+        return
+      }
+
       if (!textareaRef.current) return
 
       // 构建 /command 文本
@@ -698,7 +708,7 @@ function InputBoxComponent({
         textareaRef.current.focus()
       })
     },
-    [text, slashStartIndex, slashQuery],
+    [text, slashStartIndex, slashQuery, onCommand, onClearRevert],
   )
 
   const handleSlashClose = useCallback(() => {
