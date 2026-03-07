@@ -435,6 +435,12 @@ export function useChatSession({ chatAreaRef, currentModel, refetchModels }: Use
 
       if (!command) return
 
+      if (command === 'new') {
+        navigateHome()
+        handleNewChat()
+        return
+      }
+
       let sessionId = routeSessionId
 
       try {
@@ -464,7 +470,7 @@ export function useChatSession({ chatAreaRef, currentModel, refetchModels }: Use
         handleError('execute command', err)
       }
     },
-    [routeSessionId, effectiveDirectory, createSession, navigateToSession, currentModel],
+    [routeSessionId, effectiveDirectory, createSession, navigateToSession, currentModel, navigateHome, handleNewChat],
   )
 
   // Undo with animation
