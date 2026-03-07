@@ -1,5 +1,9 @@
 # Changelog
 
+## [v0.1.6] - 2026-03-07
+
+- fix: restore tauri mobile file attachments (ffe3398)
+
 ## [v0.1.5] - 2026-03-07
 
 - chore: keep tauri config formatted on release (48f6045)
