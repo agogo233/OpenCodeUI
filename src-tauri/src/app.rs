@@ -62,6 +62,55 @@ enum SseEvent {
     Error { message: String },
 }
 
+fn process_sse_line(line: &str, event_data: &mut String, messages: &mut Vec<String>) {
+    if let Some(stripped) = line.strip_prefix("data:") {
+        let data = stripped.trim();
+        if !data.is_empty() {
+            if !event_data.is_empty() {
+                event_data.push('\n');
+            }
+            event_data.push_str(data);
+        }
+        return;
+    }
+
+    if line.is_empty() && !event_data.is_empty() {
+        messages.push(std::mem::take(event_data));
+    }
+
+    // 忽略 event:, id:, retry: 等 SSE 字段
+}
+
+fn drain_sse_messages(buffer: &mut Vec<u8>, event_data: &mut String) -> Vec<String> {
+    let mut messages = Vec::new();
+    let mut line_start = 0usize;
+
+    for index in 0..buffer.len() {
+        if buffer[index] != b'\n' {
+            continue;
+        }
+
+        let mut line_end = index;
+        if line_end > line_start && buffer[line_end - 1] == b'\r' {
+            line_end -= 1;
+        }
+
+        let line = match std::str::from_utf8(&buffer[line_start..line_end]) {
+            Ok(line) => line.to_owned(),
+            Err(_) => String::from_utf8_lossy(&buffer[line_start..line_end]).into_owned(),
+        };
+
+        process_sse_line(&line, event_data, &mut messages);
+        line_start = index + 1;
+    }
+
+    if line_start > 0 {
+        buffer.drain(..line_start);
+    }
+
+    messages
+}
+
 // ============================================
 // SSE Commands
 // ============================================
@@ -128,9 +177,9 @@ async fn sse_connect(
     // 使用 timeout 包装每次 chunk 读取，防止连接静默断开后永远挂起
     // SSE 服务端通常每 30-60 秒发送心跳，90 秒无数据基本可以判定连接已死
     const READ_TIMEOUT: Duration = Duration::from_secs(90);
-    
+
     let mut stream = response.bytes_stream();
-    let mut buffer = String::new();
+    let mut buffer: Vec<u8> = Vec::new();
     let mut event_data = String::new();
 
     loop {
@@ -144,38 +193,10 @@ async fn sse_connect(
 
         match tokio::time::timeout(READ_TIMEOUT, stream.next()).await {
             Ok(Some(Ok(chunk))) => {
-                let text = String::from_utf8_lossy(&chunk);
-                buffer.push_str(&text);
+                buffer.extend_from_slice(&chunk);
 
-                // 按行解析 SSE 协议
-                while let Some(newline_pos) = buffer.find('\n') {
-                    let line = buffer[..newline_pos].to_string();
-                    buffer = buffer[newline_pos + 1..].to_string();
-
-                    let line = line.trim_end_matches('\r');
-
-                    if let Some(stripped) = line.strip_prefix("data:") {
-                        let data = stripped.trim();
-                        if !data.is_empty() {
-                            if !event_data.is_empty() {
-                                event_data.push('\n');
-                            }
-                            event_data.push_str(data);
-                        }
-                        continue;
-                    }
-
-                    if line.is_empty() {
-                        if !event_data.is_empty() {
-                            let _ = on_event.send(SseEvent::Message {
-                                raw: event_data.clone(),
-                            });
-                            event_data.clear();
-                        }
-                        continue;
-                    }
-
-                    // 忽略 event:, id:, retry: 等 SSE 字段
+                for raw in drain_sse_messages(&mut buffer, &mut event_data) {
+                    let _ = on_event.send(SseEvent::Message { raw });
                 }
             }
             Ok(Some(Err(e))) => {
@@ -214,6 +235,39 @@ async fn sse_connect(
 async fn sse_disconnect(window: tauri::Window, state: State<'_, SseState>) -> Result<(), String> {
     state.active.lock().unwrap().remove(window.label());
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{drain_sse_messages, process_sse_line};
+
+    #[test]
+    fn preserves_utf8_when_character_spans_multiple_chunks() {
+        let mut buffer = Vec::new();
+        let mut event_data = String::new();
+
+        buffer.extend_from_slice(b"data: \xE9");
+        assert!(drain_sse_messages(&mut buffer, &mut event_data).is_empty());
+        assert_eq!(event_data, "");
+
+        buffer.extend_from_slice(&[0x83, 0xA8, b'\n', b'\n']);
+        assert_eq!(drain_sse_messages(&mut buffer, &mut event_data), vec!["部".to_string()]);
+        assert!(buffer.is_empty());
+        assert_eq!(event_data, "");
+    }
+
+    #[test]
+    fn combines_multiple_data_lines_into_one_message() {
+        let mut messages = Vec::new();
+        let mut event_data = String::new();
+
+        process_sse_line("data: 第一行", &mut event_data, &mut messages);
+        process_sse_line("data: 第二行", &mut event_data, &mut messages);
+        process_sse_line("", &mut event_data, &mut messages);
+
+        assert_eq!(messages, vec!["第一行\n第二行".to_string()]);
+        assert_eq!(event_data, "");
+    }
 }
 
 // ============================================
