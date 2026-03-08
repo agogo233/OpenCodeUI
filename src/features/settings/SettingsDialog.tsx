@@ -28,9 +28,10 @@ import {
   StopIcon,
   EyeIcon,
   ThinkingIcon,
+  FolderIcon,
 } from '../../components/Icons'
 import { usePathMode, useServerStore, useIsMobile, useNotification, useRouter } from '../../hooks'
-import { autoApproveStore, messageStore, notificationStore } from '../../store'
+import { autoApproveStore, layoutStore, messageStore, notificationStore, useLayoutStore } from '../../store'
 import { serviceStore, useServiceStore } from '../../store/serviceStore'
 import { themeStore, type ReasoningDisplayMode } from '../../store/themeStore'
 import { isTauri } from '../../utils/tauri'
@@ -572,6 +573,7 @@ function AppearanceSettings({
 
 function GeneralSettings({ mode }: { mode: 'chat' | 'notifications' | 'service' }) {
   const { pathMode, setPathMode, effectiveStyle, detectedStyle, isAutoMode } = usePathMode()
+  const { sidebarFolderRecents } = useLayoutStore()
   const [autoApprove, setAutoApprove] = useState(autoApproveStore.enabled)
   const {
     enabled: notificationsEnabled,
@@ -625,6 +627,10 @@ function GeneralSettings({ mode }: { mode: 'chat' | 'notifications' | 'service' 
     const v = !collapseUserMessages
     setCollapseUserMessages(v)
     themeStore.setCollapseUserMessages(v)
+  }
+
+  const handleSidebarFolderRecentsToggle = () => {
+    layoutStore.setSidebarFolderRecents(!sidebarFolderRecents)
   }
 
   const handleTestNotification = () => {
@@ -742,6 +748,21 @@ function GeneralSettings({ mode }: { mode: 'chat' | 'notifications' | 'service' 
               >
                 <Toggle enabled={autoApprove} onChange={handleAutoApprove} />
               </SettingRow>
+            </SettingsCard>
+
+            <SettingsCard title="Sidebar Recents" description="Choose how recent chats are organized in the sidebar">
+              <SettingRow
+                label="Folder-Style Recents"
+                description="Group recent chats by project folder with expandable counts"
+                icon={<FolderIcon size={14} />}
+                onClick={handleSidebarFolderRecentsToggle}
+              >
+                <Toggle enabled={sidebarFolderRecents} onChange={handleSidebarFolderRecentsToggle} />
+              </SettingRow>
+              <div className="mt-2 px-1 text-[11px] leading-relaxed text-text-400">
+                When enabled, Recents shows folders first and keeps each folder list scrollable. Search still uses the
+                standard flat list.
+              </div>
             </SettingsCard>
           </div>
 
