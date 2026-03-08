@@ -6,9 +6,7 @@ import { useInView } from '../../../hooks/useInView'
 import { getDirectoryName, isSameDirectory } from '../../../utils'
 import { SessionList } from '../../sessions'
 
-const DIRECTORY_PAGE_SIZE = 8
-const MAX_VISIBLE_SESSIONS = 6
-const SESSION_LIST_MAX_HEIGHT = MAX_VISIBLE_SESSIONS * 40 + 12
+const DIRECTORY_PAGE_SIZE = 6
 const NOOP = () => {}
 
 export interface FolderRecentProject {
@@ -121,7 +119,7 @@ function FolderRecentSection({
 }: FolderRecentSectionProps) {
   const { ref, inView } = useInView({ rootMargin: '180px 0px', triggerOnce: true })
   const shouldLoad = inView || isExpanded
-  const { sessions, isLoading, isLoadingMore, hasMore, loadMore, refresh } = useSessions({
+  const { sessions, isLoading, isLoadingMore, hasMore, loadMore, patchLocalSession, removeLocalSession } = useSessions({
     directory: project.worktree,
     pageSize: DIRECTORY_PAGE_SIZE,
     enabled: shouldLoad,
@@ -132,9 +130,9 @@ function FolderRecentSection({
       const session = sessions.find(item => item.id === sessionId)
       if (!session) return
       await onRenameSession(session, newTitle)
-      await refresh()
+      patchLocalSession(sessionId, { title: newTitle })
     },
-    [sessions, onRenameSession, refresh],
+    [sessions, onRenameSession, patchLocalSession],
   )
 
   const handleDelete = useCallback(
@@ -142,9 +140,9 @@ function FolderRecentSection({
       const session = sessions.find(item => item.id === sessionId)
       if (!session) return
       await onDeleteSession(session)
-      await refresh()
+      removeLocalSession(sessionId)
     },
-    [sessions, onDeleteSession, refresh],
+    [sessions, onDeleteSession, removeLocalSession],
   )
 
   const projectName = project.name || getDirectoryName(project.worktree) || project.worktree
@@ -196,7 +194,8 @@ function FolderRecentSection({
               density="compact"
               variant="tree"
               showStats={false}
-              scrollMaxHeight={SESSION_LIST_MAX_HEIGHT}
+              loadMoreMode="button"
+              loadMoreLabel={isLoadingMore ? 'Loading...' : 'Show more'}
               emptyStateLabel="No chats in this folder"
             />
           </div>

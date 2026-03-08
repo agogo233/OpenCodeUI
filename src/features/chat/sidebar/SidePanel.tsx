@@ -98,8 +98,7 @@ export function SidePanel({
   isWideMode,
   onToggleWideMode,
 }: SidePanelProps) {
-  const { currentDirectory, savedDirectories, setCurrentDirectory, removeDirectory, addDirectory, recentProjects } =
-    useDirectory()
+  const { currentDirectory, savedDirectories, setCurrentDirectory, removeDirectory, addDirectory } = useDirectory()
   const { sidebarFolderRecents } = useLayoutStore()
   const [connectionState, setConnectionState] = useState<ConnectionInfo | null>(null)
   const [projectDeleteConfirm, setProjectDeleteConfirm] = useState<{ isOpen: boolean; projectId: string | null }>({
@@ -192,13 +191,8 @@ export function SidePanel({
         name: 'Global',
       },
     ]
-    // 按最近使用时间排序，最近使用的排最前
-    const sorted = [...savedDirectories].sort((a, b) => {
-      const aTime = recentProjects[a.path] || a.addedAt
-      const bTime = recentProjects[b.path] || b.addedAt
-      return bTime - aTime
-    })
-    sorted.forEach(d => {
+
+    savedDirectories.forEach(d => {
       list.push({
         id: d.path,
         worktree: d.path,
@@ -206,7 +200,7 @@ export function SidePanel({
       })
     })
     return list
-  }, [savedDirectories, recentProjects])
+  }, [savedDirectories])
 
   const currentProject = useMemo<ProjectItem>(() => {
     if (!currentDirectory) return projects[0]
@@ -231,12 +225,14 @@ export function SidePanel({
   const folderProjects = useMemo<ProjectItem[]>(() => {
     const list = projects.filter(project => project.id !== 'global')
 
-    if (currentProject.id === 'global') {
+    if (
+      currentProject.id === 'global' ||
+      list.some(project => isSameDirectory(project.worktree, currentProject.worktree))
+    ) {
       return list
     }
 
-    const remaining = list.filter(project => !isSameDirectory(project.worktree, currentProject.worktree))
-    return [currentProject, ...remaining]
+    return [...list, currentProject]
   }, [projects, currentProject])
 
   const handleSelectProject = useCallback(
@@ -313,24 +309,29 @@ export function SidePanel({
     async (session: ApiSession, newTitle: string) => {
       try {
         await updateSession(session.id, { title: newTitle }, session.directory)
-        await refresh()
+        if (!currentDirectory || isSameDirectory(currentDirectory, session.directory)) {
+          await refresh()
+        }
       } catch (e) {
         uiErrorHandler('rename session', e)
       }
     },
-    [refresh],
+    [currentDirectory, refresh],
   )
 
   const handleDeleteFolderSession = useCallback(
     async (session: ApiSession) => {
       await apiDeleteSession(session.id, session.directory)
-      await refresh()
+
+      if (!currentDirectory || isSameDirectory(currentDirectory, session.directory)) {
+        await refresh()
+      }
 
       if (selectedSessionId === session.id) {
         onNewSession()
       }
     },
-    [onNewSession, refresh, selectedSessionId],
+    [currentDirectory, onNewSession, refresh, selectedSessionId],
   )
 
   useEffect(() => {
