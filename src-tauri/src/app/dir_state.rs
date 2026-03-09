@@ -4,23 +4,24 @@
 // ============================================
 
 use papaya::HashMap as PaHashMap;
+use rapidhash::fast::RandomState;
 use std::sync::Arc;
 
 pub struct OpenDirectoryState {
     /// per-window 待处理目录: window label → directory path
-    pending: PaHashMap<String, Arc<str>>,
+    pending: PaHashMap<String, Arc<str>, RandomState>,
 }
 
 impl Default for OpenDirectoryState {
     fn default() -> Self {
         Self {
-            pending: PaHashMap::new(),
+            pending: PaHashMap::with_hasher(RandomState::new()),
         }
     }
 }
 
 impl OpenDirectoryState {
-    pub fn pending(&self) -> &PaHashMap<String, Arc<str>> {
+    pub fn pending(&self) -> &PaHashMap<String, Arc<str>, RandomState> {
         &self.pending
     }
 }

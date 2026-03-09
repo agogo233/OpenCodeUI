@@ -3,6 +3,7 @@
 // ============================================
 
 use papaya::HashMap as PaHashMap;
+use rapidhash::fast::RandomState;
 use std::sync::{atomic::AtomicU64, Arc};
 
 /// 用于管理 SSE 连接的全局状态（支持多窗口）
@@ -11,14 +12,14 @@ pub struct SseState {
     /// 每次连接分配一个递增 ID，用于区分不同连接
     next_id: AtomicU64,
     /// 每个窗口的活跃连接 ID: window label → connection ID
-    active: PaHashMap<Arc<str>, u64>,
+    active: PaHashMap<Arc<str>, u64, RandomState>,
 }
 
 impl Default for SseState {
     fn default() -> Self {
         Self {
             next_id: AtomicU64::new(0),
-            active: PaHashMap::new(),
+            active: PaHashMap::with_hasher(RandomState::new()),
         }
     }
 }
@@ -30,7 +31,7 @@ impl SseState {
     // }
 
     #[inline(always)]
-    pub fn active(&self) -> &PaHashMap<Arc<str>, u64> {
+    pub fn active(&self) -> &PaHashMap<Arc<str>, u64, RandomState> {
         &self.active
     }
 
