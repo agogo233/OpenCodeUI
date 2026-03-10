@@ -100,6 +100,7 @@ export const ChatArea = memo(
       const userScrolledAwayRef = useRef(false) // 流式期间用户主动上滑
       const suppressScrollRef = useRef(false) // 临时禁用（undo/redo）
       const userInteractingRef = useRef(false) // 用户正在触摸/滚轮交互中
+      const lastScrollTopRef = useRef(0)
 
       // ---- 加载更多 ----
       const [isLoadingMore, setIsLoadingMore] = useState(false)
@@ -171,15 +172,25 @@ export const ChatArea = memo(
         const el = scrollContainerRef.current
         if (!el) return
         const onScroll = () => {
-          const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight <= atBottomThreshold
+          const currentTop = el.scrollTop
+          const prevTop = lastScrollTopRef.current
+          lastScrollTopRef.current = currentTop
+
+          const atBottom = el.scrollHeight - currentTop - el.clientHeight <= atBottomThreshold
           const prev = isAtBottomRef.current
           isAtBottomRef.current = atBottom
           if (atBottom) userScrolledAwayRef.current = false
-          // 流式期间：用户主动交互（触摸/滚轮）导致离开底部 → 标记 scrolledAway
+
+          // 用户正在交互且向上滚动（即使仍在阈值内）→ 标记 scrolledAway，暂停自动滚动
+          if (userInteractingRef.current && currentTop < prevTop - 2) {
+            userScrolledAwayRef.current = true
+          }
+
+          // 流式期间：用户主动交互导致离开底部 → 标记 scrolledAway
           // 必须检查 userInteractingRef 以区分"自动滚动触发的 onScroll"和"用户主动滑动"
           if (!atBottom && userInteractingRef.current) userScrolledAwayRef.current = true
           if (prev !== atBottom) onAtBottomChange?.(atBottom)
-          setIsNearTop(el.scrollTop < 150)
+          setIsNearTop(currentTop < 150)
         }
         el.addEventListener('scroll', onScroll, { passive: true })
         return () => el.removeEventListener('scroll', onScroll)
