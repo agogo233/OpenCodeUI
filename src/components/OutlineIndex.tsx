@@ -1,11 +1,14 @@
 // ============================================
-// OutlineIndex - Dynamic Aperture Index
-// 动态光圈索引
+// OutlineIndex - Fisheye Outline Index
+// ============================================
 //
-// PC 端：右侧浮动，余弦插值光圈 + 滚轮导航
-// 移动端：右边缘触摸，背景模糊 + 震动反馈
+// 右侧浮动索引条，鼠标/触摸接近时产生鱼眼镜头效果：
+// - 余弦插值计算接近度 → tick 宽度和间距随之缩放
+// - lerp 平滑过渡 → rAF 驱动，不依赖 React state
+// - 接近阈值以上显示标题 label
 //
-// 性能：rAF + 直接 DOM 操作，不用 React State 驱动动画
+// PC:     hover → fisheye → click 导航
+// Mobile: touch → fisheye + 震动 + overlay → release 导航
 // ============================================
 
 import { memo, useMemo, useRef, useEffect, useCallback, useState } from 'react'
@@ -24,32 +27,152 @@ interface OutlineEntry {
 interface OutlineIndexProps {
   messages: Message[]
   onScrollToMessageId: (messageId: string) => void
-  visibleMessageIds?: string[]
 }
 
 // ============================================
-// Constants
+// Fisheye math (pure functions)
 // ============================================
 
-const INFLUENCE_RADIUS = 55
-const LERP_FACTOR = 0.18
+const LERP_SPEED = 0.18
 const EPSILON = 0.005
-const LABEL_THRESHOLD = 0.65
+const HALF_PI = Math.PI / 2
 
-const TICK_W_MIN = 8
-const TICK_W_MAX = 22
-const TICK_H = 2.5
-const MARGIN_MIN = 4
-const MARGIN_MAX = 14
-const OUTLINE_TITLE_MAX = 80
+/** 余弦衰减：距离 0 → 强度 1，距离 >= radius → 强度 0 */
+function cosineStrength(distance: number, radius: number): number {
+  return distance >= radius ? 0 : Math.cos((distance / radius) * HALF_PI)
+}
+
+/** 带死区的 lerp */
+function smoothStep(current: number, target: number): number {
+  const next = current + (target - current) * LERP_SPEED
+  return Math.abs(next) < EPSILON && target === 0 ? 0 : next
+}
 
 // ============================================
-// Data extraction (同 ChatArea 的过滤逻辑)
+// Fisheye config
 // ============================================
+
+interface FisheyeConfig {
+  influenceRadius: number
+  tickWidth: { min: number; max: number }
+  tickHeight: number
+  margin: { min: number; max: number }
+  labelThreshold: number
+}
+
+const DESKTOP: FisheyeConfig = {
+  influenceRadius: 55,
+  tickWidth: { min: 8, max: 22 },
+  tickHeight: 2.5,
+  margin: { min: 4, max: 14 },
+  labelThreshold: 0.65,
+}
+
+const MOBILE: FisheyeConfig = {
+  influenceRadius: 45,
+  tickWidth: { min: 6, max: 20 },
+  tickHeight: 2.5,
+  margin: { min: 3, max: 16 },
+  labelThreshold: 0.6,
+}
+
+// ============================================
+// Shared fisheye engine
+// ============================================
+
+interface CachedItem {
+  el: HTMLElement
+  tick: HTMLElement
+  label: HTMLElement
+}
+
+/** 查询并缓存 DOM 元素 */
+function queryCachedItems(
+  container: HTMLElement | null,
+  itemSelector: string,
+  tickAttr: string,
+  labelAttr: string,
+): CachedItem[] {
+  if (!container) return []
+  return Array.from(container.querySelectorAll<HTMLElement>(itemSelector))
+    .map(el => ({
+      el,
+      tick: el.querySelector<HTMLElement>(`[${tickAttr}]`)!,
+      label: el.querySelector<HTMLElement>(`[${labelAttr}]`)!,
+    }))
+    .filter(item => item.tick && item.label)
+}
+
+/** 一帧的鱼眼计算 + DOM 更新 */
+function applyFisheye(
+  items: CachedItem[],
+  cursorY: number | null,
+  strengths: number[],
+  config: FisheyeConfig,
+): { alive: boolean; focusIndex: number; maxStrength: number } {
+  let alive = false
+  let focusIndex = -1
+  let maxStrength = 0
+
+  for (let i = 0; i < items.length; i++) {
+    const { el, tick, label } = items[i]
+
+    // 目标强度
+    let target = 0
+    if (cursorY !== null) {
+      const rect = el.getBoundingClientRect()
+      target = cosineStrength(Math.abs(cursorY - (rect.top + rect.height / 2)), config.influenceRadius)
+    }
+
+    // 平滑过渡
+    const s = smoothStep(strengths[i] ?? 0, target)
+    strengths[i] = s
+    if (Math.abs(s - target) > EPSILON) alive = true
+    if (s > maxStrength) {
+      maxStrength = s
+      focusIndex = i
+    }
+
+    // Tick: width + color
+    tick.style.width = `${config.tickWidth.min + s * (config.tickWidth.max - config.tickWidth.min)}px`
+    if (s > 0.5) {
+      tick.style.backgroundColor = 'hsl(var(--accent-main-200))'
+      tick.style.boxShadow = '0 0 3px hsl(var(--accent-main-100) / 0.4)'
+    } else {
+      tick.style.backgroundColor = 'hsl(var(--border-300))'
+      tick.style.boxShadow = 'none'
+    }
+
+    // Item: fisheye spacing
+    const m = config.margin.min + s * (config.margin.max - config.margin.min)
+    el.style.marginTop = `${m}px`
+    el.style.marginBottom = `${m}px`
+
+    // Label: fade in/out with slide
+    if (s > config.labelThreshold) {
+      const t = Math.min(1, (s - config.labelThreshold) / (1 - config.labelThreshold))
+      label.style.opacity = `${t}`
+      label.style.transform = `translateX(${(1 - t) * 10}px)`
+      label.style.visibility = 'visible'
+    } else {
+      label.style.opacity = '0'
+      label.style.transform = 'translateX(10px)'
+      label.style.visibility = 'hidden'
+    }
+  }
+
+  return { alive, focusIndex, maxStrength }
+}
+
+// ============================================
+// Data extraction
+// ============================================
+
+const TITLE_MAX_LEN = 80
+const MOBILE_TITLE_MAX_LEN = 14
 
 function messageHasContent(msg: Message): boolean {
   if (msg.parts.length === 0) {
-    // 有错误的 assistant 消息：中止类错误不显示，其他错误（API错误等）需要展示给用户
     if (msg.info.role === 'assistant' && 'error' in msg.info && msg.info.error) {
       return msg.info.error.name !== 'MessageAbortedError'
     }
@@ -73,74 +196,42 @@ function messageHasContent(msg: Message): boolean {
   })
 }
 
-function normalizeTitle(value?: string): string | null {
-  const title = value?.trim()
-  return title ? title : null
-}
-
-function extractFallbackTitleFromUserInput(msg: Message): string | null {
-  if (!isUserMessage(msg.info)) return null
-
-  const userText = getMessageText(msg).trim()
-  if (!userText) return null
-
-  const firstNonEmptyLine = userText
-    .split(/\r?\n/)
-    .map(line => line.trim())
-    .find(Boolean)
-
-  return firstNonEmptyLine || userText
+function truncate(s: string, max: number): string {
+  return s.length <= max ? s : s.slice(0, max) + '\u2026'
 }
 
 function extractOutlineEntries(messages: Message[]): OutlineEntry[] {
   const entries: OutlineEntry[] = []
-  const visible = messages.filter(messageHasContent)
-  for (let i = 0; i < visible.length; i++) {
-    const msg = visible[i]
+  for (const msg of messages.filter(messageHasContent)) {
     if (!isUserMessage(msg.info)) continue
-
-    const summaryTitle = normalizeTitle(msg.info.summary?.title)
-    const fallbackTitle = extractFallbackTitleFromUserInput(msg)
-    const title = summaryTitle ?? fallbackTitle
+    const title =
+      msg.info.summary?.title?.trim() ||
+      getMessageText(msg)
+        .trim()
+        .split(/\r?\n/)
+        .map(l => l.trim())
+        .find(Boolean)
     if (!title) continue
-
     entries.push({
-      title: truncate(title, OUTLINE_TITLE_MAX),
+      title: truncate(title, TITLE_MAX_LEN),
       messageId: msg.info.id,
     })
   }
   return entries
 }
 
-function truncate(s: string, max: number) {
-  return s.length <= max ? s : s.slice(0, max) + '…'
-}
-
 // ============================================
 // Entry Component
 // ============================================
 
-export const OutlineIndex = memo(function OutlineIndex({
-  messages,
-  onScrollToMessageId,
-  visibleMessageIds,
-}: OutlineIndexProps) {
+export const OutlineIndex = memo(function OutlineIndex({ messages, onScrollToMessageId }: OutlineIndexProps) {
   const entries = useMemo(() => extractOutlineEntries(messages), [messages])
-
   if (entries.length < 2) return null
 
   return (
     <>
-      <DesktopAperture
-        entries={entries}
-        onScrollToMessageId={onScrollToMessageId}
-        visibleMessageIds={visibleMessageIds}
-      />
-      <MobileAperture
-        entries={entries}
-        onScrollToMessageId={onScrollToMessageId}
-        visibleMessageIds={visibleMessageIds}
-      />
+      <DesktopFisheye entries={entries} onSelect={onScrollToMessageId} />
+      <MobileFisheye entries={entries} onSelect={onScrollToMessageId} />
     </>
   )
 })
@@ -149,121 +240,57 @@ export const OutlineIndex = memo(function OutlineIndex({
 // Shared props
 // ============================================
 
-interface ApertureProps {
+interface FisheyeProps {
   entries: OutlineEntry[]
-  onScrollToMessageId: (messageId: string) => void
-  visibleMessageIds?: string[]
+  onSelect: (messageId: string) => void
 }
 
 // ============================================
-// PC 端：右侧光圈索引
+// Desktop: hover fisheye
 // ============================================
 
-const DesktopAperture = memo(function DesktopAperture({
-  entries,
-  onScrollToMessageId,
-  visibleMessageIds,
-}: ApertureProps) {
+const DesktopFisheye = memo(function DesktopFisheye({ entries, onSelect }: FisheyeProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const cursorYRef = useRef<number | null>(null)
   const strengthsRef = useRef<number[]>([])
   const rafIdRef = useRef(0)
   const isHoveringRef = useRef(false)
+  const cachedRef = useRef<CachedItem[] | null>(null)
 
-  const activeSet = useMemo(() => {
-    if (!visibleMessageIds || visibleMessageIds.length === 0) return null
-    return new Set(visibleMessageIds)
-  }, [visibleMessageIds])
-
+  // entries 变化时重置
   useEffect(() => {
     strengthsRef.current = entries.map(() => 0)
-  }, [entries.length]) // eslint-disable-line react-hooks/exhaustive-deps
+    cachedRef.current = null
+  }, [entries])
 
-  // ---- Animation loop ----
-  const runLoop = useCallback(function runLoop() {
-    const container = containerRef.current
-    if (!container) return
-
-    const items = container.querySelectorAll<HTMLElement>('[data-oi]')
-    const cursorY = cursorYRef.current
-    let alive = false
-
-    items.forEach((item, i) => {
-      const tick = item.querySelector<HTMLElement>('[data-tick]')
-      const label = item.querySelector<HTMLElement>('[data-label]')
-      if (!tick || !label) return
-
-      // target strength
-      let target = 0
-      if (cursorY !== null) {
-        const rect = item.getBoundingClientRect()
-        const centerY = rect.top + rect.height / 2
-        const d = Math.abs(cursorY - centerY)
-        if (d < INFLUENCE_RADIUS) {
-          target = Math.cos((d / INFLUENCE_RADIUS) * (Math.PI / 2))
-        }
-      }
-
-      // lerp
-      const prev = strengthsRef.current[i] ?? 0
-      let s = prev + (target - prev) * LERP_FACTOR
-      if (Math.abs(s) < EPSILON && target === 0) s = 0
-      strengthsRef.current[i] = s
-      if (Math.abs(s - target) > EPSILON) alive = true
-
-      // active 标记
-      const isActive = item.dataset.active === '1'
-      const baseW = isActive ? 13 : TICK_W_MIN
-
-      // apply styles
-      tick.style.width = `${baseW + s * (TICK_W_MAX - TICK_W_MIN)}px`
-      item.style.marginTop = `${MARGIN_MIN + s * (MARGIN_MAX - MARGIN_MIN)}px`
-      item.style.marginBottom = `${MARGIN_MIN + s * (MARGIN_MAX - MARGIN_MIN)}px`
-
-      // tick 颜色 —— 不用 opacity，直接实色
-      const shouldHL = s > 0.5
-      if (shouldHL) {
-        tick.style.backgroundColor = 'hsl(var(--accent-main-200))'
-        tick.style.boxShadow = '0 0 3px hsl(var(--accent-main-100) / 0.4)'
-      } else if (isActive) {
-        tick.style.backgroundColor = 'hsl(var(--accent-main-100) / 0.55)'
-        tick.style.boxShadow = 'none'
-      } else {
-        tick.style.backgroundColor = 'hsl(var(--border-300))'
-        tick.style.boxShadow = 'none'
-      }
-
-      // label
-      if (s > LABEL_THRESHOLD) {
-        const t = Math.min(1, (s - LABEL_THRESHOLD) / (1 - LABEL_THRESHOLD))
-        label.style.opacity = `${t}`
-        label.style.transform = `translateX(${(1 - t) * 10}px)`
-        label.style.visibility = 'visible'
-      } else {
-        label.style.opacity = '0'
-        label.style.transform = 'translateX(10px)'
-        label.style.visibility = 'hidden'
-      }
-    })
-
-    if (isHoveringRef.current || alive) {
-      rafIdRef.current = requestAnimationFrame(runLoop)
-    }
+  const getItems = useCallback(() => {
+    cachedRef.current ??= queryCachedItems(containerRef.current, '[data-oi]', 'data-tick', 'data-label')
+    return cachedRef.current
   }, [])
+
+  // 动画循环
+  const runLoop = useCallback(
+    function loop() {
+      const { alive } = applyFisheye(getItems(), cursorYRef.current, strengthsRef.current, DESKTOP)
+      if (isHoveringRef.current || alive) {
+        rafIdRef.current = requestAnimationFrame(loop)
+      }
+    },
+    [getItems],
+  )
 
   const ensureLoop = useCallback(() => {
     cancelAnimationFrame(rafIdRef.current)
     rafIdRef.current = requestAnimationFrame(runLoop)
   }, [runLoop])
 
-  // ---- Event handlers ----
   const handleMouseEnter = useCallback(() => {
     isHoveringRef.current = true
-    // 扩展容器 padding 覆盖标题区域，鼠标在标题上移动不会丢失 hover
+    // 扩展 hover 区域覆盖 label 弹出范围，防止鼠标移向 label 时丢失 hover
     const el = containerRef.current
     if (el) {
-      el.style.paddingLeft = '250px'
-      el.style.marginLeft = '-250px'
+      el.style.paddingLeft = '200px'
+      el.style.marginLeft = '-200px'
     }
     ensureLoop()
   }, [ensureLoop])
@@ -275,7 +302,6 @@ const DesktopAperture = memo(function DesktopAperture({
   const handleMouseLeave = useCallback(() => {
     isHoveringRef.current = false
     cursorYRef.current = null
-    // 收回扩展区域
     const el = containerRef.current
     if (el) {
       el.style.paddingLeft = ''
@@ -284,82 +310,51 @@ const DesktopAperture = memo(function DesktopAperture({
     ensureLoop()
   }, [ensureLoop])
 
-  const handleClick = useCallback(
-    (messageId: string) => {
-      onScrollToMessageId(messageId)
-    },
-    [onScrollToMessageId],
-  )
-
-  useEffect(() => {
-    return () => cancelAnimationFrame(rafIdRef.current)
-  }, [])
+  useEffect(() => () => cancelAnimationFrame(rafIdRef.current), [])
 
   return (
     <div
       ref={containerRef}
-      className="
-        hidden md:flex flex-col items-end
-        absolute right-3.5 top-1/2 -translate-y-1/2 z-[5]
-        py-1 pr-1 select-none
-      "
+      className="hidden md:flex flex-col items-end absolute right-3.5 top-1/2 -translate-y-1/2 z-[5] py-1 pr-1 select-none"
       onMouseEnter={handleMouseEnter}
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
     >
-      {entries.map(entry => {
-        const isActive = activeSet?.has(entry.messageId) ?? false
-        return (
+      {entries.map(entry => (
+        <div
+          key={entry.messageId}
+          data-oi
+          className="relative flex items-center justify-end cursor-pointer"
+          style={{ marginTop: `${DESKTOP.margin.min}px`, marginBottom: `${DESKTOP.margin.min}px` }}
+          onClick={() => onSelect(entry.messageId)}
+        >
           <div
-            key={entry.messageId}
-            data-oi
-            data-active={isActive ? '1' : '0'}
-            className="relative flex items-center justify-end cursor-pointer"
-            style={{ marginTop: `${MARGIN_MIN}px`, marginBottom: `${MARGIN_MIN}px` }}
-            onClick={() => handleClick(entry.messageId)}
+            data-label
+            className="absolute right-full mr-2.5 text-[13px] leading-none text-text-200 whitespace-nowrap pointer-events-none"
+            style={{ opacity: 0, transform: 'translateX(10px)', visibility: 'hidden' }}
           >
-            {/* Label — absolute 定位，不撑大触发区域 */}
-            <div
-              data-label
-              className="absolute right-full mr-2.5 text-[13px] leading-none text-text-200 whitespace-nowrap cursor-pointer"
-              style={{ opacity: 0, transform: 'translateX(10px)', visibility: 'hidden' }}
-            >
-              {entry.title}
-            </div>
-            {/* Tick mark */}
-            <div
-              data-tick
-              className="rounded-full shrink-0"
-              style={{
-                width: `${isActive ? 13 : TICK_W_MIN}px`,
-                height: `${TICK_H}px`,
-                backgroundColor: isActive ? 'hsl(var(--accent-main-100) / 0.55)' : 'hsl(var(--border-300))',
-              }}
-            />
+            {entry.title}
           </div>
-        )
-      })}
+          <div
+            data-tick
+            className="rounded-full shrink-0"
+            style={{
+              width: `${DESKTOP.tickWidth.min}px`,
+              height: `${DESKTOP.tickHeight}px`,
+              backgroundColor: 'hsl(var(--border-300))',
+            }}
+          />
+        </div>
+      ))}
     </div>
   )
 })
 
 // ============================================
-// 移动端：按住滑动索引
-// 同样的 rAF + 余弦插值光圈引擎，输入源为 touch
+// Mobile: touch fisheye + overlay
 // ============================================
 
-const MOBILE_INFLUENCE_RADIUS = 45
-const MOBILE_MARGIN_MIN = 3
-const MOBILE_MARGIN_MAX = 16
-const MOBILE_TICK_W_MIN = 6
-const MOBILE_TICK_W_MAX = 20
-const MOBILE_LABEL_THRESHOLD = 0.6
-
-const MobileAperture = memo(function MobileAperture({
-  entries,
-  onScrollToMessageId,
-  visibleMessageIds,
-}: ApertureProps) {
+const MobileFisheye = memo(function MobileFisheye({ entries, onSelect }: FisheyeProps) {
   const [overlayVisible, setOverlayVisible] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
   const overlayTitleRef = useRef<HTMLDivElement>(null)
@@ -368,17 +363,18 @@ const MobileAperture = memo(function MobileAperture({
   const rafIdRef = useRef(0)
   const isTouchingRef = useRef(false)
   const prevFocusIdxRef = useRef(-1)
-
-  const activeSet = useMemo(() => {
-    if (!visibleMessageIds || visibleMessageIds.length === 0) return null
-    return new Set(visibleMessageIds)
-  }, [visibleMessageIds])
+  const cachedRef = useRef<CachedItem[] | null>(null)
 
   useEffect(() => {
     strengthsRef.current = entries.map(() => 0)
-  }, [entries.length]) // eslint-disable-line react-hooks/exhaustive-deps
+    cachedRef.current = null
+  }, [entries])
 
-  // 震动
+  const getItems = useCallback(() => {
+    cachedRef.current ??= queryCachedItems(containerRef.current, '[data-moi]', 'data-mtick', 'data-mlabel')
+    return cachedRef.current
+  }, [])
+
   const vibrate = useCallback(() => {
     try {
       const bridge = (window as unknown as { __opencode_android?: { vibrate?: (ms: number) => void } })
@@ -393,97 +389,27 @@ const MobileAperture = memo(function MobileAperture({
     }
   }, [])
 
-  // ---- 动画循环 ----
   const runLoop = useCallback(
-    function runLoop() {
-      const container = containerRef.current
-      if (!container) return
-
-      const items = container.querySelectorAll<HTMLElement>('[data-moi]')
-      const touchY = touchYRef.current
-      let alive = false
-      let focusIdx = -1
-      let maxS = 0
-
-      items.forEach((item, i) => {
-        const tick = item.querySelector<HTMLElement>('[data-mtick]')
-        const label = item.querySelector<HTMLElement>('[data-mlabel]')
-        if (!tick || !label) return
-
-        // target
-        let target = 0
-        if (touchY !== null) {
-          const rect = item.getBoundingClientRect()
-          const centerY = rect.top + rect.height / 2
-          const d = Math.abs(touchY - centerY)
-          if (d < MOBILE_INFLUENCE_RADIUS) {
-            target = Math.cos((d / MOBILE_INFLUENCE_RADIUS) * (Math.PI / 2))
-          }
-        }
-
-        // lerp
-        const prev = strengthsRef.current[i] ?? 0
-        let s = prev + (target - prev) * LERP_FACTOR
-        if (Math.abs(s) < EPSILON && target === 0) s = 0
-        strengthsRef.current[i] = s
-        if (Math.abs(s - target) > EPSILON) alive = true
-
-        // 找最强项
-        if (s > maxS) {
-          maxS = s
-          focusIdx = i
-        }
-
-        const isActive = item.dataset.active === '1'
-        const baseW = isActive ? 10 : MOBILE_TICK_W_MIN
-
-        // styles
-        const w = baseW + s * (MOBILE_TICK_W_MAX - MOBILE_TICK_W_MIN)
-        const m = MOBILE_MARGIN_MIN + s * (MOBILE_MARGIN_MAX - MOBILE_MARGIN_MIN)
-        tick.style.width = `${w}px`
-        item.style.marginTop = `${m}px`
-        item.style.marginBottom = `${m}px`
-        tick.style.opacity = '1'
-
-        // tick 颜色
-        if (s > 0.5) {
-          tick.style.backgroundColor = 'hsl(var(--accent-main-200))'
-          tick.style.boxShadow = '0 0 3px hsl(var(--accent-main-100) / 0.4)'
-        } else if (isActive) {
-          tick.style.backgroundColor = 'hsl(var(--accent-main-100) / 0.55)'
-          tick.style.boxShadow = 'none'
-        } else {
-          tick.style.backgroundColor = 'hsl(var(--border-300))'
-          tick.style.boxShadow = 'none'
-        }
-
-        // label
-        if (s > MOBILE_LABEL_THRESHOLD) {
-          const t = Math.min(1, (s - MOBILE_LABEL_THRESHOLD) / (1 - MOBILE_LABEL_THRESHOLD))
-          label.style.opacity = `${t}`
-          label.style.transform = `translateX(${(1 - t) * 12}px)`
-          label.style.visibility = 'visible'
-        } else {
-          label.style.opacity = '0'
-          label.style.transform = 'translateX(12px)'
-          label.style.visibility = 'hidden'
-        }
-      })
+    function loop() {
+      const { alive, focusIndex, maxStrength } = applyFisheye(
+        getItems(),
+        touchYRef.current,
+        strengthsRef.current,
+        MOBILE,
+      )
 
       // 焦点切换 → 震动 + 更新 overlay 标题
-      if (focusIdx >= 0 && maxS > 0.5 && focusIdx !== prevFocusIdxRef.current) {
-        prevFocusIdxRef.current = focusIdx
+      if (focusIndex >= 0 && maxStrength > 0.5 && focusIndex !== prevFocusIdxRef.current) {
+        prevFocusIdxRef.current = focusIndex
         vibrate()
-        // 更新模糊层上的标题
         const titleEl = overlayTitleRef.current
         if (titleEl) {
-          titleEl.textContent = entries[focusIdx].title
+          titleEl.textContent = entries[focusIndex].title
           titleEl.style.opacity = '1'
           titleEl.style.transform = 'translateY(0px)'
         }
       }
-      // 没有焦点时淡出标题
-      if ((focusIdx < 0 || maxS <= 0.5) && !isTouchingRef.current) {
+      if ((focusIndex < 0 || maxStrength <= 0.5) && !isTouchingRef.current) {
         const titleEl = overlayTitleRef.current
         if (titleEl) {
           titleEl.style.opacity = '0'
@@ -492,13 +418,12 @@ const MobileAperture = memo(function MobileAperture({
       }
 
       if (isTouchingRef.current || alive) {
-        rafIdRef.current = requestAnimationFrame(runLoop)
+        rafIdRef.current = requestAnimationFrame(loop)
       } else {
-        // 所有 strength 归零后收起 overlay
         setOverlayVisible(false)
       }
     },
-    [entries, vibrate],
+    [entries, getItems, vibrate],
   )
 
   const ensureLoop = useCallback(() => {
@@ -506,7 +431,6 @@ const MobileAperture = memo(function MobileAperture({
     rafIdRef.current = requestAnimationFrame(runLoop)
   }, [runLoop])
 
-  // ---- Touch handlers ----
   const handleTouchStart = useCallback(
     (e: React.TouchEvent) => {
       e.preventDefault()
@@ -525,27 +449,20 @@ const MobileAperture = memo(function MobileAperture({
   }, [])
 
   const handleTouchEnd = useCallback(() => {
-    // 松手 → 跳转到最后聚焦的条目
     const idx = prevFocusIdxRef.current
-    if (idx >= 0 && idx < entries.length) {
-      onScrollToMessageId(entries[idx].messageId)
-    }
+    if (idx >= 0 && idx < entries.length) onSelect(entries[idx].messageId)
     isTouchingRef.current = false
     touchYRef.current = null
     prevFocusIdxRef.current = -1
-    // 淡出 overlay 标题
     const titleEl = overlayTitleRef.current
     if (titleEl) {
       titleEl.style.opacity = '0'
       titleEl.style.transform = 'translateY(4px)'
     }
-    // 回弹动画继续跑，归零后 runLoop 会 setOverlayVisible(false)
     ensureLoop()
-  }, [entries, onScrollToMessageId, ensureLoop])
+  }, [entries, onSelect, ensureLoop])
 
-  useEffect(() => {
-    return () => cancelAnimationFrame(rafIdRef.current)
-  }, [])
+  useEffect(() => () => cancelAnimationFrame(rafIdRef.current), [])
 
   return (
     <div className="md:hidden">
@@ -567,51 +484,37 @@ const MobileAperture = memo(function MobileAperture({
       {/* 索引条 */}
       <div
         ref={containerRef}
-        className="
-          absolute right-0 top-1/2 -translate-y-1/2 z-[15]
-          flex flex-col items-end
-          pr-1.5 pl-4 py-4
-          select-none
-        "
+        className="absolute right-0 top-1/2 -translate-y-1/2 z-[15] flex flex-col items-end pr-1.5 pl-4 py-4 select-none"
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
         onTouchCancel={handleTouchEnd}
       >
-        {entries.map(entry => {
-          const isVisibleEntry = activeSet?.has(entry.messageId) ?? false
-          return (
+        {entries.map(entry => (
+          <div
+            key={entry.messageId}
+            data-moi
+            className="relative flex items-center justify-end"
+            style={{ marginTop: `${MOBILE.margin.min}px`, marginBottom: `${MOBILE.margin.min}px` }}
+          >
             <div
-              key={entry.messageId}
-              data-moi
-              data-active={isVisibleEntry ? '1' : '0'}
-              className="relative flex items-center justify-end"
-              style={{
-                marginTop: `${MOBILE_MARGIN_MIN}px`,
-                marginBottom: `${MOBILE_MARGIN_MIN}px`,
-              }}
+              data-mlabel
+              className="absolute right-full mr-2.5 text-sm leading-none text-text-200 whitespace-nowrap pointer-events-none"
+              style={{ opacity: 0, transform: 'translateX(12px)', visibility: 'hidden' }}
             >
-              {/* Label — absolute 定位，不撑大触发区域 */}
-              <div
-                data-mlabel
-                className="absolute right-full mr-2.5 text-sm leading-none text-text-200 whitespace-nowrap pointer-events-none"
-                style={{ opacity: 0, transform: 'translateX(12px)', visibility: 'hidden' }}
-              >
-                {truncate(entry.title, 14)}
-              </div>
-              {/* Tick */}
-              <div
-                data-mtick
-                className="rounded-full shrink-0"
-                style={{
-                  width: `${isVisibleEntry ? 10 : MOBILE_TICK_W_MIN}px`,
-                  height: `${TICK_H}px`,
-                  backgroundColor: isVisibleEntry ? 'hsl(var(--accent-main-100) / 0.55)' : 'hsl(var(--border-300))',
-                }}
-              />
+              {truncate(entry.title, MOBILE_TITLE_MAX_LEN)}
             </div>
-          )
-        })}
+            <div
+              data-mtick
+              className="rounded-full shrink-0"
+              style={{
+                width: `${MOBILE.tickWidth.min}px`,
+                height: `${MOBILE.tickHeight}px`,
+                backgroundColor: 'hsl(var(--border-300))',
+              }}
+            />
+          </div>
+        ))}
       </div>
     </div>
   )

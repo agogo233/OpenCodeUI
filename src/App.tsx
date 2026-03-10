@@ -631,11 +631,7 @@ function App() {
             </div>
 
             {/* Outline Index - 消息目录索引 */}
-            <OutlineIndex
-              messages={messages}
-              onScrollToMessageId={handleOutlineScrollToMessage}
-              visibleMessageIds={visibleMessageIds}
-            />
+            <OutlineIndex messages={messages} onScrollToMessageId={handleOutlineScrollToMessage} />
 
             {/* Floating Input Box */}
             <div ref={inputBoxWrapperRef} className="absolute bottom-0 left-0 right-0 z-10 pointer-events-none">
