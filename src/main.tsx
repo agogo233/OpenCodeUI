@@ -37,6 +37,12 @@ function ensureRandomUUID() {
 
 ensureRandomUUID()
 
+// 禁用浏览器的 scroll restoration（刷新时不恢复旧 scrollTop），
+// 由 ChatArea 自行控制定位
+if ('scrollRestoration' in history) {
+  history.scrollRestoration = 'manual'
+}
+
 // 初始化主题系统（在 React 渲染前注入 CSS 变量，避免闪烁）
 themeStore.init()
 

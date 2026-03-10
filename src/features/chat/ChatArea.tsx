@@ -236,16 +236,24 @@ export const ChatArea = memo(
       }, [sessionId, loadState])
 
       // Session 加载完成后定位到底部（只执行一次）
+      // content-visibility: auto 导致首帧 scrollHeight 基于估算高度（120px/item），
+      // 滚到"底部"后可见区域渲染出实际高度 → scrollHeight 变化。
+      // 需要多帧重试直到真正到底
       useEffect(() => {
         if (!sessionId || loadState !== 'loaded') return
         if (visibleMessages.length === 0) return
         if (initialScrollDoneRef.current === sessionId) return
         initialScrollDoneRef.current = sessionId
 
-        requestAnimationFrame(() => {
-          const el = scrollContainerRef.current
-          if (el) el.scrollTop = el.scrollHeight
-        })
+        const el = scrollContainerRef.current
+        if (!el) return
+
+        let retries = 0
+        const scrollToEnd = () => {
+          el.scrollTop = el.scrollHeight
+          if (++retries < 8) requestAnimationFrame(scrollToEnd)
+        }
+        scrollToEnd()
       }, [sessionId, loadState, visibleMessages.length])
 
       // ============================================
