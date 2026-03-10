@@ -4,6 +4,7 @@ import { ChevronDownIcon, MaximizeIcon } from './Icons'
 import { clsx } from 'clsx'
 import { useSyntaxHighlight, type HighlightTokens } from '../hooks/useSyntaxHighlight'
 import { detectLanguage } from '../utils/languageUtils'
+import { extractContentFromUnifiedDiff } from '../utils/diffUtils'
 import { syntaxErrorHandler } from '../utils'
 import { FullscreenViewer } from './FullscreenViewer'
 
@@ -50,36 +51,6 @@ function getStartLine(diffString?: string): { old: number; new: number } {
     return { old: parseInt(match[1], 10), new: parseInt(match[2], 10) }
   }
   return { old: 1, new: 1 }
-}
-
-// Extract content (before/after) from unified diff string
-function extractContentFromDiff(diff: string): { before: string; after: string } {
-  const lines = diff.split('\n')
-  let before = ''
-  let after = ''
-
-  for (const line of lines) {
-    if (line.startsWith('Index:')) continue
-    if (line.startsWith('===')) continue
-    if (line.startsWith('---')) continue
-    if (line.startsWith('+++')) continue
-    if (line.startsWith('@@')) continue
-    if (line.startsWith('\\ No newline')) continue
-
-    if (line.startsWith(' ')) {
-      const content = line.slice(1) + '\n'
-      before += content
-      after += content
-    } else if (line.startsWith('-')) {
-      const content = line.slice(1) + '\n'
-      before += content
-    } else if (line.startsWith('+')) {
-      const content = line.slice(1) + '\n'
-      after += content
-    }
-  }
-
-  return { before: before.trimEnd(), after: after.trimEnd() }
 }
 
 // Hook to highlight code using tokens API (Robust)
@@ -178,7 +149,7 @@ export const DiffView = memo(function DiffView({
       return { before, after }
     }
     if (diff) {
-      return extractContentFromDiff(diff)
+      return extractContentFromUnifiedDiff(diff)
     }
     return null
   }, [before, after, diff])
