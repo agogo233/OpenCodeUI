@@ -69,7 +69,7 @@ vi.mock('../../hooks', () => ({
   useIsMobile: () => false,
 }))
 
-vi.mock('../../store/messageStore', () => ({
+vi.mock('../../store/messageStoreHooks', () => ({
   useMessages: () => [],
 }))
 

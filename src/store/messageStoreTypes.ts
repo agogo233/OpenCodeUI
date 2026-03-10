@@ -1,0 +1,92 @@
+// ============================================
+// MessageStore Types
+// ============================================
+
+import type { Message, Part } from '../types/message'
+import type { ApiPart } from '../api/types'
+
+export interface RevertState {
+  /** 撤销点的消息 ID */
+  messageId: string
+  /** 撤销历史栈 - 用于多步 redo */
+  history: RevertHistoryItem[]
+}
+
+export interface RevertHistoryItem {
+  messageId: string
+  text: string
+  attachments: unknown[]
+  model?: { providerID: string; modelID: string }
+  variant?: string
+  agent?: string
+}
+
+export interface SessionState {
+  /** 所有消息（包括被撤销的） */
+  messages: Message[]
+  /** 撤销状态 */
+  revertState: RevertState | null
+  /** 是否正在 streaming */
+  isStreaming: boolean
+  /** 加载状态 */
+  loadState: 'idle' | 'loading' | 'loaded' | 'error'
+  /** 向前加载的消息数（用于虚拟滚动定位） */
+  prependedCount: number
+  /** 是否还有更多历史消息 */
+  hasMoreHistory: boolean
+  /** session 目录 */
+  directory: string
+  /** 分享链接 */
+  shareUrl?: string
+  /** 断线重连后是否需要重新全量拉取 */
+  isStale: boolean
+}
+
+export interface SendRollbackSnapshot {
+  messages: Message[]
+  revertState: RevertState | null
+}
+
+export type PendingPartEvent =
+  | {
+      kind: 'updated'
+      order: number
+      data: ApiPart & { sessionID: string; messageID: string }
+    }
+  | {
+      kind: 'delta'
+      order: number
+      data: { sessionID: string; messageID: string; partID: string; field: string; delta: string }
+    }
+  | {
+      kind: 'removed'
+      order: number
+      data: { id: string; messageID: string; sessionID: string }
+    }
+
+export interface MessageStoreSnapshot {
+  sessionId: string | null
+  messages: Message[]
+  isStreaming: boolean
+  revertState: RevertState | null
+  prependedCount: number
+  hasMoreHistory: boolean
+  sessionDirectory: string
+  shareUrl: string | undefined
+  canUndo: boolean
+  canRedo: boolean
+  redoSteps: number
+  revertedContent: RevertHistoryItem | null
+  loadState: SessionState['loadState']
+}
+
+export interface SessionStateSnapshot {
+  messages: Message[]
+  isStreaming: boolean
+  loadState: SessionState['loadState']
+  revertState: RevertState | null
+  canUndo: boolean
+}
+
+// Re-export Part for convenience
+export type { Message, Part }
