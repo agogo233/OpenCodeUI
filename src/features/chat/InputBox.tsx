@@ -14,10 +14,9 @@ import { InputFooter } from './input/InputFooter'
 import { UndoStatus } from './input/UndoStatus'
 import { useMobileCollapse } from './input/useMobileCollapse'
 import { useAttachmentRail } from './input/useAttachmentRail'
+import { useInputHistory } from './input/useInputHistory'
 import { TEXT_STYLE, detectSlashTrigger, isFileSupported, ensureFileMime, readFileAsDataUrl } from './input/inputUtils'
 import { keybindingStore, matchesKeybinding } from '../../store/keybindingStore'
-import { useMessages } from '../../store/messageStoreHooks'
-import { getMessageText, type FilePart, type AgentPart } from '../../types/message'
 import { useIsMobile } from '../../hooks'
 import { ArrowDownIcon, ArrowUpIcon, PermissionListIcon, QuestionIcon } from '../../components/Icons'
 import type { ApiAgent } from '../../api/client'
@@ -180,71 +179,9 @@ function InputBoxComponent({
   } = useAttachmentRail({ attachmentCount: attachments.length, railRef: attachmentRailRef })
 
   // ============================================
-  // 历史消息导航（类终端体验）
+  // 历史消息导航（类终端体验，逻辑在 useInputHistory hook 中）
   // ============================================
-  const messages = useMessages()
-  const userHistory = useMemo((): HistoryEntry[] => {
-    const entries: HistoryEntry[] = []
-    const seen = new Set<string>()
-    for (const msg of messages) {
-      if (msg.info.role !== 'user') continue
-      const t = getMessageText(msg).trim()
-      if (!t || seen.has(t)) continue
-      seen.add(t)
-
-      // 提取附件（复用 undo 的逻辑）
-      const atts: Attachment[] = []
-      for (const part of msg.parts) {
-        if (part.type === 'file') {
-          const fp = part as FilePart
-          const isFolder = fp.mime === 'application/x-directory'
-          const sourcePath =
-            fp.source && 'path' in fp.source
-              ? fp.source.path
-              : fp.source?.type === 'resource'
-                ? fp.source.uri
-                : undefined
-          atts.push({
-            id: fp.id || crypto.randomUUID(),
-            type: isFolder ? 'folder' : 'file',
-            displayName: fp.filename || sourcePath || 'file',
-            url: fp.url,
-            mime: fp.mime,
-            relativePath: sourcePath,
-            textRange: fp.source?.text
-              ? {
-                  value: fp.source.text.value,
-                  start: fp.source.text.start,
-                  end: fp.source.text.end,
-                }
-              : undefined,
-          })
-        } else if (part.type === 'agent') {
-          const ap = part as AgentPart
-          atts.push({
-            id: ap.id || crypto.randomUUID(),
-            type: 'agent',
-            displayName: ap.name,
-            agentName: ap.name,
-            textRange: ap.source
-              ? {
-                  value: ap.source.value,
-                  start: ap.source.start,
-                  end: ap.source.end,
-                }
-              : undefined,
-          })
-        }
-      }
-      entries.push({ text: t, attachments: atts })
-    }
-    return entries
-  }, [messages])
-
-  // -1 = 未进入历史模式，0 = 最后一条，往上递增
-  const historyIndexRef = useRef(-1)
-  // 进入历史前暂存用户的输入
-  const savedInputRef = useRef<HistoryEntry>({ text: '', attachments: [] })
+  const { handleHistoryKeyDown, handleHistoryChange, resetHistoryIndex } = useInputHistory({ textareaRef })
 
   // ============================================
   // Mobile Input Dock: 滚动收起/展开（逻辑在 useMobileCollapse hook 中）
@@ -328,22 +265,25 @@ function InputBoxComponent({
     latestDraftRef.current = { text: '', attachments: [] }
     setText('')
     setAttachments([])
-    historyIndexRef.current = -1
-  }, [])
+    resetHistoryIndex()
+  }, [resetHistoryIndex])
 
-  const restoreDraft = useCallback((draft: HistoryEntry) => {
-    latestDraftRef.current = draft
-    setText(draft.text)
-    setAttachments(draft.attachments)
-    historyIndexRef.current = -1
+  const restoreDraft = useCallback(
+    (draft: HistoryEntry) => {
+      latestDraftRef.current = draft
+      setText(draft.text)
+      setAttachments(draft.attachments)
+      resetHistoryIndex()
 
-    requestAnimationFrame(() => {
-      if (!textareaRef.current) return
-      const cursorPos = draft.text.length
-      textareaRef.current.focus()
-      textareaRef.current.setSelectionRange(cursorPos, cursorPos)
-    })
-  }, [])
+      requestAnimationFrame(() => {
+        if (!textareaRef.current) return
+        const cursorPos = draft.text.length
+        textareaRef.current.focus()
+        textareaRef.current.setSelectionRange(cursorPos, cursorPos)
+      })
+    },
+    [resetHistoryIndex],
+  )
 
   const submitCommandOptimistically = useCallback(
     (commandStr: string) => {
@@ -551,62 +491,11 @@ function InputBoxComponent({
       }
 
       // 历史消息导航（类终端体验）
-      // 进入条件：光标在首行 + (内容为空 或 正在浏览历史且内容未被修改)
-      const isHistoryUnmodified = () => {
-        if (historyIndexRef.current < 0) return false
-        const entry = userHistory[userHistory.length - 1 - historyIndexRef.current]
-        if (!entry || text !== entry.text) return false
-        // 附件比较：数量一致 且 id 序列一致
-        if (attachments.length !== entry.attachments.length) return false
-        return attachments.every((a, i) => a.id === entry.attachments[i].id)
-      }
-
-      if (e.key === 'ArrowUp' && userHistory.length > 0) {
-        const ta = textareaRef.current
-        if (ta) {
-          const cursorAtFirstLine =
-            ta.selectionStart === ta.selectionEnd && ta.value.lastIndexOf('\n', ta.selectionStart - 1) === -1
-
-          const inHistory = historyIndexRef.current >= 0
-          const isEmpty = text.trim() === '' && attachments.length === 0
-
-          if (cursorAtFirstLine && (isEmpty || isHistoryUnmodified())) {
-            e.preventDefault()
-            if (!inHistory) {
-              savedInputRef.current = { text, attachments: [...attachments] }
-            }
-            const nextIndex = Math.min(historyIndexRef.current + 1, userHistory.length - 1)
-            if (nextIndex !== historyIndexRef.current) {
-              historyIndexRef.current = nextIndex
-              const entry = userHistory[userHistory.length - 1 - nextIndex]
-              setText(entry.text)
-              setAttachments(entry.attachments)
-            }
-            return
-          }
-        }
-      }
-      if (e.key === 'ArrowDown' && historyIndexRef.current >= 0) {
-        const ta = textareaRef.current
-        if (ta) {
-          const cursorAtLastLine =
-            ta.selectionStart === ta.selectionEnd && ta.value.indexOf('\n', ta.selectionStart) === -1
-
-          if (cursorAtLastLine && isHistoryUnmodified()) {
-            e.preventDefault()
-            const nextIndex = historyIndexRef.current - 1
-            historyIndexRef.current = nextIndex
-            if (nextIndex < 0) {
-              setText(savedInputRef.current.text)
-              setAttachments(savedInputRef.current.attachments)
-            } else {
-              const entry = userHistory[userHistory.length - 1 - nextIndex]
-              setText(entry.text)
-              setAttachments(entry.attachments)
-            }
-            return
-          }
-        }
+      const historyResult = handleHistoryKeyDown(e, text, attachments)
+      if (historyResult) {
+        setText(historyResult.text)
+        setAttachments(historyResult.attachments)
+        return
       }
 
       // 发送消息（读取 keybinding 配置）
@@ -616,7 +505,7 @@ function InputBoxComponent({
         handleSend()
       }
     },
-    [mentionOpen, slashOpen, mentionQuery, updateMentionQuery, handleSend, text, attachments, userHistory],
+    [mentionOpen, slashOpen, mentionQuery, updateMentionQuery, handleSend, text, attachments, handleHistoryKeyDown],
   )
 
   const handleChange = useCallback(
@@ -625,12 +514,7 @@ function InputBoxComponent({
       setText(newText)
 
       // 用户修改了内容，检查是否应退出历史模式
-      if (historyIndexRef.current >= 0) {
-        const currentEntry = userHistory[userHistory.length - 1 - historyIndexRef.current]
-        if (!currentEntry || newText !== currentEntry.text) {
-          historyIndexRef.current = -1
-        }
-      }
+      handleHistoryChange(newText)
 
       // 同步检测 mention 是否被破坏/删除
       // 比对 attachments 的 textRange：如果文本中对应位置不再匹配，删除该 attachment
@@ -668,7 +552,7 @@ function InputBoxComponent({
         }
       }
     },
-    [userHistory],
+    [handleHistoryChange],
   )
 
   // @ Mention 选择处理
