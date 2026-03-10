@@ -86,7 +86,7 @@ export const FloatingActions = memo(function FloatingActions({
         </button>
       )}
 
-      {canRedo && <UndoStatus canRedo={canRedo} revertSteps={revertSteps} onRedo={onRedo} onRedoAll={onRedoAll} />}
+      {canRedo && <UndoStatus canRedo={canRedo} revertSteps={revertSteps ?? 0} onRedo={onRedo} onRedoAll={onRedoAll} />}
 
       {showScrollToBottom && !isCollapsed && <ScrollToBottomButton onClick={onScrollToBottom} />}
     </div>
