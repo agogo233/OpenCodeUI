@@ -2,10 +2,13 @@ import type { Message, Part, TextPart, ReasoningPart } from '../../types/message
 
 function messageHasContent(message: Message): boolean {
   if (message.parts.length === 0) {
+    // 有非 abort 错误的助手消息仍然可见（展示错误信息）
     if (message.info.role === 'assistant' && 'error' in message.info && message.info.error) {
       return message.info.error.name !== 'MessageAbortedError'
     }
-    return true
+    // 任何角色的空消息都不可见：没有内容可展示
+    // part 到达后自动进入可见列表；abort 后永远不会有 part → 永远不可见
+    return false
   }
   return message.parts.some(part => {
     switch (part.type) {
