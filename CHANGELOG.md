@@ -1,5 +1,23 @@
 # Changelog
 
+## [v0.2.3] - 2026-03-15
+
+- fix: probe 最长行选取改用 monoDisplayWidth 估算渲染宽度，CJK/全角字符按双倍计，修复含中文注释时横向滚动不到位 (d1fb35a)
+- Revert "fix: probe 元素去掉 overflow:hidden 修复横向滚动不到位 — hidden 在两个方向截断内容导致 scrollWidth 偏小" (0e5353f)
+- fix: probe 元素去掉 overflow:hidden 修复横向滚动不到位 — hidden 在两个方向截断内容导致 scrollWidth 偏小 (c9788fc)
+- fix: lint warnings — ref 写入移入 useEffect，CodePreview 提取 tokens 避免 render 期间读 ref，修复 CodePreview 测试，清理多余依赖和 eslint-disable (96955f7)
+- fix: 消除胶囊⇄输入框切换闪烁 — FloatingActions 改为同一 DOM 切换定位避免 remount，胶囊去掉入场动画和防抖回归纯 UI (bc3cc0c)
+- fix: 移动端胶囊⇄输入框过渡优化 — 胶囊退场不延迟避免与输入框重叠闪烁，收起方向加 120ms 防抖消除滚动边界抖动 (4060e83)
+- refactor: 统一动画体系 — UndoStatus 去自带动画改由 PresenceItem 控制，CollapsedCapsule 从 CSS animate-in 换成 usePresence，PresenceItem 加 shrink-0 防挤压，清理 CSS 死代码 (5106ac0)
+- fix: probe 元素精确撑开 scrollWidth 修复横向滚动不到位，去掉 backdrop-blur (0f3b764)
+- Revert "fix: 代码预览/diff 横向滚动重构 — CodePreview/UnifiedDiffView 改原生滚动+sticky gutter，SplitDiffView 用 probe 元素精确撑宽，去掉 backdrop-blur" (9d12d72)
+- fix: 代码预览/diff 横向滚动重构 — CodePreview/UnifiedDiffView 改原生滚动+sticky gutter，SplitDiffView 用 probe 元素精确撑宽，去掉 backdrop-blur (9e37646)
+- feat: usePresence hook + 浮动按钮/权限框/提问框入场退场动画 — 命令式 animate() 零额外 bundle (fb8c59f)
+- fix: 消息流底部间距增大，为浮动按钮预留空间 (7f32fa2)
+- fix: 删除 Output 的 Running... 文字，Input/Output spinner 统一无文字对齐 (e8c409e)
+- fix: 单工具调用始终 compact 布局，消除流结束时的缩进跳变 — SmoothHeight 平滑过渡 + steps header 入场动画 (031502f)
+- fix: 代码预览和 diff 行号背景色统一 — gutter 去掉硬编码背景，继承父容器颜色 (9ef8223)
+
 ## [v0.2.2] - 2026-03-15
 
 - ci: 恢复 codegen-units=1 减小产物体积，Rust cache 按平台隔离，精简工作流 (5018e3b)
