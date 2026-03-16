@@ -46,10 +46,10 @@
     "loadingChanges": "加载变更中...",
     "failedToLoad": "加载变更失败",
     "noChanges": "此会话无变更",
-    "list": "列表",
-    "tree": "树形",
-    "unified": "合并",
-    "split": "分栏"
+    "list": "List",
+    "tree": "Tree",
+    "unified": "Unified",
+    "split": "Split"
   },
   "mcpPanel": {
     "title": "MCP 服务器",
