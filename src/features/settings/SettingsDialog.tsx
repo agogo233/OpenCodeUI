@@ -178,7 +178,7 @@ export function SettingsDialog({ isOpen, onClose, initialTab = 'servers' }: Sett
           {/* Sticky Header + Tabs */}
           <div className="shrink-0 bg-bg-000">
             {/* Title bar */}
-            <div className="flex items-center justify-between px-4 pt-2 pb-2">
+            <div className="flex items-center justify-between px-4 pt-3 pb-2">
               <div className="text-[15px] font-semibold text-text-100">{t('title')}</div>
               <button
                 onClick={onClose}
@@ -188,25 +188,27 @@ export function SettingsDialog({ isOpen, onClose, initialTab = 'servers' }: Sett
               </button>
             </div>
 
-            {/* Tab Bar - pill style, horizontal scroll */}
-            <div className="flex items-center gap-1.5 px-3 pb-2.5 overflow-x-auto scrollbar-none">
-              {visibleTabs.map(vt => (
-                <button
-                  key={vt.id}
-                  onClick={() => switchTab(vt.id)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[13px] font-medium transition-colors whitespace-nowrap shrink-0
-                    ${
-                      vt.id === tab
-                        ? 'bg-accent-main-100/10 text-accent-main-100 ring-1 ring-accent-main-100/25'
-                        : 'text-text-400 active:bg-bg-100/60'
-                    }`}
-                >
-                  {vt.icon}
-                  {vt.label}
-                </button>
-              ))}
+            {/* Tab Bar - horizontal scroll with padding for visual safety */}
+            <div className="relative">
+              <div className="flex items-center gap-1.5 px-4 pb-3 overflow-x-auto scrollbar-none">
+                {visibleTabs.map(vt => (
+                  <button
+                    key={vt.id}
+                    onClick={() => switchTab(vt.id)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[13px] font-medium transition-colors whitespace-nowrap shrink-0 border
+                      ${
+                        vt.id === tab
+                          ? 'bg-accent-main-100/10 text-accent-main-100 border-accent-main-100/30'
+                          : 'text-text-400 border-transparent active:bg-bg-100/60'
+                      }`}
+                  >
+                    {vt.icon}
+                    {vt.label}
+                  </button>
+                ))}
+              </div>
+              <div className="absolute bottom-0 left-0 right-0 border-b border-border-100/40" />
             </div>
-            <div className="border-b border-border-100/40" />
           </div>
 
           {/* Content - single scroll container */}
