@@ -32,15 +32,7 @@ import type {
   CompactionPart,
   AssistantMessageInfo,
 } from '../../types/message'
-
-function formatDuration(ms: number): string {
-  if (ms < 1000) return `${ms}ms`
-  const s = ms / 1000
-  if (s < 60) return `${s.toFixed(1)}s`
-  const m = Math.floor(s / 60)
-  const rem = Math.round(s % 60)
-  return rem > 0 ? `${m}m${rem}s` : `${m}m`
-}
+import { formatDuration } from '../../utils/formatUtils'
 
 interface MessageRendererProps {
   message: Message
@@ -339,11 +331,8 @@ const AssistantMessageView = memo(function AssistantMessageView({
   const { created, completed } = info.time
   const duration = completed != null ? completed - created : undefined
   const hasStepFinishPart = parts.some(part => part.type === 'step-finish')
-  const showTurnDurationFooter = !isStreaming
-    && !hasStepFinishPart
-    && stepFinishDisplay.turnDuration
-    && turnDuration != null
-    && turnDuration > 0
+  const showTurnDurationFooter =
+    !isStreaming && !hasStepFinishPart && stepFinishDisplay.turnDuration && turnDuration != null && turnDuration > 0
 
   if (!isStreaming && parts.length === 0) {
     // 有错误时直接显示错误信息
