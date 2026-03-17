@@ -22,7 +22,7 @@ interface SessionListProps {
   onNewChat: () => void
   showHeader?: boolean
   grouped?: boolean
-  density?: 'default' | 'compact'
+  density?: 'default' | 'compact' | 'minimal'
   showStats?: boolean
   /** Global 模式下显示每个 session 的目录名 */
   showDirectory?: boolean
@@ -238,7 +238,7 @@ export interface SessionListItemProps {
   onSelect: () => void
   onDelete: () => void
   onRename: (newTitle: string) => void
-  density?: 'default' | 'compact'
+  density?: 'default' | 'compact' | 'minimal'
   showStats?: boolean
   showDirectory?: boolean
 }
@@ -275,6 +275,7 @@ export function SessionListItem({
   const itemRef = useRef<HTMLDivElement>(null)
   const isMobile = useIsMobile()
   const isCompact = density === 'compact'
+  const isMinimal = density === 'minimal'
 
   const handleDelete = (e: React.MouseEvent) => {
     e.stopPropagation()
@@ -376,7 +377,7 @@ export function SessionListItem({
 
   if (isEditing) {
     return (
-      <div className="px-3 py-2">
+      <div className={isMinimal ? 'px-2 py-0.5' : 'px-3 py-2'}>
         <input
           ref={inputRef}
           type="text"
@@ -385,7 +386,9 @@ export function SessionListItem({
           onBlur={handleSaveEdit}
           onKeyDown={handleKeyDown}
           onClick={e => e.stopPropagation()}
-          className="w-full bg-bg-000 border border-accent-main-100/50 rounded px-2 py-1.5 text-sm text-text-100 focus:outline-none focus:ring-1 focus:ring-accent-main-100/30 leading-relaxed"
+          className={`w-full bg-bg-000 border border-accent-main-100/50 rounded px-2 text-text-100 focus:outline-none focus:ring-1 focus:ring-accent-main-100/30 ${
+            isMinimal ? 'py-0.5 text-[12px] leading-normal' : 'py-1.5 text-sm leading-relaxed'
+          }`}
         />
       </div>
     )
@@ -395,6 +398,74 @@ export function SessionListItem({
   // 桌面端：hover 触发
   const actionsVisible = isMobile ? showActions : false
 
+  // ============================================
+  // Minimal 模式 —— 文件夹视图下的紧凑单行
+  // 标题 + 时间 + 活跃状态圆点
+  // ============================================
+  if (isMinimal) {
+    return (
+      <div
+        ref={itemRef}
+        onClick={handleClick}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        className={`group relative flex items-center gap-1.5 px-2 py-1.5 rounded-md cursor-pointer transition-colors duration-150 select-none ${
+          isSelected ? 'bg-bg-200/80 text-text-100' : 'text-text-300 hover:bg-bg-200/40 hover:text-text-200'
+        } ${showActions ? 'bg-bg-200/40' : ''}`}
+      >
+        {/* 活跃状态圆点 */}
+        {activeStatus && (
+          <span className="relative shrink-0 flex items-center justify-center w-3 h-3" title={activeStatus.label}>
+            <span className={`absolute w-1.5 h-1.5 rounded-full ${activeStatus.dot}`} />
+            {activeStatus.pulse && (
+              <span className={`absolute w-1.5 h-1.5 rounded-full ${activeStatus.dot} animate-ping opacity-50`} />
+            )}
+          </span>
+        )}
+
+        {/* 标题 */}
+        <span className="min-w-0 flex-1 truncate text-[12px]" title={session.title || t('sessions.untitledChat')}>
+          {session.title || t('sessions.untitledChat')}
+        </span>
+
+        {/* 时间 — hover 时被操作按钮覆盖 */}
+        {session.time?.updated && (
+          <span className="shrink-0 text-[10px] text-text-500 group-hover:opacity-0 transition-opacity duration-150">
+            {formatRelativeTime(session.time.updated)}
+          </span>
+        )}
+
+        {/* 操作按钮 */}
+        <div
+          className={`absolute right-2 shrink-0 flex items-center gap-0.5 transition-opacity duration-150 ${
+            actionsVisible
+              ? 'opacity-100 pointer-events-auto'
+              : 'opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto'
+          }`}
+        >
+          <button
+            onClick={handleStartEdit}
+            className="p-1 rounded hover:bg-bg-300 text-text-500 hover:text-text-200 transition-colors focus:outline-none"
+            title={t('sessions.rename')}
+          >
+            <PencilIcon className="w-3 h-3" />
+          </button>
+          <button
+            onClick={handleDelete}
+            className="p-1 rounded hover:bg-danger-bg text-text-500 hover:text-danger-100 transition-colors focus:outline-none"
+            title={t('common:delete')}
+          >
+            <TrashIcon className="w-3 h-3" />
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  // ============================================
+  // Default / Compact 模式
+  // ============================================
   return (
     <div
       ref={itemRef}

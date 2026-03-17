@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { ApiSession } from '../../../api'
-import { ArrowDownIcon, ArrowUpIcon, FolderIcon, FolderOpenIcon, SpinnerIcon } from '../../../components/Icons'
+import { FolderIcon, FolderOpenIcon, SpinnerIcon } from '../../../components/Icons'
 import { ConfirmDialog } from '../../../components/ui/ConfirmDialog'
 import { useSessions } from '../../../hooks'
+import { useIsMobile } from '../../../hooks/useIsMobile'
 import { useInView } from '../../../hooks/useInView'
 import { getDirectoryName, isSameDirectory } from '../../../utils'
 import { SessionListItem } from '../../sessions'
@@ -32,6 +33,9 @@ interface PendingDeleteSession {
   removeLocal: () => void
 }
 
+// 拖拽指示位置：上方 or 下方
+type DropPosition = 'above' | 'below' | null
+
 function getInitialExpandedProjectIds(projects: FolderRecentProject[], currentDirectory?: string): string[] {
   if (projects.length === 0) return []
 
@@ -52,10 +56,24 @@ export function FolderRecentList({
   onReorderProject,
 }: FolderRecentListProps) {
   const { t } = useTranslation(['chat', 'common'])
+  const isMobile = useIsMobile()
   const [expandedProjectIds, setExpandedProjectIds] = useState<string[]>(() =>
     getInitialExpandedProjectIds(projects, currentDirectory),
   )
   const [pendingDelete, setPendingDelete] = useState<PendingDeleteSession | null>(null)
+
+  // ---- 拖拽状态 ----
+  const [draggedId, setDraggedId] = useState<string | null>(null)
+  const [dropTarget, setDropTarget] = useState<{ id: string; position: DropPosition }>({ id: '', position: null })
+  // 拖拽开始前保存展开状态，结束后恢复
+  const savedExpandedRef = useRef<string[] | null>(null)
+
+  // ---- 移动端触摸拖拽 ----
+  const [touchDragId, setTouchDragId] = useState<string | null>(null)
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const touchMovedRef = useRef(false)
+  const touchStartY = useRef(0)
+  const folderRefs = useRef<Map<string, HTMLDivElement>>(new Map())
 
   // 当 projects 列表变化时，过滤掉已不存在的展开项
   useEffect(() => {
@@ -82,37 +100,191 @@ export function FolderRecentList({
     )
   }, [])
 
+  // ============================================
+  // 桌面端拖拽 (HTML5 Drag & Drop)
+  // ============================================
+  const startDrag = useCallback(
+    (projectId: string) => {
+      // 保存展开状态并收起所有文件夹
+      savedExpandedRef.current = expandedProjectIds
+      setExpandedProjectIds([])
+      setDraggedId(projectId)
+    },
+    [expandedProjectIds],
+  )
+
+  const handleDragOver = useCallback(
+    (e: React.DragEvent, projectId: string) => {
+      e.preventDefault()
+      e.dataTransfer.dropEffect = 'move'
+      if (!draggedId || projectId === draggedId) {
+        setDropTarget({ id: '', position: null })
+        return
+      }
+      // 根据鼠标在目标元素的上/下半区决定插入位置
+      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+      const midY = rect.top + rect.height / 2
+      const position: DropPosition = e.clientY < midY ? 'above' : 'below'
+      setDropTarget({ id: projectId, position })
+    },
+    [draggedId],
+  )
+
+  const handleDragLeave = useCallback(() => {
+    setDropTarget({ id: '', position: null })
+  }, [])
+
+  const finishDrag = useCallback(
+    (targetProjectId: string) => {
+      if (draggedId && draggedId !== targetProjectId) {
+        const draggedProject = projects.find(p => p.id === draggedId)
+        const targetProject = projects.find(p => p.id === targetProjectId)
+        if (draggedProject?.canReorder && targetProject?.canReorder) {
+          onReorderProject(draggedProject.worktree, targetProject.worktree)
+        }
+      }
+      // 恢复展开状态
+      if (savedExpandedRef.current) {
+        setExpandedProjectIds(savedExpandedRef.current)
+        savedExpandedRef.current = null
+      }
+      setDraggedId(null)
+      setDropTarget({ id: '', position: null })
+    },
+    [draggedId, projects, onReorderProject],
+  )
+
+  const cancelDrag = useCallback(() => {
+    if (savedExpandedRef.current) {
+      setExpandedProjectIds(savedExpandedRef.current)
+      savedExpandedRef.current = null
+    }
+    setDraggedId(null)
+    setDropTarget({ id: '', position: null })
+  }, [])
+
+  // ============================================
+  // 移动端触摸拖拽
+  // ============================================
+  const handleTouchStart = useCallback(
+    (projectId: string, e: React.TouchEvent) => {
+      const project = projects.find(p => p.id === projectId)
+      if (!project?.canReorder) return
+
+      touchMovedRef.current = false
+      touchStartY.current = e.touches[0].clientY
+
+      longPressTimer.current = setTimeout(() => {
+        if (!touchMovedRef.current) {
+          // 触发拖拽模式
+          savedExpandedRef.current = expandedProjectIds
+          setExpandedProjectIds([])
+          setTouchDragId(projectId)
+        }
+      }, 400)
+    },
+    [projects, expandedProjectIds],
+  )
+
+  const handleTouchMove = useCallback(
+    (e: React.TouchEvent) => {
+      const dy = Math.abs(e.touches[0].clientY - touchStartY.current)
+      if (dy > 8) touchMovedRef.current = true
+
+      if (longPressTimer.current && touchMovedRef.current && !touchDragId) {
+        clearTimeout(longPressTimer.current)
+        longPressTimer.current = null
+      }
+
+      if (!touchDragId) return
+
+      // 找到手指下方的文件夹
+      const touchY = e.touches[0].clientY
+      let foundTarget: { id: string; position: DropPosition } = { id: '', position: null }
+
+      for (const [id, el] of folderRefs.current.entries()) {
+        if (id === touchDragId) continue
+        const rect = el.getBoundingClientRect()
+        if (touchY >= rect.top && touchY <= rect.bottom) {
+          const midY = rect.top + rect.height / 2
+          foundTarget = { id, position: touchY < midY ? 'above' : 'below' }
+          break
+        }
+      }
+      setDropTarget(foundTarget)
+    },
+    [touchDragId],
+  )
+
+  const handleTouchEnd = useCallback(() => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current)
+      longPressTimer.current = null
+    }
+
+    if (touchDragId && dropTarget.id && dropTarget.id !== touchDragId) {
+      const draggedProject = projects.find(p => p.id === touchDragId)
+      const targetProject = projects.find(p => p.id === dropTarget.id)
+      if (draggedProject?.canReorder && targetProject?.canReorder) {
+        onReorderProject(draggedProject.worktree, targetProject.worktree)
+      }
+    }
+
+    // 恢复展开状态
+    if (savedExpandedRef.current) {
+      setExpandedProjectIds(savedExpandedRef.current)
+      savedExpandedRef.current = null
+    }
+    setTouchDragId(null)
+    setDropTarget({ id: '', position: null })
+  }, [touchDragId, dropTarget, projects, onReorderProject])
+
+  // 清理长按定时器
+  useEffect(() => {
+    return () => {
+      if (longPressTimer.current) clearTimeout(longPressTimer.current)
+    }
+  }, [])
+
+  const activeDragId = draggedId || touchDragId
+  const isDragging = !!activeDragId
+
   return (
     <>
-      <div className="h-full overflow-y-auto custom-scrollbar px-2 py-2">
+      <div className="h-full overflow-y-auto custom-scrollbar px-1.5 py-1">
         {projects.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center px-6 text-center text-text-400 opacity-70">
             <p className="text-xs font-medium text-text-300">{t('sidebar.noProjectFoldersYet')}</p>
             <p className="mt-1 text-[11px] text-text-400/70">{t('sidebar.addProjectDesc')}</p>
           </div>
         ) : (
-          <div className="space-y-0.5">
-            {projects.map((project, index) => (
+          <div onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}>
+            {projects.map(project => (
               <FolderRecentSection
                 key={project.id}
                 project={project}
-                canMoveUp={!!project.canReorder && index > 0 && !!projects[index - 1]?.canReorder}
-                canMoveDown={!!project.canReorder && index < projects.length - 1 && !!projects[index + 1]?.canReorder}
-                isExpanded={expandedProjectIds.includes(project.id)}
-                isCurrent={isSameDirectory(project.worktree, currentDirectory)}
+                isExpanded={!isDragging && expandedProjectIds.includes(project.id)}
                 selectedSessionId={selectedSessionId}
                 onToggle={() => handleToggleProject(project.id)}
-                onMoveUp={() => {
-                  const target = projects[index - 1]
-                  if (target) onReorderProject(project.worktree, target.worktree)
-                }}
-                onMoveDown={() => {
-                  const target = projects[index + 1]
-                  if (target) onReorderProject(project.worktree, target.worktree)
-                }}
                 onSelectSession={onSelectSession}
                 onRenameSession={onRenameSession}
                 onRequestDeleteSession={setPendingDelete}
+                // 桌面拖拽
+                draggable={!!project.canReorder && !isMobile}
+                isDragged={activeDragId === project.id}
+                dropPosition={dropTarget.id === project.id && activeDragId !== project.id ? dropTarget.position : null}
+                onDragStart={() => startDrag(project.id)}
+                onDragOver={e => handleDragOver(e, project.id)}
+                onDragLeave={handleDragLeave}
+                onDrop={() => finishDrag(project.id)}
+                onDragEnd={cancelDrag}
+                // 移动端拖拽
+                isTouchDragging={touchDragId === project.id}
+                onTouchDragStart={e => handleTouchStart(project.id, e)}
+                registerRef={el => {
+                  if (el) folderRefs.current.set(project.id, el)
+                  else folderRefs.current.delete(project.id)
+                }}
               />
             ))}
           </div>
@@ -138,37 +310,55 @@ export function FolderRecentList({
   )
 }
 
+// ============================================
+// Folder Section
+// ============================================
+
 interface FolderRecentSectionProps {
   project: FolderRecentProject
-  canMoveUp: boolean
-  canMoveDown: boolean
   isExpanded: boolean
-  isCurrent: boolean
   selectedSessionId: string | null
   onToggle: () => void
-  onMoveUp: () => void
-  onMoveDown: () => void
   onSelectSession: (session: ApiSession) => void
   onRenameSession: (session: ApiSession, newTitle: string) => Promise<void>
   onRequestDeleteSession: (pending: PendingDeleteSession) => void
+  // 桌面拖拽
+  draggable: boolean
+  isDragged: boolean
+  dropPosition: DropPosition
+  onDragStart: () => void
+  onDragOver: (e: React.DragEvent) => void
+  onDragLeave: () => void
+  onDrop: () => void
+  onDragEnd: () => void
+  // 移动端拖拽
+  isTouchDragging: boolean
+  onTouchDragStart: (e: React.TouchEvent) => void
+  registerRef: (el: HTMLDivElement | null) => void
 }
 
 function FolderRecentSection({
   project,
-  canMoveUp,
-  canMoveDown,
   isExpanded,
-  isCurrent,
   selectedSessionId,
   onToggle,
-  onMoveUp,
-  onMoveDown,
   onSelectSession,
   onRenameSession,
   onRequestDeleteSession,
+  draggable,
+  isDragged,
+  dropPosition,
+  onDragStart,
+  onDragOver,
+  onDragLeave,
+  onDrop,
+  onDragEnd,
+  isTouchDragging,
+  onTouchDragStart,
+  registerRef,
 }: FolderRecentSectionProps) {
   const { t } = useTranslation(['chat', 'common'])
-  const { ref, inView } = useInView({ rootMargin: '200px 0px', triggerOnce: true })
+  const { ref: inViewRef, inView } = useInView({ rootMargin: '200px 0px', triggerOnce: true })
   const [hasActivated, setHasActivated] = useState(false)
 
   useEffect(() => {
@@ -208,87 +398,93 @@ function FolderRecentSection({
 
   const projectName = project.name || getDirectoryName(project.worktree) || project.worktree
   const FolderDisplayIcon = isExpanded ? FolderOpenIcon : FolderIcon
+  const isBeingDragged = isDragged || isTouchDragging
 
   return (
-    <div ref={ref}>
-      <div className="group relative">
+    <div ref={inViewRef}>
+      <div
+        ref={registerRef}
+        draggable={draggable}
+        onDragStart={e => {
+          e.dataTransfer.effectAllowed = 'move'
+          e.dataTransfer.setData('text/plain', project.id)
+          onDragStart()
+        }}
+        onDragOver={onDragOver}
+        onDragLeave={onDragLeave}
+        onDrop={e => {
+          e.preventDefault()
+          onDrop()
+        }}
+        onDragEnd={onDragEnd}
+        onTouchStart={onTouchDragStart}
+        className={`relative transition-all duration-150 ${isBeingDragged ? 'opacity-30 scale-95' : ''}`}
+      >
+        {/* 拖拽指示线 — 上方 */}
+        <div
+          className={`absolute left-2 right-2 top-0 h-0.5 rounded-full bg-accent-main-100 transition-opacity duration-100 ${
+            dropPosition === 'above' ? 'opacity-100' : 'opacity-0'
+          }`}
+        />
+
+        {/* 文件夹行 */}
         <button
           onClick={onToggle}
-          className="flex w-full items-center gap-2 rounded-lg px-3 py-2 pr-[56px] text-left transition-all duration-200 hover:bg-bg-200/50"
+          className={`flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-left transition-colors duration-150 hover:bg-bg-200/40 ${
+            draggable || project.canReorder ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'
+          }`}
           title={project.worktree}
         >
-          <FolderDisplayIcon
-            size={15}
-            className={isCurrent ? 'shrink-0 text-accent-main-100' : 'shrink-0 text-text-400/90'}
-          />
-          <div className="min-w-0 flex-1 truncate text-[13px] font-medium text-text-100">{projectName}</div>
+          <FolderDisplayIcon size={15} className="shrink-0 text-text-400" />
+          <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-text-300">{projectName}</span>
         </button>
 
-        {(canMoveUp || canMoveDown) && (
-          <div className="absolute right-2 top-1/2 z-10 flex -translate-y-1/2 items-center gap-0.5 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
-            <button
-              onClick={e => {
-                e.stopPropagation()
-                onMoveUp()
-              }}
-              disabled={!canMoveUp}
-              className="rounded-md p-1 text-text-400 transition-colors hover:bg-bg-300 hover:text-text-100 disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-text-400"
-              title={t('sidebar.moveFolderUp')}
-            >
-              <ArrowUpIcon size={12} />
-            </button>
-            <button
-              onClick={e => {
-                e.stopPropagation()
-                onMoveDown()
-              }}
-              disabled={!canMoveDown}
-              className="rounded-md p-1 text-text-400 transition-colors hover:bg-bg-300 hover:text-text-100 disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-text-400"
-              title={t('sidebar.moveFolderDown')}
-            >
-              <ArrowDownIcon size={12} />
-            </button>
+        {/* 拖拽指示线 — 下方 */}
+        <div
+          className={`absolute left-2 right-2 bottom-0 h-0.5 rounded-full bg-accent-main-100 transition-opacity duration-100 ${
+            dropPosition === 'below' ? 'opacity-100' : 'opacity-0'
+          }`}
+        />
+
+        {/* Session 列表 */}
+        {isExpanded && (
+          <div onTouchStart={e => e.stopPropagation()}>
+            {!hasActivated || isLoading ? (
+              <div className="flex items-center px-2 py-1 text-[11px] text-text-400/70">
+                <SpinnerIcon size={12} className="animate-spin" />
+              </div>
+            ) : sessions.length === 0 ? (
+              <div className="px-2 py-1 text-[11px] text-text-400/50">{t('sidebar.noChatsInFolder')}</div>
+            ) : (
+              <>
+                {sessions.map(session => (
+                  <SessionListItem
+                    key={session.id}
+                    session={session}
+                    isSelected={session.id === selectedSessionId}
+                    onSelect={() => onSelectSession(session)}
+                    onRename={newTitle => handleRename(session.id, newTitle)}
+                    onDelete={() => handleDelete(session.id)}
+                    density="minimal"
+                    showStats={false}
+                    showDirectory={false}
+                  />
+                ))}
+
+                {hasMore && (
+                  <button
+                    onClick={() => void loadMore()}
+                    disabled={isLoadingMore}
+                    className="w-full rounded px-2 py-1 text-left text-[11px] text-text-500 transition-colors hover:text-text-300 disabled:cursor-default"
+                  >
+                    {isLoadingMore ? t('common:loadingMore') : t('sidebar.showMoreChats')}
+                  </button>
+                )}
+              </>
+            )}
           </div>
         )}
       </div>
-
-      {isExpanded && (
-        <div className="space-y-0.5 pt-0.5">
-          {!hasActivated || isLoading ? (
-            <div className="flex items-center px-2 py-1.5 text-[12px] text-text-400/70">
-              <SpinnerIcon size={13} className="animate-spin" />
-            </div>
-          ) : sessions.length === 0 ? (
-            <div className="px-2 py-1.5 text-[12px] text-text-400/70">{t('sidebar.noChatsInFolder')}</div>
-          ) : (
-            <>
-              {sessions.map(session => (
-                <SessionListItem
-                  key={session.id}
-                  session={session}
-                  isSelected={session.id === selectedSessionId}
-                  onSelect={() => onSelectSession(session)}
-                  onRename={newTitle => handleRename(session.id, newTitle)}
-                  onDelete={() => handleDelete(session.id)}
-                  density="compact"
-                  showStats
-                  showDirectory={false}
-                />
-              ))}
-
-              {hasMore && (
-                <button
-                  onClick={() => void loadMore()}
-                  disabled={isLoadingMore}
-                  className="w-full rounded-lg px-3 py-2 text-left text-[12px] font-medium text-text-400/80 transition-colors hover:bg-bg-200/35 hover:text-text-300 disabled:cursor-default disabled:hover:bg-transparent"
-                >
-                  {isLoadingMore ? t('common:loadingMore') : t('sidebar.showMoreChats')}
-                </button>
-              )}
-            </>
-          )}
-        </div>
-      )}
     </div>
   )
 }
