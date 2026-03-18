@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { ApiSession } from '../../../api'
 import { FolderIcon, FolderOpenIcon, SpinnerIcon } from '../../../components/Icons'
@@ -8,6 +8,8 @@ import { useDelayedRender, useSessions } from '../../../hooks'
 import { useIsMobile } from '../../../hooks/useIsMobile'
 import { useInView } from '../../../hooks/useInView'
 import { getDirectoryName, isSameDirectory } from '../../../utils'
+import { useBusySessions } from '../../../store/activeSessionStore'
+import { useNotifications } from '../../../store/notificationStore'
 import { SessionListItem } from '../../sessions'
 
 const DIRECTORY_PAGE_SIZE = 5
@@ -34,6 +36,13 @@ interface FolderRecentListProps {
 interface PendingDeleteSession {
   session: ApiSession
   removeLocal: () => void
+}
+
+interface FolderStatus {
+  dot: string
+  label: string
+  pulse: boolean
+  count?: number
 }
 
 // 拖拽指示位置：上方 or 下方
@@ -63,6 +72,8 @@ export function FolderRecentList({
   const { t } = useTranslation(['chat', 'common'])
   const isMobile = useIsMobile()
   const [pendingDelete, setPendingDelete] = useState<PendingDeleteSession | null>(null)
+  const allBusySessions = useBusySessions()
+  const allNotifications = useNotifications()
 
   // ---- 拖拽状态 ----
   const [draggedId, setDraggedId] = useState<string | null>(null)
@@ -266,6 +277,82 @@ export function FolderRecentList({
   const activeDragId = draggedId || touchDragId
   const isDragging = !!activeDragId
 
+  const folderStatusByProjectId = useMemo(() => {
+    const map = new Map<string, FolderStatus>()
+
+    for (const project of projects) {
+      const isProjectExpanded = !isDragging && expandedProjectIds.includes(project.id)
+      if (isProjectExpanded) continue
+
+      const dirSessions = allBusySessions.filter(entry => isSameDirectory(entry.directory, project.worktree))
+      if (dirSessions.length > 0) {
+        let hasPermission = false
+        let hasQuestion = false
+        let hasRetry = false
+
+        for (const session of dirSessions) {
+          if (session.pendingAction?.type === 'permission') hasPermission = true
+          else if (session.pendingAction?.type === 'question') hasQuestion = true
+          else if (session.status.type === 'retry') hasRetry = true
+        }
+
+        const count = dirSessions.length
+        if (hasPermission) {
+          map.set(project.id, {
+            dot: 'bg-warning-100',
+            label: t('chat:activeSession.awaitingPermission'),
+            pulse: false,
+            count,
+          })
+          continue
+        }
+        if (hasQuestion) {
+          map.set(project.id, {
+            dot: 'bg-info-100',
+            label: t('chat:activeSession.awaitingAnswer'),
+            pulse: false,
+            count,
+          })
+          continue
+        }
+        if (hasRetry) {
+          map.set(project.id, {
+            dot: 'bg-warning-100',
+            label: t('chat:activeSession.retrying'),
+            pulse: false,
+            count,
+          })
+          continue
+        }
+
+        map.set(project.id, {
+          dot: 'bg-success-100',
+          label: t('chat:activeSession.working'),
+          pulse: true,
+          count,
+        })
+        continue
+      }
+
+      const hasUnreadCompleted = allNotifications.some(
+        notification =>
+          notification.type === 'completed' &&
+          !notification.read &&
+          isSameDirectory(notification.directory, project.worktree),
+      )
+
+      if (hasUnreadCompleted) {
+        map.set(project.id, {
+          dot: 'bg-accent-main-100',
+          label: t('chat:notification.completed'),
+          pulse: false,
+        })
+      }
+    }
+
+    return map
+  }, [projects, expandedProjectIds, isDragging, allBusySessions, allNotifications, t])
+
   return (
     <>
       <div className="h-full overflow-y-auto custom-scrollbar px-1.5 py-1">
@@ -281,6 +368,7 @@ export function FolderRecentList({
                 key={project.id}
                 project={project}
                 isExpanded={!isDragging && expandedProjectIds.includes(project.id)}
+                folderStatus={folderStatusByProjectId.get(project.id) ?? null}
                 selectedSessionId={selectedSessionId}
                 onToggle={() => handleToggleProject(project.id)}
                 onSelectSession={onSelectSession}
@@ -334,6 +422,7 @@ export function FolderRecentList({
 interface FolderRecentSectionProps {
   project: FolderRecentProject
   isExpanded: boolean
+  folderStatus: FolderStatus | null
   selectedSessionId: string | null
   onToggle: () => void
   onSelectSession: (session: ApiSession) => void
@@ -357,6 +446,7 @@ interface FolderRecentSectionProps {
 function FolderRecentSection({
   project,
   isExpanded,
+  folderStatus,
   selectedSessionId,
   onToggle,
   onSelectSession,
@@ -455,6 +545,17 @@ function FolderRecentSection({
         >
           <FolderDisplayIcon size={15} className="shrink-0 text-text-400" />
           <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-text-300">{projectName}</span>
+          {folderStatus && (
+            <span
+              className="relative shrink-0 flex items-center justify-center w-3 h-3"
+              title={folderStatus.count ? `${folderStatus.label} (${folderStatus.count})` : folderStatus.label}
+            >
+              <span className={`absolute w-1.5 h-1.5 rounded-full ${folderStatus.dot}`} />
+              {folderStatus.pulse && (
+                <span className={`absolute w-1.5 h-1.5 rounded-full ${folderStatus.dot} animate-ping opacity-50`} />
+              )}
+            </span>
+          )}
         </button>
 
         {/* 拖拽指示线 — 下方 */}
