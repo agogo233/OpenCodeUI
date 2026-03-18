@@ -36,6 +36,8 @@ export const ResizablePanel = memo(function ResizablePanel({
   const rafRef = useRef<number>(0)
   const currentSizeRef = useRef(size)
   const isResizingRef = useRef(isResizing)
+  const effectiveMaxSize =
+    position === 'right' ? Math.min(maxSize, Math.max(minSize, window.innerWidth - 320)) : maxSize
   // 保存事件处理函数引用，以便在组件卸载时清理
   const mouseHandlersRef = useRef<{
     move: ((e: MouseEvent) => void) | null
@@ -96,7 +98,7 @@ export const ResizablePanel = memo(function ResizablePanel({
             delta = startY - moveEvent.clientY
           }
 
-          const newSize = Math.min(Math.max(startSize + delta, minSize), maxSize)
+          const newSize = Math.min(Math.max(startSize + delta, minSize), effectiveMaxSize)
           const cssVar = position === 'right' ? '--panel-width' : '--panel-height'
           panel.style.setProperty(cssVar, `${newSize}px`)
           currentSizeRef.current = newSize
@@ -127,7 +129,7 @@ export const ResizablePanel = memo(function ResizablePanel({
       document.addEventListener('mousemove', handleMouseMove)
       document.addEventListener('mouseup', handleMouseUp)
     },
-    [position, minSize, maxSize, onSizeChange],
+    [position, minSize, effectiveMaxSize, onSizeChange],
   )
 
   // Mobile Touch Resize (仅 BottomPanel)

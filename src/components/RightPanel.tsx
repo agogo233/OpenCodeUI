@@ -144,6 +144,7 @@ export const RightPanel = memo(function RightPanel() {
       position="right"
       isOpen={rightPanelOpen}
       size={rightPanelWidth}
+      maxSize={1280}
       onSizeChange={layoutStore.setRightPanelWidth}
       onClose={layoutStore.closeRightPanel}
       className="pb-[var(--safe-area-inset-bottom)]"
