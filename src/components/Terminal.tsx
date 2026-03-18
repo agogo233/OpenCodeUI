@@ -124,103 +124,133 @@ function isMobileDevice(): boolean {
 
 type StickyModifier = 'ctrl' | 'alt' | null
 
-interface MobileExtraKeysProps {
-  onSend: (data: string) => void
+type ModifierKey = Exclude<StickyModifier, null>
+
+interface MobileExtraKey {
+  data?: string
+  label: string
+  modifier?: ModifierKey
 }
 
-function MobileExtraKeys({ onSend }: MobileExtraKeysProps) {
-  const [sticky, setSticky] = useState<StickyModifier>(null)
+const MOBILE_EXTRA_KEY_ROWS: MobileExtraKey[][] = [
+  [
+    { label: 'ESC', data: '\x1b' },
+    { label: '/', data: '/' },
+    { label: '-', data: '-' },
+    { label: 'HOME', data: '\x1b[H' },
+    { label: '↑', data: '\x1b[A' },
+    { label: 'END', data: '\x1b[F' },
+    { label: 'PGUP', data: '\x1b[5~' },
+  ],
+  [
+    { label: 'TAB', data: '\t' },
+    { label: 'CTRL', modifier: 'ctrl' },
+    { label: 'ALT', modifier: 'alt' },
+    { label: '←', data: '\x1b[D' },
+    { label: '↓', data: '\x1b[B' },
+    { label: '→', data: '\x1b[C' },
+    { label: 'PGDN', data: '\x1b[6~' },
+  ],
+]
 
-  const send = useCallback(
-    (data: string) => {
-      onSend(data)
-      // 发送后清除粘滞状态
-      setSticky(null)
-    },
-    [onSend],
-  )
+function toCtrlSequence(data: string): string {
+  if (data.length !== 1) return data
 
-  const handleKey = useCallback(
-    (key: string) => {
-      if (sticky === 'ctrl') {
-        // Ctrl+key: 字母转控制字符 (A=0x01 ... Z=0x1A)
-        const upper = key.toUpperCase()
-        if (upper >= 'A' && upper <= 'Z') {
-          send(String.fromCharCode(upper.charCodeAt(0) - 64))
-        } else {
-          send(key)
-        }
-      } else if (sticky === 'alt') {
-        // Alt+key: ESC 前缀
-        send(`\x1b${key}`)
-      } else {
-        send(key)
-      }
-    },
-    [sticky, send],
-  )
+  const upper = data.toUpperCase()
+  if (upper >= 'A' && upper <= 'Z') {
+    return String.fromCharCode(upper.charCodeAt(0) - 64)
+  }
 
-  const toggleSticky = useCallback((mod: StickyModifier) => {
-    setSticky(prev => (prev === mod ? null : mod))
+  switch (data) {
+    case ' ':
+    case '@':
+    case '`':
+      return '\x00'
+    case '[':
+      return '\x1b'
+    case '\\':
+      return '\x1c'
+    case ']':
+      return '\x1d'
+    case '^':
+      return '\x1e'
+    case '_':
+    case '/':
+      return '\x1f'
+    case '?':
+      return '\x7f'
+    default:
+      return data
+  }
+}
+
+function applyStickyModifier(data: string, sticky: StickyModifier): string {
+  if (!sticky) return data
+  if (sticky === 'ctrl') return toCtrlSequence(data)
+  return `\x1b${data}`
+}
+
+interface MobileExtraKeysProps {
+  onFocusTerminal: () => void
+  onSend: (data: string) => void
+  onToggleSticky: (modifier: ModifierKey) => void
+  stickyModifier: StickyModifier
+}
+
+function MobileExtraKeys({ onSend, stickyModifier, onToggleSticky, onFocusTerminal }: MobileExtraKeysProps) {
+  const handlePointerDown = useCallback((e: React.PointerEvent<HTMLButtonElement>) => {
+    e.preventDefault()
   }, [])
 
+  const handleSend = useCallback(
+    (data: string) => {
+      onSend(data)
+      onFocusTerminal()
+    },
+    [onFocusTerminal, onSend],
+  )
+
   const btnBase =
-    'flex items-center justify-center h-8 min-w-[36px] px-2 rounded-md text-[11px] font-mono transition-colors duration-100 active:scale-95 select-none'
-  const btnNormal = `${btnBase} bg-bg-200/60 text-text-300 active:bg-bg-300/80`
-  const btnActive = `${btnBase} bg-accent-main-100/20 text-accent-main-100 ring-1 ring-accent-main-100/40`
+    'flex h-8 min-w-0 w-full items-center justify-center rounded-md border px-0.5 text-[clamp(9px,2.7vw,11px)] font-mono font-semibold tracking-tight text-text-200 transition-[background-color,color,border-color,transform] duration-100 select-none active:scale-[0.98]'
+  const btnNormal = `${btnBase} border-border-200/20 bg-bg-200/70 active:bg-bg-300/80`
+  const btnActive = `${btnBase} border-accent-main-100/45 bg-accent-main-100/18 text-accent-main-100`
 
   return (
-    <div className="flex items-center gap-1 px-1.5 py-1 bg-bg-100 border-t border-border-200/40 overflow-x-auto no-scrollbar">
-      <button className={btnNormal} onPointerDown={e => e.preventDefault()} onClick={() => send('\x1b')}>
-        Esc
-      </button>
-      <button className={btnNormal} onPointerDown={e => e.preventDefault()} onClick={() => handleKey('\t')}>
-        Tab
-      </button>
+    <div className="border-t border-border-200/40 bg-bg-100/95 supports-[backdrop-filter]:bg-bg-100/85 supports-[backdrop-filter]:backdrop-blur-sm">
+      <div className="px-1 py-1">
+        <div className="grid gap-0.5">
+          {MOBILE_EXTRA_KEY_ROWS.map((row, rowIndex) => (
+            <div key={rowIndex} className="grid grid-cols-7 gap-0.5">
+              {row.map(key => {
+                const isModifier = key.modifier !== undefined
+                const isActive = isModifier && stickyModifier === key.modifier
 
-      {/* 粘滞修饰键 */}
-      <button
-        className={sticky === 'ctrl' ? btnActive : btnNormal}
-        onPointerDown={e => e.preventDefault()}
-        onClick={() => toggleSticky('ctrl')}
-      >
-        Ctrl
-      </button>
-      <button
-        className={sticky === 'alt' ? btnActive : btnNormal}
-        onPointerDown={e => e.preventDefault()}
-        onClick={() => toggleSticky('alt')}
-      >
-        Alt
-      </button>
-
-      {/* 方向键 */}
-      <button className={btnNormal} onPointerDown={e => e.preventDefault()} onClick={() => send('\x1b[A')}>
-        ↑
-      </button>
-      <button className={btnNormal} onPointerDown={e => e.preventDefault()} onClick={() => send('\x1b[B')}>
-        ↓
-      </button>
-      <button className={btnNormal} onPointerDown={e => e.preventDefault()} onClick={() => send('\x1b[C')}>
-        →
-      </button>
-      <button className={btnNormal} onPointerDown={e => e.preventDefault()} onClick={() => send('\x1b[D')}>
-        ←
-      </button>
-
-      {/* 常用特殊字符 */}
-      <button className={btnNormal} onPointerDown={e => e.preventDefault()} onClick={() => handleKey('-')}>
-        -
-      </button>
-      <button className={btnNormal} onPointerDown={e => e.preventDefault()} onClick={() => handleKey('|')}>
-        |
-      </button>
-      <button className={btnNormal} onPointerDown={e => e.preventDefault()} onClick={() => handleKey('/')}>
-        /
-      </button>
-      <button className={btnNormal} onPointerDown={e => e.preventDefault()} onClick={() => handleKey('~')}>
-        ~
-      </button>
+                return (
+                  <button
+                    key={key.label}
+                    type="button"
+                    aria-pressed={isActive}
+                    className={isActive ? btnActive : btnNormal}
+                    onPointerDown={handlePointerDown}
+                    onClick={() => {
+                      if (key.modifier) {
+                        onToggleSticky(key.modifier)
+                        onFocusTerminal()
+                        return
+                      }
+                      if (key.data) {
+                        handleSend(key.data)
+                      }
+                    }}
+                  >
+                    {key.label}
+                  </button>
+                )
+              })}
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   )
 }
@@ -238,13 +268,48 @@ interface TerminalProps {
 export const Terminal = memo(function Terminal({ ptyId, directory, isActive }: TerminalProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [isTouchScrolling, setIsTouchScrolling] = useState(false)
+  const [stickyModifier, setStickyModifier] = useState<StickyModifier>(null)
   const terminalRef = useRef<XTerm | null>(null)
   const fitAddonRef = useRef<FitAddon | null>(null)
+  const stickyModifierRef = useRef<StickyModifier>(null)
   const wsRef = useRef<WebSocket | null>(null)
   const resizeTimeoutRef = useRef<number | null>(null)
   const mountedRef = useRef(true)
   const isPanelResizingRef = useRef(false)
   const [hasBeenActive, setHasBeenActive] = useState(isActive)
+
+  const clearStickyModifier = useCallback(() => {
+    stickyModifierRef.current = null
+    setStickyModifier(null)
+  }, [])
+
+  const toggleStickyModifier = useCallback((modifier: ModifierKey) => {
+    setStickyModifier(prev => {
+      const next = prev === modifier ? null : modifier
+      stickyModifierRef.current = next
+      return next
+    })
+  }, [])
+
+  const focusTerminal = useCallback(() => {
+    terminalRef.current?.focus()
+  }, [])
+
+  const sendTerminalData = useCallback(
+    (data: string) => {
+      const sticky = stickyModifierRef.current
+      const outgoing = applyStickyModifier(data, sticky)
+
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        wsRef.current.send(outgoing)
+      }
+
+      if (sticky) {
+        clearStickyModifier()
+      }
+    },
+    [clearStickyModifier],
+  )
 
   // 当 tab 第一次变为活动状态时，标记它
   useEffect(() => {
@@ -297,6 +362,18 @@ export const Terminal = memo(function Terminal({ ptyId, directory, isActive }: T
     terminal.loadAddon(webLinksAddon)
 
     terminal.open(containerRef.current)
+
+    const textarea = terminal.textarea
+    const handleTextareaBlur = () => clearStickyModifier()
+    if (isMobile && textarea) {
+      textarea.setAttribute('autocapitalize', 'none')
+      textarea.setAttribute('autocomplete', 'off')
+      textarea.setAttribute('autocorrect', 'off')
+      textarea.setAttribute('enterkeyhint', 'send')
+      textarea.setAttribute('inputmode', 'text')
+      textarea.setAttribute('spellcheck', 'false')
+      textarea.addEventListener('blur', handleTextareaBlur)
+    }
 
     requestAnimationFrame(() => {
       if (mountedRef.current) {
@@ -369,9 +446,7 @@ export const Terminal = memo(function Terminal({ ptyId, directory, isActive }: T
 
       disposeData?.dispose()
       disposeData = terminal.onData(data => {
-        if (ws && ws.readyState === WebSocket.OPEN) {
-          ws.send(data)
-        }
+        sendTerminalData(data)
       })
     }
 
@@ -401,6 +476,7 @@ export const Terminal = memo(function Terminal({ ptyId, directory, isActive }: T
       }
       disposeData?.dispose()
       disposeTitle?.dispose()
+      textarea?.removeEventListener('blur', handleTextareaBlur)
       // 置空 refs 防止内存泄漏
       wsRef.current = null
       // 显式 dispose addons
@@ -410,7 +486,7 @@ export const Terminal = memo(function Terminal({ ptyId, directory, isActive }: T
       terminalRef.current = null
       fitAddonRef.current = null
     }
-  }, [ptyId, directory, hasBeenActive])
+  }, [ptyId, directory, hasBeenActive, clearStickyModifier, sendTerminalData])
 
   useEffect(() => {
     const container = containerRef.current
@@ -586,6 +662,12 @@ export const Terminal = memo(function Terminal({ ptyId, directory, isActive }: T
     }
   }, [isActive])
 
+  useEffect(() => {
+    if (!isActive) {
+      clearStickyModifier()
+    }
+  }, [isActive, clearStickyModifier])
+
   // 监听面板 resize 结束事件
   useEffect(() => {
     if (!isActive) return
@@ -607,12 +689,6 @@ export const Terminal = memo(function Terminal({ ptyId, directory, isActive }: T
   }, [isActive, ptyId, directory])
 
   const isMobile = isMobileDevice()
-
-  const handleSendData = useCallback((data: string) => {
-    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      wsRef.current.send(data)
-    }
-  }, [])
 
   return (
     <>
@@ -673,16 +749,23 @@ export const Terminal = memo(function Terminal({ ptyId, directory, isActive }: T
           }}
           onClick={() => {
             if (isMobile && terminalRef.current) {
-              terminalRef.current.focus()
+              focusTerminal()
             }
           }}
           onTouchEnd={e => {
             if (terminalRef.current && e.target === containerRef.current) {
-              terminalRef.current.focus()
+              focusTerminal()
             }
           }}
         />
-        {isMobile && <MobileExtraKeys onSend={handleSendData} />}
+        {isMobile && (
+          <MobileExtraKeys
+            stickyModifier={stickyModifier}
+            onToggleSticky={toggleStickyModifier}
+            onSend={sendTerminalData}
+            onFocusTerminal={focusTerminal}
+          />
+        )}
       </div>
     </>
   )
