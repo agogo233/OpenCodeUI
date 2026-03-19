@@ -501,7 +501,7 @@ const ToolGroup = memo(function ToolGroup({ parts, stepFinish, duration, turnDur
           }
         >
           <div
-            className={showStepsHeader ? 'flex flex-col min-h-0 min-w-0' : 'flex flex-col'}
+            className={showStepsHeader ? 'flex flex-col min-h-0 min-w-0 overflow-hidden' : 'flex flex-col'}
             style={showStepsHeader ? { clipPath: 'inset(0 -100% 0 -100%)' } : undefined}
           >
             {(!showStepsHeader || shouldRenderBody) &&
