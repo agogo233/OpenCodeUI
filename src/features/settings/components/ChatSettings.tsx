@@ -12,7 +12,7 @@ import {
 } from '../../../components/Icons'
 import { usePathMode, useIsMobile } from '../../../hooks'
 import { autoApproveStore, layoutStore, useLayoutStore } from '../../../store'
-import { themeStore, type ReasoningDisplayMode } from '../../../store/themeStore'
+import { themeStore, type ReasoningDisplayMode, type ToolDisplayMode } from '../../../store/themeStore'
 import { Toggle, SegmentedControl, SettingRow, SettingsCard } from './SettingsUI'
 import type { PathMode } from '../../../utils/directoryUtils'
 
@@ -24,6 +24,7 @@ export function ChatSettings() {
   const [collapseUserMessages, setCollapseUserMessages] = useState(themeStore.collapseUserMessages)
   const [stepFinishDisplay, setStepFinishDisplay] = useState(themeStore.stepFinishDisplay)
   const [reasoningDisplayMode, setReasoningDisplayMode] = useState(themeStore.reasoningDisplayMode)
+  const [toolDisplayMode, setToolDisplayMode] = useState(themeStore.toolDisplayMode)
   const isMobile = useIsMobile()
   void isMobile // reserved for future mobile-specific logic
 
@@ -47,6 +48,11 @@ export function ChatSettings() {
   const handleReasoningDisplayModeChange = (mode: ReasoningDisplayMode) => {
     setReasoningDisplayMode(mode)
     themeStore.setReasoningDisplayMode(mode)
+  }
+
+  const handleToolDisplayModeChange = (mode: ToolDisplayMode) => {
+    setToolDisplayMode(mode)
+    themeStore.setToolDisplayMode(mode)
   }
 
   return (
@@ -128,6 +134,26 @@ export function ChatSettings() {
                       { value: 'markdown', label: t('chat.markdown') },
                     ]}
                     onChange={v => handleReasoningDisplayModeChange(v as ReasoningDisplayMode)}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-border-200/45 bg-bg-100/35 px-2.5 py-2.5">
+              <div className="flex items-start gap-3">
+                <span className="text-text-400 mt-0.5 shrink-0">
+                  <EyeIcon size={14} />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="text-[13px] font-medium text-text-100">{t('chat.toolDisplayMode')}</div>
+                  <div className="text-[11px] text-text-400 mt-0.5 mb-2">{t('chat.toolDisplayModeDesc')}</div>
+                  <SegmentedControl
+                    value={toolDisplayMode}
+                    options={[
+                      { value: 'detailed', label: t('chat.toolDetailed') },
+                      { value: 'ambient', label: t('chat.toolAmbient') },
+                    ]}
+                    onChange={v => handleToolDisplayModeChange(v as ToolDisplayMode)}
                   />
                 </div>
               </div>

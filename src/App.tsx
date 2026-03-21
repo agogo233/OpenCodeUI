@@ -30,6 +30,8 @@ import type { Attachment } from './api'
 import { createPtySession } from './api/pty'
 import { autoApproveStore } from './store/autoApproveStore'
 import type { TerminalTab } from './store/layoutStore'
+import { AmbientPermissionContext, type AmbientPermissionContextValue } from './features/chat/AmbientPermissionContext'
+import { useTheme } from './hooks/useTheme'
 
 const SettingsDialog = lazy(() =>
   import('./features/settings/SettingsDialog').then(module => ({ default: module.SettingsDialog })),
@@ -596,6 +598,32 @@ function App() {
     if (questionRequestId) setQuestionCollapsed(false)
   }, [questionRequestId])
 
+  // ============================================
+  // Ambient Mode — 权限/提问 inline context
+  // ============================================
+  const { toolDisplayMode } = useTheme()
+  const isAmbientMode = toolDisplayMode === 'ambient'
+
+  const ambientPermissionCtx = useMemo<AmbientPermissionContextValue>(
+    () => ({
+      pendingPermissions: pendingPermissionRequests,
+      pendingQuestions: pendingQuestionRequests,
+      onPermissionReply: (requestId, reply) => handlePermissionReply(requestId, reply, effectiveDirectory),
+      onQuestionReply: (requestId, answers) => handleQuestionReply(requestId, answers, effectiveDirectory),
+      onQuestionReject: requestId => handleQuestionReject(requestId, effectiveDirectory),
+      isReplying,
+    }),
+    [
+      pendingPermissionRequests,
+      pendingQuestionRequests,
+      handlePermissionReply,
+      handleQuestionReply,
+      handleQuestionReject,
+      isReplying,
+      effectiveDirectory,
+    ],
+  )
+
   const revertedMessage = inputRestoreContent
     ? {
         text: inputRestoreContent.text,
@@ -644,24 +672,26 @@ function App() {
 
             {/* Scrollable Area */}
             <div className="absolute inset-0">
-              <ChatArea
-                ref={chatAreaRef}
-                messages={messages}
-                sessionId={routeSessionId}
-                isStreaming={isStreaming}
-                allowStreamingLayoutAnimation={isAtBottom}
-                loadState={loadState}
-                hasMoreHistory={hasMoreHistory}
-                onLoadMore={loadMoreHistory}
-                onUndo={handleUndoWithAnimation}
-                onFork={handleForkMessage}
-                canUndo={canUndo}
-                registerMessage={registerMessage}
-                retryStatus={retryStatus}
-                bottomPadding={inputBoxHeight}
-                onVisibleMessageIdsChange={handleVisibleIdsChange}
-                onAtBottomChange={setIsAtBottom}
-              />
+              <AmbientPermissionContext.Provider value={ambientPermissionCtx}>
+                <ChatArea
+                  ref={chatAreaRef}
+                  messages={messages}
+                  sessionId={routeSessionId}
+                  isStreaming={isStreaming}
+                  allowStreamingLayoutAnimation={isAtBottom}
+                  loadState={loadState}
+                  hasMoreHistory={hasMoreHistory}
+                  onLoadMore={loadMoreHistory}
+                  onUndo={handleUndoWithAnimation}
+                  onFork={handleForkMessage}
+                  canUndo={canUndo}
+                  registerMessage={registerMessage}
+                  retryStatus={retryStatus}
+                  bottomPadding={inputBoxHeight}
+                  onVisibleMessageIdsChange={handleVisibleIdsChange}
+                  onAtBottomChange={setIsAtBottom}
+                />
+              </AmbientPermissionContext.Provider>
             </div>
 
             {/* Outline Index - 消息目录索引 */}
@@ -751,8 +781,8 @@ function App() {
               />
             </div>
 
-            {/* Permission Dialog */}
-            {pendingPermissionRequests.length > 0 && (
+            {/* Permission Dialog — ambient 模式下权限在信息流中 inline 渲染 */}
+            {!isAmbientMode && pendingPermissionRequests.length > 0 && (
               <PermissionDialog
                 request={pendingPermissionRequests[0]}
                 onReply={reply => handlePermissionReply(pendingPermissionRequests[0].id, reply, effectiveDirectory)}
@@ -764,8 +794,8 @@ function App() {
               />
             )}
 
-            {/* Question Dialog */}
-            {pendingPermissionRequests.length === 0 && pendingQuestionRequests.length > 0 && (
+            {/* Question Dialog — ambient 模式下提问在信息流中 inline 渲染 */}
+            {!isAmbientMode && pendingPermissionRequests.length === 0 && pendingQuestionRequests.length > 0 && (
               <QuestionDialog
                 request={pendingQuestionRequests[0]}
                 onReply={answers => handleQuestionReply(pendingQuestionRequests[0].id, answers, effectiveDirectory)}

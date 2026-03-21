@@ -1,6 +1,7 @@
 export { TextPartView } from './TextPartView'
 export { ReasoningPartView } from './ReasoningPartView'
 export { ToolPartView } from './ToolPartView'
+export { AmbientToolGroup } from './AmbientToolViews'
 export { FilePartView, AgentPartView, SyntheticTextPartView } from './AttachmentPartViews'
 export { StepFinishPartView } from './StepFinishPartView'
 export { SubtaskPartView } from './SubtaskPartView'

@@ -31,6 +31,21 @@
     "running": "Running",
     "failed": "Failed"
   },
+  "ambient": {
+    "read": "read {{count}} files",
+    "search": "searched {{count}} times",
+    "edit": "edited {{count}} files",
+    "execute": "ran {{count}} commands",
+    "network": "fetched {{count}} URLs",
+    "think": "thought {{count}} times",
+    "task": "ran {{count}} subtasks",
+    "other": "{{count}} actions",
+    "separator": ", ",
+    "errorSuffix": ", {{count}} failed",
+    "runningSuffix": "...",
+    "running": "Running",
+    "failed": "Failed"
+  },
   "todo": {
     "tasks": "Tasks",
     "completedCount": "{{completed}}/{{total}}"

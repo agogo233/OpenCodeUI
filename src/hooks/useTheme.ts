@@ -3,7 +3,7 @@ import { flushSync } from 'react-dom'
 import { THEME_SWITCH_DISABLE_MS } from '../constants'
 import { themeStore, type ColorMode } from '../store/themeStore'
 import type { StepFinishDisplay } from '../store/themeStore'
-import type { ReasoningDisplayMode, DiffStyle } from '../store/themeStore'
+import type { ReasoningDisplayMode, DiffStyle, ToolDisplayMode } from '../store/themeStore'
 
 // 保持向后兼容的类型别名
 export type ThemeMode = ColorMode
@@ -146,6 +146,12 @@ export function useTheme() {
     themeStore.setDiffStyle(style)
   }, [])
 
+  // ---- Tool Display Mode ----
+
+  const setToolDisplayMode = useCallback((mode: ToolDisplayMode) => {
+    themeStore.setToolDisplayMode(mode)
+  }, [])
+
   return {
     // 日夜模式（向后兼容）
     mode: state.colorMode,
@@ -185,5 +191,9 @@ export function useTheme() {
     // Diff 行标记风格
     diffStyle: state.diffStyle,
     setDiffStyle,
+
+    // 工具调用显示模式
+    toolDisplayMode: state.toolDisplayMode,
+    setToolDisplayMode,
   }
 }

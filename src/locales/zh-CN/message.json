@@ -31,6 +31,21 @@
     "running": "运行中",
     "failed": "失败"
   },
+  "ambient": {
+    "read": "读取了 {{count}} 个文件",
+    "search": "搜索了 {{count}} 次",
+    "edit": "编辑了 {{count}} 个文件",
+    "execute": "执行了 {{count}} 次",
+    "network": "请求了 {{count}} 次",
+    "think": "思考了 {{count}} 次",
+    "task": "运行了 {{count}} 个子任务",
+    "other": "操作了 {{count}} 次",
+    "separator": "，",
+    "errorSuffix": "，失败 {{count}} 次",
+    "runningSuffix": "...",
+    "running": "运行中",
+    "failed": "失败"
+  },
   "todo": {
     "tasks": "任务",
     "completedCount": "{{completed}}/{{total}}"

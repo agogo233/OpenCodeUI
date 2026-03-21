@@ -9,6 +9,7 @@ import {
   TextPartView,
   ReasoningPartView,
   ToolPartView,
+  AmbientToolGroup,
   FilePartView,
   AgentPartView,
   SyntheticTextPartView,
@@ -326,7 +327,7 @@ const AssistantMessageView = memo(function AssistantMessageView({
   onEnsureParts?: (messageId: string) => void
 }) {
   const { parts, isStreaming, info } = message
-  const { stepFinishDisplay } = useTheme()
+  const { stepFinishDisplay, toolDisplayMode } = useTheme()
 
   const wrapperRef = useEntryGrowAnimation(info.time.created)
 
@@ -402,6 +403,21 @@ const AssistantMessageView = memo(function AssistantMessageView({
               )
 
             if (item.type === 'tool-group') {
+              // Ambient 模式：纯文字摘要，视觉降权
+              if (toolDisplayMode === 'ambient') {
+                return (
+                  <AmbientToolGroup
+                    key={item.parts[0].id}
+                    parts={item.parts as ToolPart[]}
+                    stepFinish={item.stepFinish}
+                    duration={isLastStepFinish ? duration : undefined}
+                    turnDuration={isLastStepFinish ? turnDuration : undefined}
+                    isStreaming={isStreaming}
+                  />
+                )
+              }
+
+              // Detailed 模式（默认）：带图标、timeline
               return (
                 <ToolGroup
                   key={item.parts[0].id}

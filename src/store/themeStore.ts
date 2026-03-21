@@ -68,6 +68,9 @@ export type ReasoningDisplayMode = 'capsule' | 'italic' | 'markdown'
 /** Diff 行标记风格：markers = 传统 +/- 符号, changeBars = 行号左侧彩色竖条 */
 export type DiffStyle = 'markers' | 'changeBars'
 
+/** 工具调用显示模式：detailed = 显性（带图标、timeline）, ambient = 隐性（纯文字、折叠摘要） */
+export type ToolDisplayMode = 'detailed' | 'ambient'
+
 const DEFAULT_STEP_FINISH_DISPLAY: StepFinishDisplay = {
   tokens: true,
   cache: true,
@@ -78,6 +81,7 @@ const DEFAULT_STEP_FINISH_DISPLAY: StepFinishDisplay = {
 
 const DEFAULT_REASONING_DISPLAY_MODE: ReasoningDisplayMode = 'capsule'
 const DEFAULT_DIFF_STYLE: DiffStyle = 'markers'
+const DEFAULT_TOOL_DISPLAY_MODE: ToolDisplayMode = 'detailed'
 
 export interface ThemeState {
   /** 当前选中的主题风格 ID */
@@ -96,6 +100,8 @@ export interface ThemeState {
   wideMode: boolean
   /** Diff 行标记风格 */
   diffStyle: DiffStyle
+  /** 工具调用显示模式 */
+  toolDisplayMode: ToolDisplayMode
 }
 
 // ============================================
@@ -110,6 +116,7 @@ const STORAGE_KEY_STEP_FINISH_DISPLAY = 'step-finish-display'
 const STORAGE_KEY_REASONING_DISPLAY_MODE = 'reasoning-display-mode'
 const STORAGE_KEY_WIDE_MODE = 'chat-wide-mode'
 const STORAGE_KEY_DIFF_STYLE = 'diff-style'
+const STORAGE_KEY_TOOL_DISPLAY_MODE = 'tool-display-mode'
 
 // ============================================
 // DOM Style Element IDs
@@ -150,6 +157,9 @@ class ThemeStore {
     const savedDiffStyle = localStorage.getItem(STORAGE_KEY_DIFF_STYLE) as DiffStyle | null
     const diffStyle: DiffStyle = savedDiffStyle === 'changeBars' ? 'changeBars' : DEFAULT_DIFF_STYLE
 
+    const savedToolDisplayMode = localStorage.getItem(STORAGE_KEY_TOOL_DISPLAY_MODE) as ToolDisplayMode | null
+    const toolDisplayMode: ToolDisplayMode = savedToolDisplayMode === 'ambient' ? 'ambient' : DEFAULT_TOOL_DISPLAY_MODE
+
     this.state = {
       presetId: savedPreset,
       colorMode: savedMode,
@@ -159,6 +169,7 @@ class ThemeStore {
       reasoningDisplayMode,
       wideMode: savedWideMode,
       diffStyle,
+      toolDisplayMode,
     }
   }
 
@@ -191,6 +202,9 @@ class ThemeStore {
   }
   get diffStyle() {
     return this.state.diffStyle
+  }
+  get toolDisplayMode() {
+    return this.state.toolDisplayMode
   }
 
   /** 获取当前主题预设（内置主题返回对象，自定义返回 undefined） */
@@ -286,6 +300,13 @@ class ThemeStore {
     if (this.state.diffStyle === style) return
     this.state = { ...this.state, diffStyle: style }
     localStorage.setItem(STORAGE_KEY_DIFF_STYLE, style)
+    this.emit()
+  }
+
+  setToolDisplayMode(mode: ToolDisplayMode) {
+    if (this.state.toolDisplayMode === mode) return
+    this.state = { ...this.state, toolDisplayMode: mode }
+    localStorage.setItem(STORAGE_KEY_TOOL_DISPLAY_MODE, mode)
     this.emit()
   }
 

@@ -340,3 +340,49 @@ export function extractToolData(part: ToolPart): ExtractedToolData {
   }
   return defaultExtractData(part)
 }
+
+// ============================================
+// Ambient Mode — 工具分类
+// 用于生成自然语言摘要："3 次读取 · 2 次搜索 · 1 次执行"
+// ============================================
+
+/** 工具分类 — 对应 i18n ambient.* key */
+export type ToolCategory = 'read' | 'search' | 'edit' | 'execute' | 'network' | 'think' | 'task' | 'other'
+
+const categoryMatchers: Array<{ category: ToolCategory; match: (name: string) => boolean }> = [
+  // 顺序很重要：todo 在 read/write 之前，避免 TodoWrite 被分到 edit
+  { category: 'other', match: includes('todo') },
+  { category: 'task', match: exact('task') },
+  { category: 'read', match: includes('read', 'cat') },
+  { category: 'edit', match: includes('write', 'save', 'edit', 'replace', 'patch') },
+  { category: 'search', match: includes('search', 'find', 'grep', 'glob') },
+  { category: 'execute', match: includes('bash', 'sh', 'cmd', 'terminal', 'shell') },
+  { category: 'network', match: includes('web', 'fetch', 'http', 'browse', 'network', 'exa') },
+  { category: 'think', match: includes('think', 'reason', 'plan') },
+]
+
+/**
+ * 获取工具的分类
+ */
+export function getToolCategory(toolName: string): ToolCategory {
+  const lower = toolName.toLowerCase()
+  for (const { category, match } of categoryMatchers) {
+    if (match(lower)) return category
+  }
+  return 'other'
+}
+
+/**
+ * 统计一组工具调用的分类计数，返回有序数组
+ * 顺序：read → search → edit → execute → network → think → task → other
+ */
+export function categorizeTools(toolNames: string[]): Array<{ category: ToolCategory; count: number }> {
+  const counts = new Map<ToolCategory, number>()
+  for (const name of toolNames) {
+    const cat = getToolCategory(name)
+    counts.set(cat, (counts.get(cat) || 0) + 1)
+  }
+
+  const order: ToolCategory[] = ['read', 'search', 'edit', 'execute', 'network', 'think', 'task', 'other']
+  return order.filter(cat => counts.has(cat)).map(cat => ({ category: cat, count: counts.get(cat)! }))
+}
