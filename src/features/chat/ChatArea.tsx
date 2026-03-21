@@ -42,6 +42,7 @@ interface ChatAreaProps {
   hasMoreHistory?: boolean
   onLoadMore?: () => void | Promise<void>
   onUndo?: (userMessageId: string) => void
+  onFork?: (message: Message) => void | Promise<void>
   canUndo?: boolean
   registerMessage?: (id: string, element: HTMLElement | null) => void
   retryStatus?: RetryStatusInlineData | null
@@ -69,6 +70,7 @@ export const ChatArea = memo(
         loadState = 'idle',
         onLoadMore,
         onUndo,
+        onFork,
         canUndo,
         hasMoreHistory: _hasMoreHistory = false,
         registerMessage,
@@ -404,6 +406,7 @@ export const ChatArea = memo(
                         allowStreamingLayoutAnimation={allowStreamingLayoutAnimation}
                         turnDuration={turnDurationMap.get(msg.info.id)}
                         onUndo={onUndo}
+                        onFork={onFork}
                         canUndo={canUndo}
                         onEnsureParts={id => {
                           if (!sessionId) return
@@ -422,6 +425,7 @@ export const ChatArea = memo(
           stickyRenderIds,
           registerMessage,
           onUndo,
+          onFork,
           canUndo,
           messageMaxWidthClass,
           sessionId,

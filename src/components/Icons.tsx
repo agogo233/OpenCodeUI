@@ -61,6 +61,7 @@ import {
   Users,
   GitCommitHorizontal,
   GitBranch,
+  Split,
   Plug,
   KeyRound,
   Wifi,
@@ -167,6 +168,7 @@ export const ClipboardListIcon = wrap(ClipboardList)
 export const UsersIcon = wrap(Users)
 export const GitCommitIcon = wrap(GitCommitHorizontal)
 export const GitBranchIcon = wrap(GitBranch)
+export const SplitIcon = wrap(Split)
 export const PlugIcon = wrap(Plug)
 export const KeyIcon = wrap(KeyRound)
 export const WifiIcon = wrap(Wifi)

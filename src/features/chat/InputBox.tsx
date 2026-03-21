@@ -373,13 +373,17 @@ function InputBoxComponent({
           agent: mentionedAgent || selectedAgent,
           variant: selectedVariant,
         }),
-      resetDraft,
+      () => {
+        resetDraft()
+        onClearRevert?.()
+      },
     )
   }, [
     attachments,
     canSend,
     isSubmitting,
     onCommand,
+    onClearRevert,
     onSend,
     resetDraft,
     runSubmit,

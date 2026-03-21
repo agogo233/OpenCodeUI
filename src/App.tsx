@@ -173,6 +173,7 @@ function App() {
     canRedo,
     redoSteps,
     revertedContent,
+    restoredContent,
     agents,
     selectedAgent,
     setSelectedAgent,
@@ -207,6 +208,7 @@ function App() {
     handleCommand,
     handleUndoWithAnimation,
     handleRedoWithAnimation,
+    handleForkMessage,
     handleSelectSession,
     handleNewSession,
     handleVisibleMessageIdsChange,
@@ -273,12 +275,18 @@ function App() {
   // ============================================
   // Model Restoration Effect
   // ============================================
+  const inputRestoreContent = revertedContent ?? restoredContent
+
   useEffect(() => {
     // 1. 优先从 revertedContent 恢复（Undo/Redo 场景）
-    if (revertedContent?.model) {
-      const modelSelection = restoreModelSelection(revertedContent.model, revertedContent.variant ?? null, models)
+    if (inputRestoreContent?.model) {
+      const modelSelection = restoreModelSelection(
+        inputRestoreContent.model,
+        inputRestoreContent.variant ?? null,
+        models,
+      )
       if (modelSelection) {
-        restoreFromMessage(revertedContent.model, revertedContent.variant)
+        restoreFromMessage(inputRestoreContent.model, inputRestoreContent.variant)
         return
       }
     }
@@ -291,15 +299,15 @@ function App() {
       const userInfo = lastUserMsg.info as { model?: { providerID: string; modelID: string }; variant?: string }
       restoreFromMessage(userInfo.model, userInfo.variant)
     }
-  }, [messages, models, revertedContent, restoreFromMessage])
+  }, [inputRestoreContent, messages, models, restoreFromMessage])
 
   // ============================================
   // Agent Restoration Effect
   // ============================================
   useEffect(() => {
     // 1. 优先从 revertedContent 恢复（Undo/Redo 场景）
-    if (revertedContent?.agent) {
-      restoreAgentFromMessage(revertedContent.agent)
+    if (inputRestoreContent?.agent) {
+      restoreAgentFromMessage(inputRestoreContent.agent)
       return
     }
 
@@ -310,7 +318,7 @@ function App() {
     if (lastUserMsg && 'agent' in lastUserMsg.info) {
       restoreAgentFromMessage((lastUserMsg.info as { agent?: string }).agent)
     }
-  }, [messages, revertedContent, restoreAgentFromMessage])
+  }, [inputRestoreContent, messages, restoreAgentFromMessage])
 
   // ============================================
   // Global Keybindings
@@ -588,10 +596,10 @@ function App() {
     if (questionRequestId) setQuestionCollapsed(false)
   }, [questionRequestId])
 
-  const revertedMessage = revertedContent
+  const revertedMessage = inputRestoreContent
     ? {
-        text: revertedContent.text,
-        attachments: revertedContent.attachments as Attachment[],
+        text: inputRestoreContent.text,
+        attachments: inputRestoreContent.attachments as Attachment[],
       }
     : undefined
 
@@ -646,6 +654,7 @@ function App() {
                 hasMoreHistory={hasMoreHistory}
                 onLoadMore={loadMoreHistory}
                 onUndo={handleUndoWithAnimation}
+                onFork={handleForkMessage}
                 canUndo={canUndo}
                 registerMessage={registerMessage}
                 retryStatus={retryStatus}

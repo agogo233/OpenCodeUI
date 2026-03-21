@@ -1,7 +1,7 @@
-import { memo, useState, useRef, useEffect, useLayoutEffect, useMemo } from 'react'
+import { memo, useState, useRef, useEffect, useLayoutEffect, useMemo, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { animate } from 'motion/mini'
-import { ChevronDownIcon, ChevronRightIcon, UndoIcon } from '../../components/Icons'
+import { ChevronDownIcon, ChevronRightIcon, SplitIcon, SpinnerIcon, UndoIcon } from '../../components/Icons'
 import { CopyButton, SmoothHeight } from '../../components/ui'
 import { useDelayedRender } from '../../hooks'
 import { useTheme } from '../../hooks/useTheme'
@@ -40,6 +40,7 @@ interface MessageRendererProps {
   /** 回合总时长（毫秒），仅在回合最后一条 assistant 消息上有值 */
   turnDuration?: number
   onUndo?: (userMessageId: string) => void
+  onFork?: (message: Message) => Promise<void> | void
   canUndo?: boolean
   onEnsureParts?: (messageId: string) => void
 }
@@ -49,6 +50,7 @@ export const MessageRenderer = memo(function MessageRenderer({
   allowStreamingLayoutAnimation = true,
   turnDuration,
   onUndo,
+  onFork,
   canUndo,
   onEnsureParts,
 }: MessageRendererProps) {
@@ -56,7 +58,7 @@ export const MessageRenderer = memo(function MessageRenderer({
   const isUser = info.role === 'user'
 
   if (isUser) {
-    return <UserMessageView message={message} onUndo={onUndo} canUndo={canUndo} />
+    return <UserMessageView message={message} onUndo={onUndo} onFork={onFork} canUndo={canUndo} />
   }
 
   return (
@@ -187,13 +189,15 @@ const CollapsibleUserText = memo(function CollapsibleUserText({
 interface UserMessageViewProps {
   message: Message
   onUndo?: (userMessageId: string) => void
+  onFork?: (message: Message) => Promise<void> | void
   canUndo?: boolean
 }
 
-const UserMessageView = memo(function UserMessageView({ message, onUndo, canUndo }: UserMessageViewProps) {
+const UserMessageView = memo(function UserMessageView({ message, onUndo, onFork, canUndo }: UserMessageViewProps) {
   const { t } = useTranslation('message')
   const { parts, info } = message
   const [showSystemContext, setShowSystemContext] = useState(false)
+  const [isForking, setIsForking] = useState(false)
   const shouldRenderSystemContext = useDelayedRender(showSystemContext)
   const { collapseUserMessages } = useTheme()
 
@@ -207,6 +211,20 @@ const UserMessageView = memo(function UserMessageView({ message, onUndo, canUndo
 
   const hasSystemContext = syntheticParts.length > 0
   const messageText = textParts.map(p => p.text).join('')
+
+  const handleFork = useCallback(async () => {
+    if (!onFork || isForking) return
+
+    setIsForking(true)
+
+    try {
+      await onFork(message)
+    } catch {
+      // 业务错误由上层统一处理
+    } finally {
+      setIsForking(false)
+    }
+  }, [isForking, message, onFork])
 
   return (
     <div ref={wrapperRef} className="flex flex-col items-end group">
@@ -271,6 +289,17 @@ const UserMessageView = memo(function UserMessageView({ message, onUndo, canUndo
               title={t('undoFromHere')}
             >
               <UndoIcon />
+            </button>
+          )}
+          {onFork && (
+            <button
+              onClick={() => void handleFork()}
+              disabled={isForking}
+              className="p-1.5 rounded-md transition-colors duration-150 text-text-400 hover:text-text-200 disabled:cursor-default disabled:text-text-500"
+              title={isForking ? t('forkingFromHere') : t('forkFromHere')}
+              aria-label={isForking ? t('forkingFromHere') : t('forkFromHere')}
+            >
+              {isForking ? <SpinnerIcon className="animate-spin" /> : <SplitIcon />}
             </button>
           )}
           {/* Copy button */}

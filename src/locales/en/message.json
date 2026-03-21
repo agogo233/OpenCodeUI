@@ -4,6 +4,8 @@
   "hideSystemContext": "Hide",
   "showSystemContext": "Show system context ({{count}})",
   "undoFromHere": "Undo from here",
+  "forkFromHere": "Fork from here",
+  "forkingFromHere": "Forking...",
   "stepsCount": "{{done}}/{{total}} steps",
   "tokens": "tokens",
   "tokensK": "{{count}}k tokens",
