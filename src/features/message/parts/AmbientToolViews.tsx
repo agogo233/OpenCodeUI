@@ -83,26 +83,41 @@ export const AmbientToolGroup = memo(function AmbientToolGroup({
   const summaryText = useMemo(() => {
     const doneParts = parts.filter(p => p.state.status === 'completed' || p.state.status === 'error')
     const activeParts = parts.filter(p => p.state.status === 'running' || p.state.status === 'pending')
+    const sep = t('ambient.separator')
 
     const segments: string[] = []
 
+    // 已完成部分：分类 ≤ 2 正常列举，> 2 取前两个 + "等共 N 步操作"
     if (doneParts.length > 0) {
       const cats = categorizeTools(doneParts.map(p => p.tool))
-      segments.push(cats.map(({ category, count }) => t(`ambient.${category}`, { count })).join(t('ambient.separator')))
+      if (cats.length <= 2) {
+        segments.push(cats.map(({ category, count }) => t(`ambient.${category}`, { count })).join(sep))
+      } else {
+        const top = cats
+          .slice(0, 2)
+          .map(({ category, count }) => t(`ambient.${category}`, { count }))
+          .join(sep)
+        const total = doneParts.length
+        segments.push(
+          t('ambient.summaryCompact', {
+            detail: top,
+            total,
+            remaining: total - cats.slice(0, 2).reduce((s, c) => s + c.count, 0),
+          }),
+        )
+      }
     }
 
+    // 进行中部分：只取第一个 active 分类
     if (activeParts.length > 0) {
       const cats = categorizeTools(activeParts.map(p => p.tool))
-      segments.push(
-        cats
-          .map(({ category, count }) =>
-            t(`ambient.${category}_active`, { count, defaultValue: t(`ambient.${category}`, { count }) }),
-          )
-          .join(t('ambient.separator')),
-      )
+      if (cats.length > 0) {
+        const { category, count } = cats[0]
+        segments.push(t(`ambient.${category}_active`, { count, defaultValue: t(`ambient.${category}`, { count }) }))
+      }
     }
 
-    let text = segments.join(t('ambient.separator'))
+    let text = segments.join(sep)
 
     if (errorCount > 0) {
       text += t('ambient.errorSuffix', { count: errorCount })
