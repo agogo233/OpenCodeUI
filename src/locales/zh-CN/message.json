@@ -4,6 +4,8 @@
   "hideSystemContext": "隐藏",
   "showSystemContext": "显示系统上下文 ({{count}})",
   "undoFromHere": "从此处撤销",
+  "forkFromHere": "从此处分叉",
+  "forkingFromHere": "正在分叉...",
   "stepsCount": "{{done}}/{{total}} steps",
   "tokens": "token",
   "tokensK": "{{count}}k token",

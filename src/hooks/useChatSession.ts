@@ -10,6 +10,7 @@ import {
   autoApproveStore,
   childSessionStore,
   useActiveSessionStore,
+  type RevertHistoryItem,
 } from '../store'
 import { useSessionManager, useGlobalEvents } from '../hooks'
 import {
@@ -33,12 +34,16 @@ import {
   executeCommand,
   summarizeSession,
   updateSession,
+  forkSession,
+  extractUserMessageContent,
   type ApiSession,
   type ApiAgent,
+  type ApiMessageWithParts,
+  type ApiUserMessage,
   type Attachment,
   type ModelInfo,
 } from '../api'
-import { getMessageText } from '../types/message'
+import { getMessageText, type Message as UIMessage } from '../types/message'
 import { clipboardErrorHandler, copyTextToClipboard, createErrorHandler, isSameDirectory } from '../utils'
 import { serverStorage } from '../utils/perServerStorage'
 import { UNDO_SCROLL_DELAY_MS, STORAGE_KEY_SELECTED_AGENT } from '../constants'
@@ -73,6 +78,7 @@ export function useChatSession({ chatAreaRef, currentModel, refetchModels }: Use
   const [selectedAgent, setSelectedAgentRaw] = useState<string>(() => {
     return serverStorage.get(STORAGE_KEY_SELECTED_AGENT) || ''
   })
+  const [restoredContent, setRestoredContent] = useState<{ sessionId: string; content: RevertHistoryItem } | null>(null)
 
   // 封装 setSelectedAgent：同步写入 serverStorage（按服务器隔离）
   const setSelectedAgent = useCallback((agentName: string) => {
@@ -436,6 +442,38 @@ export function useChatSession({ chatAreaRef, currentModel, refetchModels }: Use
     resetPendingRequests()
   }, [routeSessionId, resetPermissions, resetPendingRequests])
 
+  const handleForkMessage = useCallback(
+    async (message: UIMessage) => {
+      if (message.info.role !== 'user') return
+
+      try {
+        const userInfo = message.info as unknown as ApiUserMessage
+        const content = extractUserMessageContent({
+          info: message.info as ApiMessageWithParts['info'],
+          parts: message.parts as unknown as ApiMessageWithParts['parts'],
+        })
+        const forkedSession = await forkSession(userInfo.sessionID, userInfo.id, effectiveDirectory)
+
+        setRestoredContent({
+          sessionId: forkedSession.id,
+          content: {
+            messageId: userInfo.id,
+            text: content.text,
+            attachments: content.attachments,
+            model: userInfo.model,
+            variant: userInfo.variant,
+            agent: userInfo.agent,
+          },
+        })
+
+        navigateToSession(forkedSession.id, forkedSession.directory)
+      } catch (error) {
+        handleError('fork session', error)
+      }
+    },
+    [effectiveDirectory, navigateToSession],
+  )
+
   // Abort handler
   const handleAbort = useCallback(async () => {
     if (!routeSessionId) return
@@ -608,6 +646,16 @@ export function useChatSession({ chatAreaRef, currentModel, refetchModels }: Use
     }
   }, [messages])
 
+  const clearRestoredContent = useCallback(() => {
+    setRestoredContent(null)
+    clearRevert()
+  }, [clearRevert])
+
+  const activeRestoredContent = useMemo(() => {
+    if (!restoredContent || restoredContent.sessionId !== routeSessionId) return null
+    return restoredContent.content
+  }, [restoredContent, routeSessionId])
+
   return {
     // State
     messages,
@@ -617,6 +665,7 @@ export function useChatSession({ chatAreaRef, currentModel, refetchModels }: Use
     canRedo,
     redoSteps,
     revertedContent,
+    restoredContent: activeRestoredContent,
     loadState,
     hasMoreHistory,
     retryStatus,
@@ -640,7 +689,7 @@ export function useChatSession({ chatAreaRef, currentModel, refetchModels }: Use
     // Session management
     loadMoreHistory,
     handleRedoAll,
-    clearRevert,
+    clearRevert: clearRestoredContent,
 
     // Animation
     registerMessage,
@@ -652,6 +701,7 @@ export function useChatSession({ chatAreaRef, currentModel, refetchModels }: Use
     handleCommand,
     handleUndoWithAnimation,
     handleRedoWithAnimation,
+    handleForkMessage,
     handleSelectSession,
     handleNewSession,
     handleVisibleMessageIdsChange,
