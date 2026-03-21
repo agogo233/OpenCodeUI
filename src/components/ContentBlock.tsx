@@ -31,7 +31,7 @@ export interface ContentBlockProps {
   /** 语言 */
   language?: string
   /** 样式变体 */
-  variant?: 'default' | 'error'
+  variant?: 'default' | 'error' | 'ambient'
   /** 默认折叠 */
   defaultCollapsed?: boolean
   /** 最大高度（px），0 表示不限制 */
@@ -87,9 +87,10 @@ export const ContentBlock = memo(function ContentBlock({
   const maxHeight = maxHeightProp ?? responsiveMaxHeight
 
   const isError = variant === 'error'
+  const isAmbient = variant === 'ambient'
   const isDiff = !!diff
   const hasContent = !!content?.trim() || isDiff || stats?.exit !== undefined
-  const canCollapse = collapsible && hasContent
+  const canCollapse = collapsible && hasContent && !isAmbient
   const lang = language || (filePath ? detectLanguage(filePath) : 'text')
   const fileName = filePath?.split(/[/\\]/).pop()
 
@@ -146,19 +147,31 @@ export const ContentBlock = memo(function ContentBlock({
   }, [isDiff])
 
   // 是否展开内容区
-  const showBody = (hasContent && !collapsed) || (isLoading && !hasContent)
+  const showBody = (hasContent && !collapsed) || (isLoading && !hasContent) || isAmbient
+
+  // 容器样式
+  const containerClass = isError
+    ? 'border border-danger-100/30 bg-danger-100/5'
+    : isAmbient
+      ? 'bg-bg-100 border border-border-200/30'
+      : 'bg-bg-100 border border-border-200/40'
+
+  // Header 样式
+  const headerClass = isError
+    ? 'bg-danger-100/8 hover:bg-danger-100/12'
+    : isAmbient
+      ? '' // ambient: 无背景色，无 border-bottom，header 融入内容
+      : 'bg-bg-200/40 hover:bg-bg-200/60'
 
   return (
     <div
-      className={`rounded-lg overflow-hidden text-xs contain-content ${
-        isError ? 'border border-danger-100/30 bg-danger-100/5' : 'bg-bg-100 border border-border-200/40'
-      }`}
+      className={`${isAmbient ? 'rounded-md' : 'rounded-lg'} overflow-hidden text-xs contain-content ${containerClass}`}
     >
       {/* Header */}
       <div
-        className={`flex items-center gap-2 px-3 h-8 select-none transition-colors ${
+        className={`flex items-center gap-2 px-3 ${isAmbient ? 'h-7' : 'h-8'} select-none transition-colors ${
           canCollapse ? 'cursor-pointer' : ''
-        } ${isError ? 'bg-danger-100/8 hover:bg-danger-100/12' : 'bg-bg-200/40 hover:bg-bg-200/60'}`}
+        } ${headerClass}`}
         onClick={canCollapse ? () => setCollapsed(!collapsed) : undefined}
       >
         {/* Left: chevron + label + filename */}
@@ -170,7 +183,7 @@ export const ContentBlock = memo(function ContentBlock({
           )}
           <span
             className={`font-medium font-mono leading-none whitespace-nowrap ${
-              isError ? 'text-danger-100' : 'text-text-300'
+              isError ? 'text-danger-100' : isAmbient ? 'text-text-500' : 'text-text-300'
             }`}
           >
             {label}

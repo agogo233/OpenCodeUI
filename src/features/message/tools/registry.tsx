@@ -347,11 +347,22 @@ export function extractToolData(part: ToolPart): ExtractedToolData {
 // ============================================
 
 /** 工具分类 — 对应 i18n ambient.* key */
-export type ToolCategory = 'read' | 'search' | 'edit' | 'execute' | 'network' | 'think' | 'task' | 'other'
+export type ToolCategory =
+  | 'read'
+  | 'search'
+  | 'edit'
+  | 'execute'
+  | 'network'
+  | 'think'
+  | 'task'
+  | 'todo'
+  | 'question'
+  | 'other'
 
 const categoryMatchers: Array<{ category: ToolCategory; match: (name: string) => boolean }> = [
-  // 顺序很重要：todo 在 read/write 之前，避免 TodoWrite 被分到 edit
-  { category: 'other', match: includes('todo') },
+  // 顺序很重要：todo/question 在 read/write 之前
+  { category: 'todo', match: includes('todo') },
+  { category: 'question', match: includes('question', 'ask') },
   { category: 'task', match: exact('task') },
   { category: 'read', match: includes('read', 'cat') },
   { category: 'edit', match: includes('write', 'save', 'edit', 'replace', 'patch') },
@@ -369,12 +380,13 @@ export function getToolCategory(toolName: string): ToolCategory {
   for (const { category, match } of categoryMatchers) {
     if (match(lower)) return category
   }
+  // 未知工具
   return 'other'
 }
 
 /**
  * 统计一组工具调用的分类计数，返回有序数组
- * 顺序：read → search → edit → execute → network → think → task → other
+ * 顺序：read → search → edit → execute → network → think → task → todo → question
  */
 export function categorizeTools(toolNames: string[]): Array<{ category: ToolCategory; count: number }> {
   const counts = new Map<ToolCategory, number>()
@@ -383,6 +395,17 @@ export function categorizeTools(toolNames: string[]): Array<{ category: ToolCate
     counts.set(cat, (counts.get(cat) || 0) + 1)
   }
 
-  const order: ToolCategory[] = ['read', 'search', 'edit', 'execute', 'network', 'think', 'task', 'other']
+  const order: ToolCategory[] = [
+    'read',
+    'search',
+    'edit',
+    'execute',
+    'network',
+    'think',
+    'task',
+    'todo',
+    'question',
+    'other',
+  ]
   return order.filter(cat => counts.has(cat)).map(cat => ({ category: cat, count: counts.get(cat)! }))
 }

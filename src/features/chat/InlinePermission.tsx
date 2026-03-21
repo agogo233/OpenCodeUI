@@ -1,14 +1,18 @@
 /**
  * InlinePermission — 融入信息流的权限确认
  *
- * 不是弹窗，不是卡片。渲染在对应的工具调用下方。
- * 视觉上就是一段文字 + 几个文字按钮。
+ * 紧凑的 inline 卡片，拥有弹窗的全部功能：
+ * - Diff 预览（文件编辑类）
+ * - Patterns 内容（命令类）
+ * - Always 规则
+ * - Allow once / Always allow / Reject 按钮
  */
 
 import { memo } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { ApiPermissionRequest, PermissionReply } from '../../api'
 import { DiffView } from '../../components/DiffView'
+import { ContentBlock } from '../../components'
 import { autoApproveStore } from '../../store'
 
 interface InlinePermissionProps {
@@ -37,6 +41,8 @@ export const InlinePermission = memo(function InlinePermission({
   }
 
   const isFileEdit = request.permission === 'edit' || request.permission === 'write'
+  const hasPatterns = request.patterns && request.patterns.length > 0
+  const hasRules = request.always && request.always.length > 0
 
   const handleAlways = () => {
     if (autoApproveStore.enabled) {
@@ -52,51 +58,74 @@ export const InlinePermission = memo(function InlinePermission({
   }
 
   return (
-    <div className="py-1.5 space-y-2">
-      {/* Diff 预览 — 文件编辑类 */}
-      {isFileEdit && diff && (
-        <DiffView
-          diff={diff}
-          before={before}
-          after={after}
-          filePath={filepath}
-          defaultCollapsed={false}
-          maxHeight={150}
-        />
-      )}
+    <div className="my-1.5 rounded-lg border border-border-200/50 bg-bg-200/20 overflow-hidden">
+      {/* 内容区 */}
+      <div className="space-y-2 max-h-[200px] overflow-auto custom-scrollbar">
+        {/* Diff 预览 */}
+        {isFileEdit && diff && (
+          <DiffView
+            diff={diff}
+            before={before}
+            after={after}
+            filePath={filepath}
+            defaultCollapsed={false}
+            maxHeight={150}
+          />
+        )}
 
-      {/* 请求内容 — 非文件编辑类 */}
-      {!isFileEdit && request.patterns && request.patterns.length > 0 && (
-        <div className="text-[12px] text-text-400 font-mono whitespace-pre-wrap">
-          {request.patterns.map(p => p.replace(/\\n/g, '\n')).join('\n')}
-        </div>
-      )}
+        {/* 请求内容 — 命令类 */}
+        {hasPatterns && !isFileEdit && (
+          <div className="px-3 pt-2.5">
+            <ContentBlock
+              label={t('permissionDialog.request')}
+              content={request.patterns.map(p => p.replace(/\\n/g, '\n')).join('\n\n')}
+              language="bash"
+              maxHeight={120}
+              collapsible={false}
+            />
+          </div>
+        )}
 
-      {/* 操作 — 纯文字按钮，融入阅读流 */}
-      <div className="flex items-center gap-3 text-sm">
+        {/* 规则 */}
+        {hasRules && (
+          <div className="px-3 pt-1">
+            <ContentBlock
+              label={t('permissionDialog.rule')}
+              content={request.always.join('\n')}
+              language="bash"
+              maxHeight={60}
+              collapsible={false}
+            />
+          </div>
+        )}
+      </div>
+
+      {/* 操作栏 */}
+      <div className="flex items-center gap-2 px-3 py-2 border-t border-border-200/30">
         <button
           onClick={() => onReply(request.id, 'once')}
           disabled={isReplying}
-          className="text-text-100 hover:text-accent-main-100 transition-colors font-medium disabled:opacity-50 cursor-pointer bg-transparent border-0 p-0"
+          className="px-3 py-1 rounded-md bg-text-100 text-bg-000 text-[13px] font-medium hover:bg-text-200 transition-colors disabled:opacity-50"
         >
           {t('permissionDialog.allowOnce')}
         </button>
-        <span className="text-text-500">·</span>
         <button
           onClick={handleAlways}
           disabled={isReplying}
-          className="text-text-300 hover:text-text-100 transition-colors disabled:opacity-50 cursor-pointer bg-transparent border-0 p-0"
+          className="px-3 py-1 rounded-md border border-border-200/60 text-[13px] text-text-200 hover:bg-bg-200 transition-colors disabled:opacity-50"
         >
           {t('permissionDialog.alwaysAllow')}
         </button>
-        <span className="text-text-500">·</span>
         <button
           onClick={() => onReply(request.id, 'reject')}
           disabled={isReplying}
-          className="text-text-400 hover:text-danger-100 transition-colors disabled:opacity-50 cursor-pointer bg-transparent border-0 p-0"
+          className="px-3 py-1 rounded-md text-[13px] text-text-400 hover:text-danger-100 hover:bg-bg-200 transition-colors disabled:opacity-50"
         >
           {t('common:reject')}
         </button>
+        <span className="ml-auto text-[11px] text-text-500">
+          {autoApproveStore.enabled ? t('permissionDialog.browserSession') : t('permissionDialog.thisSession')}
+        </span>
       </div>
     </div>
   )

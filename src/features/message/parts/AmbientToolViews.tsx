@@ -13,7 +13,6 @@ import {
   hasTodos,
   categorizeTools,
 } from '../tools'
-import type { ToolCategory } from '../tools'
 import { SmoothHeight } from '../../../components/ui'
 import { StepFinishPartView } from './StepFinishPartView'
 import { useAmbientPermission, findPermissionForTool, findQuestionForTool } from '../../chat/AmbientPermissionContext'
@@ -47,16 +46,63 @@ export const AmbientToolGroup = memo(function AmbientToolGroup({
   isStreaming,
 }: AmbientToolGroupProps) {
   const { t } = useTranslation('message')
-  const [expanded, setExpanded] = useState(false)
-  const shouldRenderBody = useDelayedRender(expanded)
 
   const hasRunning = parts.some(p => p.state.status === 'running' || p.state.status === 'pending')
   const errorCount = parts.filter(p => p.state.status === 'error').length
 
-  // 统计分类 + 错误
+  // 如果组内有 pending 权限/提问，强制展开（用户必须交互，不可收起）
+  const { pendingPermissions, pendingQuestions } = useAmbientPermission()
+  const hasPendingInteraction = parts.some(
+    p => findPermissionForTool(pendingPermissions, p.callID) || findQuestionForTool(pendingQuestions, p.callID),
+  )
+
+  // 编辑/写入/执行类工具完成后——仅作为初始值展开，用户可以手动收起
+  const hasSideEffectDone = parts.some(p => {
+    const cat = getToolCategory(p.tool)
+    return (cat === 'edit' || cat === 'execute') && (p.state.status === 'completed' || p.state.status === 'error')
+  })
+
+  const [expanded, setExpanded] = useState(hasSideEffectDone)
+  // 只有 pending 交互强制展开，其他靠 state
+  const effectiveExpanded = expanded || hasPendingInteraction
+  const shouldRenderBody = useDelayedRender(effectiveExpanded)
+
+  // 按状态分组统计
   const summaryText = useMemo(() => {
-    const categories = categorizeTools(parts.map(p => p.tool))
-    return buildNaturalSummary(categories, errorCount, hasRunning, t)
+    const doneParts = parts.filter(p => p.state.status === 'completed' || p.state.status === 'error')
+    const activeParts = parts.filter(p => p.state.status === 'running' || p.state.status === 'pending')
+
+    const segments: string[] = []
+
+    // 已完成的——完成时
+    if (doneParts.length > 0) {
+      const cats = categorizeTools(doneParts.map(p => p.tool))
+      segments.push(cats.map(({ category, count }) => t(`ambient.${category}`, { count })).join(t('ambient.separator')))
+    }
+
+    // 进行中的——进行时
+    if (activeParts.length > 0) {
+      const cats = categorizeTools(activeParts.map(p => p.tool))
+      segments.push(
+        cats
+          .map(({ category, count }) =>
+            t(`ambient.${category}_active`, { count, defaultValue: t(`ambient.${category}`, { count }) }),
+          )
+          .join(t('ambient.separator')),
+      )
+    }
+
+    let text = segments.join(t('ambient.separator'))
+
+    if (errorCount > 0) {
+      text += t('ambient.errorSuffix', { count: errorCount })
+    }
+
+    if (hasRunning) {
+      text += t('ambient.runningSuffix')
+    }
+
+    return text
   }, [parts, errorCount, hasRunning, t])
 
   return (
@@ -70,7 +116,7 @@ export const AmbientToolGroup = memo(function AmbientToolGroup({
           onKeyDown={e => {
             if (e.key === 'Enter' || e.key === ' ') setExpanded(!expanded)
           }}
-          aria-expanded={expanded}
+          aria-expanded={effectiveExpanded}
           className={`text-sm leading-relaxed cursor-pointer hover:text-text-200 transition-colors ${
             hasRunning ? 'reasoning-shimmer-text' : 'text-text-300'
           }`}
@@ -81,7 +127,7 @@ export const AmbientToolGroup = memo(function AmbientToolGroup({
         {/* 展开后的工具详情列表 */}
         <div
           className={`grid transition-[grid-template-rows,opacity] duration-250 ease-out ${
-            expanded ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
+            effectiveExpanded ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
           }`}
         >
           <div className="min-h-0 min-w-0 overflow-hidden" style={{ clipPath: 'inset(0 -100% 0 -100%)' }}>
@@ -111,8 +157,6 @@ export const AmbientToolGroup = memo(function AmbientToolGroup({
 // ============================================
 
 const AmbientToolItem = memo(function AmbientToolItem({ part }: { part: ToolPart }) {
-  const { t } = useTranslation('message')
-
   // 有副作用的工具（编辑/写入/执行）完成后默认展开，方便审查
   const category = getToolCategory(part.tool)
   const hasSideEffect = category === 'edit' || category === 'execute'
@@ -131,6 +175,29 @@ const AmbientToolItem = memo(function AmbientToolItem({ part }: { part: ToolPart
     useAmbientPermission()
   const permissionRequest = findPermissionForTool(pendingPermissions, part.callID)
   const questionRequest = findQuestionForTool(pendingQuestions, part.callID)
+
+  // 有 pending question/permission 时，跳过工具名行，直接渲染 inline UI
+  // 摘要里已经说了"正在提问"/"正在执行"，这里不需要再重复工具名
+  if (permissionRequest) {
+    return (
+      <div className="min-w-0">
+        <InlinePermission request={permissionRequest} onReply={onPermissionReply} isReplying={isReplying} />
+      </div>
+    )
+  }
+
+  if (questionRequest) {
+    return (
+      <div className="min-w-0">
+        <InlineQuestion
+          request={questionRequest}
+          onReply={onQuestionReply}
+          onReject={onQuestionReject}
+          isReplying={isReplying}
+        />
+      </div>
+    )
+  }
 
   return (
     <div className="min-w-0">
@@ -164,28 +231,11 @@ const AmbientToolItem = memo(function AmbientToolItem({ part }: { part: ToolPart
 
         {/* 状态 */}
         <span className="inline-flex items-center gap-1.5 ml-auto shrink-0">
-          {isActive && <span className="text-[11px] reasoning-shimmer-text">{t('ambient.running')}</span>}
-          {isError && <span className="text-[11px] text-danger-100">{t('ambient.failed')}</span>}
           {dur !== undefined && state.status === 'completed' && (
             <span className="text-[11px] text-text-500 tabular-nums">{formatDuration(dur)}</span>
           )}
         </span>
       </span>
-
-      {/* 权限请求 — 融入工具调用位置 */}
-      {permissionRequest && (
-        <InlinePermission request={permissionRequest} onReply={onPermissionReply} isReplying={isReplying} />
-      )}
-
-      {/* 提问请求 — 融入工具调用位置 */}
-      {questionRequest && (
-        <InlineQuestion
-          request={questionRequest}
-          onReply={onQuestionReply}
-          onReject={onQuestionReject}
-          isReplying={isReplying}
-        />
-      )}
 
       {/* 可展开的详情 */}
       <div
@@ -195,7 +245,7 @@ const AmbientToolItem = memo(function AmbientToolItem({ part }: { part: ToolPart
       >
         <div className="min-h-0 min-w-0 overflow-hidden">
           {shouldRenderBody && (
-            <div className="pl-2 pr-1 pb-2 pt-0.5">
+            <div className="pb-1.5 pt-0.5">
               <AmbientToolBody part={part} />
             </div>
           )}
@@ -206,7 +256,8 @@ const AmbientToolItem = memo(function AmbientToolItem({ part }: { part: ToolPart
 })
 
 // ============================================
-// AmbientToolBody — 复用现有 renderer
+// AmbientToolBody — 复用现有 renderer，沉浸模式只去掉 input
+// edit/write 的 diff、files、diagnostics 全部保留
 // ============================================
 
 function AmbientToolBody({ part }: { part: ToolPart }) {
@@ -214,6 +265,7 @@ function AmbientToolBody({ part }: { part: ToolPart }) {
   const lowerTool = tool.toLowerCase()
   const data = extractToolData(part)
 
+  // Task 和 Todo 保持原有 renderer
   if (lowerTool === 'task') {
     return <TaskRenderer part={part} data={data} />
   }
@@ -222,36 +274,14 @@ function AmbientToolBody({ part }: { part: ToolPart }) {
     return <TodoRenderer part={part} data={data} />
   }
 
+  // 其他工具：用 DefaultRenderer 的 ambientMode，去掉 input，保留完整 output
   const config = getToolConfig(tool)
   if (config?.renderer) {
     const CustomRenderer = config.renderer
     return <CustomRenderer part={part} data={data} />
   }
 
-  return <DefaultRenderer part={part} data={data} />
+  return <DefaultRenderer part={part} data={data} ambientMode />
 }
 
-// ============================================
-// 自然语言摘要构建
-// ============================================
-
-function buildNaturalSummary(
-  categories: Array<{ category: ToolCategory; count: number }>,
-  errorCount: number,
-  hasRunning: boolean,
-  t: (key: string, opts?: Record<string, unknown>) => string,
-): string {
-  const parts = categories.map(({ category, count }) => t(`ambient.${category}`, { count }))
-
-  let text = parts.join(t('ambient.separator'))
-
-  if (errorCount > 0) {
-    text += t('ambient.errorSuffix', { count: errorCount })
-  }
-
-  if (hasRunning) {
-    text += t('ambient.runningSuffix')
-  }
-
-  return text
-}
+// (end of file)

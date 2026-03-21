@@ -1,11 +1,12 @@
 /**
  * InlineQuestion — 融入信息流的提问交互
  *
- * 渲染在对话流中，用户直接在流里选择/输入回答。
+ * 紧凑的 inline 卡片，选项清晰，自定义输入居中对齐。
  */
 
 import { memo, useState, useCallback, useRef, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
+import { CheckIcon } from '../../components/Icons'
 import type { ApiQuestionRequest, ApiQuestionInfo, QuestionAnswer } from '../../api'
 
 interface InlineQuestionProps {
@@ -43,54 +44,54 @@ export const InlineQuestion = memo(function InlineQuestion({
 
   const selectOption = useCallback((qIdx: number, label: string) => {
     setAnswers(prev => {
-      const newMap = new Map(prev)
-      newMap.set(qIdx, new Set([label]))
-      return newMap
+      const m = new Map(prev)
+      m.set(qIdx, new Set([label]))
+      return m
     })
     setCustomEnabled(prev => {
-      const newMap = new Map(prev)
-      newMap.set(qIdx, false)
-      return newMap
+      const m = new Map(prev)
+      m.set(qIdx, false)
+      return m
     })
   }, [])
 
   const selectCustom = useCallback((qIdx: number) => {
     setAnswers(prev => {
-      const newMap = new Map(prev)
-      newMap.set(qIdx, new Set())
-      return newMap
+      const m = new Map(prev)
+      m.set(qIdx, new Set())
+      return m
     })
     setCustomEnabled(prev => {
-      const newMap = new Map(prev)
-      newMap.set(qIdx, true)
-      return newMap
+      const m = new Map(prev)
+      m.set(qIdx, true)
+      return m
     })
   }, [])
 
   const toggleOption = useCallback((qIdx: number, label: string) => {
     setAnswers(prev => {
-      const newMap = new Map(prev)
-      const current = new Set(prev.get(qIdx) || [])
-      if (current.has(label)) current.delete(label)
-      else current.add(label)
-      newMap.set(qIdx, current)
-      return newMap
+      const m = new Map(prev)
+      const s = new Set(prev.get(qIdx) || [])
+      if (s.has(label)) s.delete(label)
+      else s.add(label)
+      m.set(qIdx, s)
+      return m
     })
   }, [])
 
   const toggleCustom = useCallback((qIdx: number) => {
     setCustomEnabled(prev => {
-      const newMap = new Map(prev)
-      newMap.set(qIdx, !prev.get(qIdx))
-      return newMap
+      const m = new Map(prev)
+      m.set(qIdx, !prev.get(qIdx))
+      return m
     })
   }, [])
 
   const updateCustomValue = useCallback((qIdx: number, value: string) => {
     setCustomValues(prev => {
-      const newMap = new Map(prev)
-      newMap.set(qIdx, value)
-      return newMap
+      const m = new Map(prev)
+      m.set(qIdx, value)
+      return m
     })
   }, [])
 
@@ -111,40 +112,42 @@ export const InlineQuestion = memo(function InlineQuestion({
     const selected = answers.get(idx) || new Set()
     const isCustom = customEnabled.get(idx)
     const customValue = customValues.get(idx)?.trim()
-    return selected.size > 0 || (isCustom && customValue)
+    return selected.size > 0 || (isCustom && !!customValue)
   })
 
   return (
-    <div className="py-1.5 space-y-3">
-      {request.questions.map((question, qIdx) => (
-        <InlineQuestionItem
-          key={qIdx}
-          question={question}
-          selected={answers.get(qIdx) || new Set()}
-          isCustomEnabled={customEnabled.get(qIdx) || false}
-          customValue={customValues.get(qIdx) || ''}
-          onSelectOption={label => selectOption(qIdx, label)}
-          onSelectCustom={() => selectCustom(qIdx)}
-          onToggleOption={label => toggleOption(qIdx, label)}
-          onToggleCustom={() => toggleCustom(qIdx)}
-          onCustomValueChange={value => updateCustomValue(qIdx, value)}
-        />
-      ))}
+    <div className="my-1.5 rounded-lg border border-border-200/50 bg-bg-200/20 overflow-hidden">
+      {/* 问题列表 */}
+      <div className="px-3 py-2.5 space-y-3">
+        {request.questions.map((question, qIdx) => (
+          <InlineQuestionItem
+            key={qIdx}
+            question={question}
+            selected={answers.get(qIdx) || new Set()}
+            isCustomEnabled={customEnabled.get(qIdx) || false}
+            customValue={customValues.get(qIdx) || ''}
+            onSelectOption={label => selectOption(qIdx, label)}
+            onSelectCustom={() => selectCustom(qIdx)}
+            onToggleOption={label => toggleOption(qIdx, label)}
+            onToggleCustom={() => toggleCustom(qIdx)}
+            onCustomValueChange={value => updateCustomValue(qIdx, value)}
+          />
+        ))}
+      </div>
 
-      {/* 操作 — 纯文字按钮 */}
-      <div className="flex items-center gap-3 text-sm">
+      {/* 操作栏 */}
+      <div className="flex items-center gap-2 px-3 py-2 border-t border-border-200/30">
         <button
           onClick={handleSubmit}
           disabled={!canSubmit || isReplying}
-          className="text-text-100 hover:text-accent-main-100 transition-colors font-medium disabled:opacity-50 cursor-pointer bg-transparent border-0 p-0"
+          className="px-3 py-1 rounded-md bg-text-100 text-bg-000 text-[13px] font-medium hover:bg-text-200 transition-colors disabled:opacity-50"
         >
           {t('common:submit')}
         </button>
-        <span className="text-text-500">·</span>
         <button
           onClick={() => onReject(request.id)}
           disabled={isReplying}
-          className="text-text-400 hover:text-text-200 transition-colors disabled:opacity-50 cursor-pointer bg-transparent border-0 p-0"
+          className="px-3 py-1 rounded-md text-[13px] text-text-400 hover:text-text-200 hover:bg-bg-200 transition-colors disabled:opacity-50"
         >
           {t('common:skip')}
         </button>
@@ -154,7 +157,7 @@ export const InlineQuestion = memo(function InlineQuestion({
 })
 
 // ============================================
-// InlineQuestionItem — 单个问题
+// InlineQuestionItem
 // ============================================
 
 interface InlineQuestionItemProps {
@@ -191,12 +194,21 @@ function InlineQuestionItem({
     }
   }, [isCustomEnabled])
 
-  return (
-    <div className="space-y-1.5">
-      {/* 问题文字 — 就是正文 */}
-      <div className="text-sm text-text-100">{question.question}</div>
+  const adjustHeight = useCallback(() => {
+    const el = textareaRef.current
+    if (el) {
+      el.style.height = 'auto'
+      el.style.height = `${Math.min(el.scrollHeight, 100)}px`
+    }
+  }, [])
 
-      {/* 选项 — 轻量文字按钮列表 */}
+  return (
+    <div className="space-y-2">
+      {/* 问题文字 */}
+      {question.header && <div className="text-[11px] text-text-400 font-medium">{question.header}</div>}
+      <div className="text-[13px] text-text-100">{question.question}</div>
+
+      {/* 选项 — 紧凑按钮组 */}
       <div className="flex flex-wrap gap-1.5">
         {question.options.map((option, idx) => {
           const isSelected = selected.has(option.label)
@@ -204,13 +216,22 @@ function InlineQuestionItem({
             <button
               key={idx}
               onClick={() => (isMultiple ? onToggleOption(option.label) : onSelectOption(option.label))}
-              className={`px-2.5 py-1 text-[13px] rounded-md border transition-colors cursor-pointer bg-transparent ${
-                isSelected
-                  ? 'border-text-100 text-text-100'
-                  : 'border-border-200/60 text-text-300 hover:border-border-300 hover:text-text-200'
-              }`}
               title={option.description}
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-[12px] rounded-md border transition-all ${
+                isSelected
+                  ? 'border-text-100 text-text-100 bg-bg-300/40'
+                  : 'border-border-200/60 text-text-300 hover:border-text-400 hover:text-text-200'
+              }`}
             >
+              {isMultiple && (
+                <span
+                  className={`inline-flex w-3.5 h-3.5 rounded items-center justify-center border transition-colors ${
+                    isSelected ? 'border-text-100 bg-text-100 text-bg-000' : 'border-border-300'
+                  }`}
+                >
+                  {isSelected && <CheckIcon size={10} />}
+                </span>
+              )}
               {option.label}
             </button>
           )
@@ -226,14 +247,26 @@ function InlineQuestionItem({
               else onSelectCustom()
             }
           }}
-          className={`rounded-md border px-2.5 py-1.5 transition-colors cursor-text ${
-            isCustomEnabled ? 'border-text-100' : 'border-border-200/60'
+          className={`flex items-center rounded-md border transition-colors ${
+            isCustomEnabled ? 'border-text-100 bg-bg-300/20' : 'border-border-200/60 hover:border-text-400'
           }`}
         >
+          {isMultiple && (
+            <span
+              className={`ml-2.5 inline-flex w-3.5 h-3.5 rounded items-center justify-center border shrink-0 transition-colors ${
+                isCustomEnabled ? 'border-text-100 bg-text-100 text-bg-000' : 'border-border-300'
+              }`}
+            >
+              {isCustomEnabled && <CheckIcon size={10} />}
+            </span>
+          )}
           <textarea
             ref={textareaRef}
             value={customValue}
-            onChange={e => onCustomValueChange(e.target.value)}
+            onChange={e => {
+              onCustomValueChange(e.target.value)
+              adjustHeight()
+            }}
             onClick={e => {
               e.stopPropagation()
               if (!isCustomEnabled) {
@@ -243,7 +276,7 @@ function InlineQuestionItem({
             }}
             placeholder={t('questionDialog.typeYourAnswer')}
             rows={1}
-            className="w-full bg-transparent text-sm text-text-100 placeholder:text-text-500 focus:outline-none resize-none min-h-[20px]"
+            className="flex-1 bg-transparent text-[12px] text-text-100 placeholder:text-text-500 focus:outline-none resize-none min-h-[32px] px-2.5 py-1.5 leading-relaxed"
           />
         </div>
       )}

@@ -9,7 +9,7 @@ import type { ToolRendererProps, ExtractedToolData } from '../types'
 // 通用的 Input/Output 渲染逻辑
 // ============================================
 
-export function DefaultRenderer({ part, data }: ToolRendererProps) {
+export function DefaultRenderer({ part, data, ambientMode }: ToolRendererProps & { ambientMode?: boolean }) {
   const { t } = useTranslation('message')
   const { state, tool } = part
   const isActive = state.status === 'running' || state.status === 'pending'
@@ -19,13 +19,12 @@ export function DefaultRenderer({ part, data }: ToolRendererProps) {
   const hasOutput = !!(data.files || data.diff || data.output?.trim() || data.exitCode !== undefined)
   const hasDiagnostics = !!data.diagnostics?.length
 
-  // Output 不再依赖 hasInput
-  const showOutput = hasOutput || hasError || (isActive && !hasOutput)
+  const showOutput = hasOutput || hasError || (!ambientMode && isActive && !hasOutput)
 
   return (
     <div className="flex flex-col gap-2">
-      {/* Input - 默认折叠 */}
-      {(hasInput || (isActive && !hasInput)) && (
+      {/* Input - 沉浸模式下不显示 */}
+      {!ambientMode && (hasInput || (isActive && !hasInput)) && (
         <ContentBlock
           label={t('defaultRenderer.input')}
           content={data.input || ''}
@@ -38,7 +37,14 @@ export function DefaultRenderer({ part, data }: ToolRendererProps) {
 
       {/* Output */}
       {showOutput && (
-        <OutputBlock tool={tool} data={data} isActive={isActive} hasError={hasError} hasOutput={hasOutput} />
+        <OutputBlock
+          tool={tool}
+          data={data}
+          isActive={isActive && !ambientMode}
+          hasError={hasError}
+          hasOutput={hasOutput}
+          ambientMode={ambientMode}
+        />
       )}
 
       {/* Diagnostics */}
@@ -57,18 +63,24 @@ interface OutputBlockProps {
   isActive: boolean
   hasError: boolean
   hasOutput: boolean
+  ambientMode?: boolean
 }
 
-function OutputBlock({ tool, data, isActive, hasError, hasOutput }: OutputBlockProps) {
+function OutputBlock({ tool, data, isActive, hasError, hasOutput, ambientMode }: OutputBlockProps) {
   const { t } = useTranslation('message')
+  // 沉浸模式：ambient 样式 + 不可折叠
+  const ambientProps = ambientMode
+    ? { variant: 'ambient' as const, collapsible: false as const, defaultCollapsed: false as const }
+    : {}
 
   // 1. Error 优先
   if (hasError) {
-    return <ContentBlock label={t('defaultRenderer.error')} content={data.error || ''} variant="error" />
+    return (
+      <ContentBlock label={t('defaultRenderer.error')} content={data.error || ''} variant="error" {...ambientProps} />
+    )
   }
 
   // 2. 工具活跃时（running/pending）统一显示 loading
-  //    所有工具行为一致，权限弹窗已有预览，这里不重复展示
   if (isActive) {
     return <ContentBlock label={t('defaultRenderer.output')} isLoading={true} loadingText="" />
   }
@@ -91,6 +103,7 @@ function OutputBlock({ tool, data, isActive, hasError, hasOutput }: OutputBlockP
                   : undefined)
               }
               language={detectLanguage(file.filePath)}
+              {...ambientProps}
             />
           ))}
         </div>
@@ -106,6 +119,7 @@ function OutputBlock({ tool, data, isActive, hasError, hasOutput }: OutputBlockP
           diff={data.diff}
           diffStats={data.diffStats}
           language={data.outputLang}
+          {...ambientProps}
         />
       )
     }
@@ -118,12 +132,13 @@ function OutputBlock({ tool, data, isActive, hasError, hasOutput }: OutputBlockP
         language={data.outputLang}
         filePath={data.filePath}
         stats={data.exitCode !== undefined ? { exit: data.exitCode } : undefined}
+        {...ambientProps}
       />
     )
   }
 
   // 4. 无输出
-  return <ContentBlock label={t('defaultRenderer.output')} />
+  return <ContentBlock label={t('defaultRenderer.output')} {...ambientProps} />
 }
 
 // ============================================
