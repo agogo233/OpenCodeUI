@@ -3,16 +3,21 @@
  *
  * 整体终端风格：
  * - 统一背景，命令和输出连续排列
- * - $ prompt + 命令
- * - 输出支持 ANSI 颜色
+ * - $ prompt + 命令（Shiki 语法高亮）
+ * - 输出支持 ANSI 颜色，带高度限制
  * - 运行中用光标闪烁
- * - exit code 非 0 时内联显示
+ * - exit code 内联在输出末尾
+ * - 复制 + 全屏按钮在右上角 hover 显示
  */
 
-import { useMemo } from 'react'
-import { CopyButton } from '../../../../components/ui'
+import { useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import { MaximizeIcon, CopyIcon, CheckIcon } from '../../../../components/Icons'
+import { FullscreenViewer } from '../../../../components/FullscreenViewer'
 import { useSyntaxHighlight } from '../../../../hooks/useSyntaxHighlight'
+import { useResponsiveMaxHeight } from '../../../../hooks/useResponsiveMaxHeight'
 import { parseAnsi, stripAnsi, type AnsiSegment } from '../../../../utils/ansiUtils'
+import { copyTextToClipboard, clipboardErrorHandler } from '../../../../utils'
 import type { ToolRendererProps } from '../types'
 
 // ============================================
@@ -20,12 +25,15 @@ import type { ToolRendererProps } from '../types'
 // ============================================
 
 export function BashRenderer({ part, data }: ToolRendererProps) {
+  const { t } = useTranslation(['components'])
   const { state } = part
   const isActive = state.status === 'running' || state.status === 'pending'
   const hasError = !!data.error
   const command = data.input?.trim()
   const output = data.output?.trim()
   const exitCode = data.exitCode
+  const maxHeight = useResponsiveMaxHeight()
+  const [fullscreenOpen, setFullscreenOpen] = useState(false)
 
   // 解析 ANSI
   const outputSegments = useMemo(() => {
@@ -43,16 +51,13 @@ export function BashRenderer({ part, data }: ToolRendererProps) {
     return null
   }
 
-  return (
-    <div className="rounded-lg border border-border-200/40 bg-bg-100 overflow-hidden font-mono text-[11px] leading-[1.6] group/terminal relative">
-      <CopyButton
-        text={[command && `$ ${command}`, plainOutput, data.error].filter(Boolean).join('\n')}
-        position="absolute"
-        groupName="terminal"
-      />
+  const hasOutput = !!(outputSegments && outputSegments.length > 0)
+  const isDone = !isActive
 
-      <div className="px-3 py-2 space-y-0.5">
-        {/* $ command — Shiki 语法高亮 */}
+  return (
+    <div className="rounded-lg border border-border-200/40 bg-bg-100 overflow-hidden font-mono text-[11px] leading-[1.6] group/terminal">
+      {/* 滚动区：命令 + 输出 */}
+      <div className="px-3 pt-2 pb-0.5 overflow-y-auto custom-scrollbar" style={{ maxHeight }}>
         {command && (
           <div className="flex items-start gap-1.5">
             <span className="text-accent-main-100 shrink-0 select-none font-semibold">$</span>
@@ -60,31 +65,85 @@ export function BashRenderer({ part, data }: ToolRendererProps) {
           </div>
         )}
 
-        {/* 光标：命令后、输出前，独占一行闪烁 */}
-        {isActive && !output && !hasError && (
-          <div>
+        {isActive && !hasOutput && !hasError && (
+          <div className="mt-0.5">
             <TerminalCursor />
           </div>
         )}
 
-        {/* 输出 */}
-        {outputSegments && outputSegments.length > 0 && (
-          <div className="text-text-300 whitespace-pre-wrap break-all">
-            <AnsiOutput segments={outputSegments} />
-            {/* 还在运行，输出末尾闪光标 */}
+        {hasOutput && (
+          <div className="text-text-300 whitespace-pre-wrap break-all mt-0.5">
+            <AnsiOutput segments={outputSegments!} />
             {isActive && <TerminalCursor />}
           </div>
         )}
 
-        {/* Error */}
-        {hasError && <div className="text-danger-100 whitespace-pre-wrap break-all">{data.error}</div>}
+        {hasError && <div className="text-danger-100 whitespace-pre-wrap break-all mt-0.5">{data.error}</div>}
       </div>
 
-      {/* Exit code — 只在非 0 时显示 */}
-      {exitCode !== undefined && exitCode !== 0 && !isActive && (
-        <div className="px-3 pb-2 text-[10px] text-warning-100">exit {exitCode}</div>
+      {/* 固定底行：看起来和终端内容一样，但不在滚动区内 */}
+      <div className="flex items-center px-3 pb-2 pt-0.5">
+        {isDone && exitCode !== undefined && (
+          <span
+            className={`text-[10px] font-medium ${exitCode === 0 ? 'text-accent-secondary-100' : 'text-warning-100'}`}
+          >
+            {t('contentBlock.exitCode', { code: exitCode })}
+          </span>
+        )}
+        <span className="ml-auto flex items-center gap-1 text-text-400 opacity-100 sm:opacity-0 sm:group-hover/terminal:opacity-100 transition-opacity">
+          {command && <TerminalCopyButton text={command} />}
+          {(hasOutput || hasError) && (
+            <button
+              className="hover:text-text-200 transition-colors"
+              onClick={() => setFullscreenOpen(true)}
+              title={t('contentBlock.fullscreen')}
+            >
+              <MaximizeIcon size={12} />
+            </button>
+          )}
+        </span>
+      </div>
+
+      {/* 全屏查看器 */}
+      {(plainOutput || data.error) && (
+        <FullscreenViewer
+          mode="code"
+          isOpen={fullscreenOpen}
+          onClose={() => setFullscreenOpen(false)}
+          content={[command && `$ ${command}`, plainOutput, data.error].filter(Boolean).join('\n')}
+          language="text"
+        />
       )}
     </div>
+  )
+}
+
+// ============================================
+// Terminal Copy Button
+// ============================================
+
+function TerminalCopyButton({ text, size = 12 }: { text: string; size?: number }) {
+  const [copied, setCopied] = useState(false)
+
+  const handleCopy = async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    try {
+      await copyTextToClipboard(text)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch (err) {
+      clipboardErrorHandler('copy', err)
+    }
+  }
+
+  return (
+    <button
+      className={`p-0.5 rounded transition-colors ${copied ? 'text-success-100' : 'text-text-400 hover:text-text-200'}`}
+      onClick={handleCopy}
+      title={copied ? 'Copied!' : 'Copy'}
+    >
+      {copied ? <CheckIcon size={size} /> : <CopyIcon size={size} />}
+    </button>
   )
 }
 
@@ -104,7 +163,6 @@ function HighlightedCommand({ command }: { command: string }) {
     )
   }
 
-  // fallback: 高亮还没加载时用纯文本
   return <span className="text-text-100 whitespace-pre-wrap break-all">{command}</span>
 }
 
