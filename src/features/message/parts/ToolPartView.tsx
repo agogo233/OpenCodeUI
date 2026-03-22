@@ -53,7 +53,7 @@ export const ToolPartView = memo(function ToolPartView({
   const isActive = state.status === 'running' || state.status === 'pending'
   const isError = state.status === 'error'
   const [expanded, setExpanded] = useState(() => isActive)
-  const { inlineToolRequests } = useTheme()
+  const { inlineToolRequests, immersiveMode } = useTheme()
 
   const { pendingPermissions, pendingQuestions, onPermissionReply, onQuestionReply, onQuestionReject, isReplying } =
     useInlineToolRequests()
@@ -74,8 +74,11 @@ export const ToolPartView = memo(function ToolPartView({
     if (isActive || hasPendingInteraction) {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- 运行中或待交互时保持展开
       setExpanded(true)
+    } else if (immersiveMode && descriptive && !isReadableTool(toolName)) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- 沉浸模式下非可读工具完成后收起
+      setExpanded(false)
     }
-  }, [isActive, hasPendingInteraction])
+  }, [isActive, hasPendingInteraction, immersiveMode, descriptive, toolName])
 
   // Shared icon element
   const toolIcon = (
@@ -345,6 +348,17 @@ export const ToolPartView = memo(function ToolPartView({
     </div>
   )
 })
+
+// ============================================
+// Helpers
+// ============================================
+
+/** 用户需要阅读/交互的工具 */
+const READABLE_TOOL_PATTERNS = /bash|sh|cmd|terminal|shell|write|save|edit|replace|patch|todo|question|ask/i
+
+function isReadableTool(toolName: string): boolean {
+  return READABLE_TOOL_PATTERNS.test(toolName.toLowerCase())
+}
 
 // ============================================
 // ToolBody - 根据工具类型选择渲染器

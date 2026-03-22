@@ -79,6 +79,8 @@
     "toolCardStyleDesc": "选择工具调用结果的展示方式",
     "toolCardClassic": "经典",
     "toolCardCompact": "精简",
+    "immersiveMode": "沉浸模式",
+    "immersiveModeDesc": "一键开启内嵌请求、描述型步骤和精简输出，更沉浸的体验",
     "thinkingDisplay": "思考过程显示",
     "thinkingDisplayDesc": "选择 Capsule、低干扰 Italic 或 Markdown 推理样式",
     "capsule": "Capsule",

@@ -30,6 +30,7 @@ export function ChatSettings() {
   const [descriptiveToolSteps, setDescriptiveToolSteps] = useState(themeStore.descriptiveToolSteps)
   const [inlineToolRequests, setInlineToolRequests] = useState(themeStore.inlineToolRequests)
   const [toolCardStyle, setToolCardStyle] = useState(themeStore.toolCardStyle)
+  const [immersiveMode, setImmersiveMode] = useState(themeStore.immersiveMode)
   const isMobile = useIsMobile()
   void isMobile // reserved for future mobile-specific logic
 
@@ -70,6 +71,16 @@ export function ChatSettings() {
   const handleToolCardStyleChange = (style: ToolCardStyle) => {
     setToolCardStyle(style)
     themeStore.setToolCardStyle(style)
+  }
+
+  const handleImmersiveModeToggle = () => {
+    const v = !immersiveMode
+    setImmersiveMode(v)
+    themeStore.setImmersiveMode(v)
+    // 同步本地 state（因为 setImmersiveMode 联动改了子功能）
+    setInlineToolRequests(v)
+    setDescriptiveToolSteps(v)
+    setToolCardStyle(v ? 'compact' : 'classic')
   }
 
   return (
@@ -135,6 +146,18 @@ export function ChatSettings() {
               <Toggle enabled={collapseUserMessages} onChange={handleCollapseToggle} />
             </SettingRow>
 
+            <SettingRow
+              label={t('chat.immersiveMode')}
+              description={t('chat.immersiveModeDesc')}
+              icon={<EyeIcon size={14} />}
+              onClick={handleImmersiveModeToggle}
+              className="bg-bg-100/35 border-border-200/45"
+            >
+              <Toggle enabled={immersiveMode} onChange={handleImmersiveModeToggle} />
+            </SettingRow>
+          </div>
+
+          <div className="grid gap-2 lg:grid-cols-2">
             <SettingRow
               label={t('chat.inlineToolRequests')}
               description={t('chat.inlineToolRequestsDesc')}

@@ -79,6 +79,8 @@
     "toolCardStyleDesc": "Choose how tool call results are displayed",
     "toolCardClassic": "Classic",
     "toolCardCompact": "Compact",
+    "immersiveMode": "Immersive Mode",
+    "immersiveModeDesc": "Enable inline requests, descriptive steps and compact output together for a cleaner experience",
     "thinkingDisplay": "Thinking Display",
     "thinkingDisplayDesc": "Choose capsule, low-noise italic, or markdown reasoning style",
     "capsule": "Capsule",

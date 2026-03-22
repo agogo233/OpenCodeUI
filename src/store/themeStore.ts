@@ -85,6 +85,7 @@ const DEFAULT_CODE_WORD_WRAP = false
 /** 工具输出渲染风格：classic = 经典（input+output 分离），compact = 精简（只展示 output，header 更矮） */
 export type ToolCardStyle = 'classic' | 'compact'
 const DEFAULT_TOOL_CARD_STYLE: ToolCardStyle = 'classic'
+const DEFAULT_IMMERSIVE_MODE = false
 
 export interface ThemeState {
   /** 当前选中的主题风格 ID */
@@ -111,6 +112,8 @@ export interface ThemeState {
   codeWordWrap: boolean
   /** 工具输出渲染风格 */
   toolCardStyle: ToolCardStyle
+  /** 沉浸模式 */
+  immersiveMode: boolean
 }
 
 // ============================================
@@ -129,6 +132,7 @@ const STORAGE_KEY_DESCRIPTIVE_TOOL_STEPS = 'descriptive-tool-steps'
 const STORAGE_KEY_INLINE_TOOL_REQUESTS = 'inline-tool-requests'
 const STORAGE_KEY_CODE_WORD_WRAP = 'code-word-wrap'
 const STORAGE_KEY_TOOL_CARD_STYLE = 'tool-card-style'
+const STORAGE_KEY_IMMERSIVE_MODE = 'immersive-mode'
 
 // ============================================
 // DOM Style Element IDs
@@ -186,6 +190,9 @@ class ThemeStore {
         ? savedToolCardStyle
         : DEFAULT_TOOL_CARD_STYLE
 
+    const savedImmersiveMode = localStorage.getItem(STORAGE_KEY_IMMERSIVE_MODE)
+    const immersiveMode = savedImmersiveMode === 'true' ? true : DEFAULT_IMMERSIVE_MODE
+
     this.state = {
       presetId: savedPreset,
       colorMode: savedMode,
@@ -199,6 +206,7 @@ class ThemeStore {
       inlineToolRequests,
       codeWordWrap,
       toolCardStyle,
+      immersiveMode,
     }
   }
 
@@ -243,6 +251,9 @@ class ThemeStore {
   }
   get toolCardStyle() {
     return this.state.toolCardStyle
+  }
+  get immersiveMode() {
+    return this.state.immersiveMode
   }
 
   /** 获取当前主题预设（内置主题返回对象，自定义返回 undefined） */
@@ -366,6 +377,23 @@ class ThemeStore {
     if (this.state.toolCardStyle === style) return
     this.state = { ...this.state, toolCardStyle: style }
     localStorage.setItem(STORAGE_KEY_TOOL_CARD_STYLE, style)
+    this.emit()
+  }
+
+  setImmersiveMode(enabled: boolean) {
+    if (this.state.immersiveMode === enabled) return
+    this.state = {
+      ...this.state,
+      immersiveMode: enabled,
+      // 联动三个子功能
+      inlineToolRequests: enabled,
+      descriptiveToolSteps: enabled,
+      toolCardStyle: enabled ? 'compact' : 'classic',
+    }
+    localStorage.setItem(STORAGE_KEY_IMMERSIVE_MODE, String(enabled))
+    localStorage.setItem(STORAGE_KEY_INLINE_TOOL_REQUESTS, String(enabled))
+    localStorage.setItem(STORAGE_KEY_DESCRIPTIVE_TOOL_STEPS, String(enabled))
+    localStorage.setItem(STORAGE_KEY_TOOL_CARD_STYLE, enabled ? 'compact' : 'classic')
     this.emit()
   }
 

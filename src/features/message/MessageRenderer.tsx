@@ -486,9 +486,16 @@ interface ToolGroupProps {
   isStreaming?: boolean
 }
 
+/** 用户需要阅读/交互的工具：沉浸模式下这些工具完成后保持展开 */
+const READABLE_TOOL_PATTERNS = /bash|sh|cmd|terminal|shell|write|save|edit|replace|patch|todo|question|ask/i
+
+function isReadableTool(toolName: string): boolean {
+  return READABLE_TOOL_PATTERNS.test(toolName.toLowerCase())
+}
+
 const ToolGroup = memo(function ToolGroup({ parts, stepFinish, duration, turnDuration, isStreaming }: ToolGroupProps) {
   const { t } = useTranslation('message')
-  const { descriptiveToolSteps, inlineToolRequests } = useTheme()
+  const { descriptiveToolSteps, inlineToolRequests, immersiveMode } = useTheme()
   const { pendingPermissions, pendingQuestions } = useInlineToolRequests()
   const hasPendingInteraction =
     inlineToolRequests &&
@@ -507,7 +514,11 @@ const ToolGroup = memo(function ToolGroup({ parts, stepFinish, duration, turnDur
   const hasErroredTools = parts.some(part => part.state.status === 'error')
   const stepsSummary = descriptiveToolSteps ? buildDescriptiveToolStepsSummary(parts, t) : undefined
 
+  // 沉浸模式下：判断工具组是否包含需要用户阅读的工具
+  const hasReadableTools = immersiveMode && parts.some(p => isReadableTool(p.tool))
+
   // descriptive 模式默认收起，运行时展开，完成后保持展开
+  // 沉浸模式下：没有可读工具则完成后自动收起
   const [expanded, setExpanded] = useState(() => (descriptiveToolSteps ? false : true))
 
   useEffect(() => {
@@ -515,8 +526,11 @@ const ToolGroup = memo(function ToolGroup({ parts, stepFinish, duration, turnDur
     if (hasActiveTools || hasPendingInteraction) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setExpanded(true)
+    } else if (immersiveMode && !hasReadableTools) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setExpanded(false)
     }
-  }, [descriptiveToolSteps, hasActiveTools, hasPendingInteraction])
+  }, [descriptiveToolSteps, hasActiveTools, hasPendingInteraction, immersiveMode, hasReadableTools])
 
   const effectiveExpanded = expanded || hasPendingInteraction
   const shouldRenderBody = useDelayedRender(effectiveExpanded)

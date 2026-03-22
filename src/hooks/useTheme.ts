@@ -170,6 +170,12 @@ export function useTheme() {
     themeStore.setToolCardStyle(style)
   }, [])
 
+  // ---- Immersive Mode ----
+
+  const setImmersiveMode = useCallback((enabled: boolean) => {
+    themeStore.setImmersiveMode(enabled)
+  }, [])
+
   return {
     // 日夜模式（向后兼容）
     mode: state.colorMode,
@@ -225,5 +231,9 @@ export function useTheme() {
     // 工具输出渲染风格
     toolCardStyle: state.toolCardStyle,
     setToolCardStyle,
+
+    // 沉浸模式
+    immersiveMode: state.immersiveMode,
+    setImmersiveMode,
   }
 }
