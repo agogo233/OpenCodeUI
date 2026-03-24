@@ -1,5 +1,12 @@
 # Changelog
 
+## [v0.3.4] - 2026-03-24
+
+- fix: align markdown copy buttons with header text (80e59ce)
+- fix: render markdown images without streamdown wrapper controls (650851f)
+- fix: remove code size-based rendering limits (42171e7)
+- fix: remove contain-intrinsic-size that caused scroll jank (7942144)
+
 ## [v0.3.3] - 2026-03-24
 
 - fix: resolve TypeScript errors in MarkdownRenderer for release (1abcdf1)
