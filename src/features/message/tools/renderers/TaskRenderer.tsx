@@ -77,13 +77,13 @@ export const TaskRenderer = memo(function TaskRenderer({ part }: ToolRendererPro
     <div className="relative overflow-hidden min-w-0">
       {/* 左侧装饰线 */}
       <div
-        className={`absolute left-0 top-0 bottom-0 w-0.5 rounded-full transition-colors ${
+        className={`absolute left-0 top-0 bottom-0 w-px transition-colors ${
           isRunning
             ? 'bg-accent-main-100 animate-pulse'
             : isError
               ? 'bg-danger-100'
               : isCompleted
-                ? 'bg-accent-secondary-100/50'
+                ? 'bg-border-300/50'
                 : 'bg-border-300/30'
         }`}
       />
@@ -111,13 +111,18 @@ export const TaskRenderer = memo(function TaskRenderer({ part }: ToolRendererPro
               <div className="pt-2 space-y-3">
                 {/* Prompt */}
                 {prompt && (
-                  <div className="text-xs text-text-400 bg-bg-200/30 rounded-sm px-3 py-2 whitespace-pre-wrap">
+                  <div className="text-[11px] text-text-400 leading-relaxed whitespace-pre-wrap break-words border-l-2 border-border-200/50 pl-2.5">
                     {prompt.length > 300 ? prompt.slice(0, 300) + '...' : prompt}
                   </div>
                 )}
 
                 {/* 子会话内容 */}
-                {targetSessionId && <SubSessionView sessionId={targetSessionId} isParentRunning={isRunning} />}
+                {targetSessionId && (
+                  <>
+                    {prompt && <hr className="border-border-200/30" />}
+                    <SubSessionView sessionId={targetSessionId} isParentRunning={isRunning} />
+                  </>
+                )}
 
                 {/* 完成时的输出 */}
                 {isCompleted && state.output !== undefined && state.output !== null && (
@@ -197,17 +202,7 @@ const TaskHeader = memo(function TaskHeader({
       </span>
 
       {/* Agent type badge */}
-      <span
-        className={`px-1.5 py-0.5 text-[10px] font-medium rounded ${
-          isRunning
-            ? 'bg-accent-main-100/20 text-accent-main-100'
-            : isError
-              ? 'bg-danger-100/20 text-danger-100'
-              : isCompleted
-                ? 'bg-accent-secondary-100/20 text-accent-secondary-100'
-                : 'bg-bg-300 text-text-300'
-        }`}
-      >
+      <span className="px-1.5 py-0.5 text-[10px] font-medium font-mono rounded-xs bg-bg-200/60 text-text-400">
         {agentType}
       </span>
 
@@ -219,7 +214,7 @@ const TaskHeader = memo(function TaskHeader({
         <div
           role="button"
           onClick={onStop}
-          className="flex-shrink-0 w-[18px] h-[18px] p-0 flex items-center justify-center bg-accent-main-000 hover:bg-accent-main-200 text-oncolor-100 rounded-sm transition-all active:scale-90"
+          className="flex-shrink-0 w-[18px] h-[18px] p-0 flex items-center justify-center text-text-400 hover:text-danger-100 hover:bg-danger-100/10 rounded-sm transition-colors active:scale-90"
           title={t('task.stop')}
         >
           <StopIcon size={10} />
@@ -399,7 +394,7 @@ const ToolBadge = memo(function ToolBadge({ tool }: { tool: ToolPart }) {
 
   return (
     <span
-      className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono ${
+      className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-xs text-[10px] font-mono ${
         isRunning
           ? 'bg-accent-main-100/10 text-accent-main-100'
           : isError
