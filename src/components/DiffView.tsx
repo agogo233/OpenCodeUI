@@ -100,7 +100,7 @@ export const DiffView = memo(function DiffView({
     <div className="border border-border-200/50 rounded-md overflow-hidden bg-bg-100 font-mono text-xs">
       {/* Header */}
       <div
-        className="flex items-center gap-3 px-3 py-2 bg-bg-200/50 cursor-pointer hover:bg-bg-200 transition-colors select-none"
+        className="flex items-center gap-3 px-3 h-8 bg-bg-200/50 cursor-pointer hover:bg-bg-200 transition-colors select-none"
         onClick={() => setCollapsed(!collapsed)}
       >
         <div className="flex items-center gap-2 min-w-0 flex-1">

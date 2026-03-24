@@ -45,7 +45,7 @@ function TodoList({ todos }: { todos: TodoItem[] }) {
     <div className="border border-border-200/50 rounded-md overflow-hidden bg-bg-100 text-xs">
       {/* Header */}
       <div
-        className="flex items-center justify-between px-3 py-1.5 bg-bg-200/50 hover:bg-bg-200 cursor-pointer select-none transition-colors"
+        className="flex items-center justify-between px-3 h-8 bg-bg-200/50 hover:bg-bg-200 cursor-pointer select-none transition-colors"
         onClick={() => setCollapsed(!collapsed)}
       >
         <div className="flex items-center gap-2">

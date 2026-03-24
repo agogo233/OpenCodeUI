@@ -103,7 +103,7 @@ export const PatchPartView = memo(function PatchPartView({ part }: PatchPartView
   return (
     <div className="rounded-md border border-border-200/60 bg-bg-100/50 overflow-hidden">
       <div
-        className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-bg-200/30 transition-colors"
+        className="flex items-center gap-2 px-3 h-8 cursor-pointer hover:bg-bg-200/30 transition-colors"
         onClick={() => setExpanded(!expanded)}
       >
         <PatchIcon className="w-4 h-4 text-text-400 flex-shrink-0" />
