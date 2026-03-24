@@ -1,4 +1,4 @@
-import { isValidElement, memo, useMemo } from 'react'
+import { Children, cloneElement, isValidElement, memo, useMemo } from 'react'
 import { Streamdown, type Components } from 'streamdown'
 import { math } from '@streamdown/math'
 import { CodeBlock } from './CodeBlock'
@@ -123,6 +123,64 @@ function tableToMarkdown(headers: string[], rows: string[][]): string {
   return lines.join('\n')
 }
 
+function injectTableCopyButton(
+  children: React.ReactNode,
+  copyText: string,
+): { children: React.ReactNode; inserted: boolean } {
+  let inserted = false
+
+  const nextChildren = Children.map(children, section => {
+    if (!isValidElement(section)) return section
+
+    const sectionType = typeof section.type === 'string' ? section.type : (section.type as { name?: string })?.name
+    if (sectionType !== 'thead' && !String(sectionType).toLowerCase().includes('thead')) return section
+
+    const sectionElement = section as React.ReactElement<{ children?: React.ReactNode }>
+    const rows = Children.toArray(sectionElement.props.children)
+    if (rows.length === 0) return section
+
+    return cloneElement(
+      sectionElement,
+      undefined,
+      rows.map((row, rowIndex) => {
+        if (!isValidElement(row) || rowIndex !== rows.length - 1) return row
+
+        const rowElement = row as React.ReactElement<{ children?: React.ReactNode }>
+        const cells = Children.toArray(rowElement.props.children)
+        if (cells.length === 0) return row
+
+        return cloneElement(
+          rowElement,
+          undefined,
+          cells.map((cell, cellIndex) => {
+            if (!isValidElement(cell) || cellIndex !== cells.length - 1 || inserted) return cell
+
+            inserted = true
+            const cellElement = cell as React.ReactElement<{ children?: React.ReactNode }>
+
+            return cloneElement(
+              cellElement,
+              undefined,
+              <>
+                <span className="block pr-8">{cellElement.props.children}</span>
+                <span className="absolute inset-y-0 right-0 flex items-center px-2">
+                  <CopyButton
+                    text={copyText}
+                    position="static"
+                    className="!p-1 opacity-0 group-hover/table:opacity-100 group-focus-within/table:opacity-100 [@media(hover:none)]:opacity-100 transition-opacity"
+                  />
+                </span>
+              </>,
+            )
+          }),
+        )
+      }),
+    )
+  })
+
+  return { children: nextChildren ?? children, inserted }
+}
+
 const MarkdownTable = memo(function MarkdownTable({
   children,
   isReasoning,
@@ -134,6 +192,11 @@ const MarkdownTable = memo(function MarkdownTable({
     const { headers, rows } = extractTableData(children)
     return tableToMarkdown(headers, rows)
   }, [children])
+
+  const { children: tableChildren, inserted: hasInlineCopyButton } = useMemo(() => {
+    if (isReasoning || !copyText) return { children, inserted: false }
+    return injectTableCopyButton(children, copyText)
+  }, [children, copyText, isReasoning])
 
   if (isReasoning) {
     return (
@@ -147,14 +210,14 @@ const MarkdownTable = memo(function MarkdownTable({
     <div className="group/table relative my-5 first:mt-0 last:mb-0 rounded-md border border-border-200/35 w-full">
       {/* Scrollable table area */}
       <div className="overflow-x-auto">
-        <table className="w-full text-[13px] border-collapse">{children}</table>
+        <table className="w-full text-[13px] border-collapse">{tableChildren}</table>
       </div>
       {/* Copy button — outside scroll, pinned to visible top-right */}
-      {copyText && (
+      {copyText && !hasInlineCopyButton && (
         <CopyButton
           text={copyText}
           position="absolute"
-          className="!top-1.5 !right-1.5 opacity-0 group-hover/table:opacity-100 [@media(hover:none)]:opacity-100 transition-opacity z-20"
+          className="!top-1.5 !right-2 opacity-0 group-hover/table:opacity-100 [@media(hover:none)]:opacity-100 transition-opacity z-20"
         />
       )}
     </div>
@@ -322,7 +385,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
           className={
             isReasoning
               ? 'px-3 py-1.5 text-left text-xs font-medium whitespace-nowrap border-b border-border-200/32'
-              : 'px-3 py-2.5 text-left text-[13px] font-semibold whitespace-nowrap border-b border-border-200/38'
+              : 'relative px-3 py-2.5 text-left text-[13px] font-semibold whitespace-nowrap border-b border-border-200/38'
           }
         >
           {children}

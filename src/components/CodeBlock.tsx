@@ -62,11 +62,11 @@ export const CodeBlock = memo(function CodeBlock({
     : 'overflow-auto custom-scrollbar'
 
   // Padding: reasoning is tighter; default reserves top for label row and right for copy button
-  const contentPad = isReasoning ? 'p-3' : showLabel ? 'pt-8 pb-3 px-4' : 'p-4'
+  const contentPad = isReasoning ? 'p-3' : showLabel ? 'pt-0 pb-3.5 px-3.5' : 'p-4'
   const contentPadShiki = isReasoning
     ? '[&_pre]:p-3 [&_pre]:m-0'
     : showLabel
-      ? '[&_pre]:pt-8 [&_pre]:pb-3 [&_pre]:px-4 [&_pre]:m-0'
+      ? '[&_pre]:pt-0 [&_pre]:pb-3.5 [&_pre]:px-3.5 [&_pre]:m-0'
       : '[&_pre]:p-4 [&_pre]:m-0'
 
   const fontSize = isReasoning ? 'text-xs' : 'text-[13px]'
@@ -111,19 +111,22 @@ export const CodeBlock = memo(function CodeBlock({
       className={`group/code relative rounded-md overflow-hidden border border-border-200/40 bg-bg-200/40 w-full max-w-full flex flex-col contain-content ${className}`}
       style={style}
     >
-      {/* Language label — top-left, always visible */}
-      {showLabel && (
-        <span className="absolute top-2 left-4 z-10 text-[11px] text-text-500 font-medium tracking-wide select-none pointer-events-none">
-          {language}
-        </span>
+      {showLabel ? (
+        <div className="flex min-h-10 items-start justify-between pl-3.5 pr-0 pt-2 pb-0">
+          <div className="flex h-8 min-w-0 items-center text-[11px] font-medium leading-none tracking-wide text-text-500 select-none">
+            <span className="truncate">{language}</span>
+          </div>
+          <div className="inline-flex h-8 shrink-0 items-center pr-2 opacity-0 group-hover/code:opacity-100 group-focus-within/code:opacity-100 [@media(hover:none)]:opacity-100 transition-opacity">
+            <CopyButton text={code} position="static" className="!h-8 !w-8 !p-2" />
+          </div>
+        </div>
+      ) : (
+        <CopyButton
+          text={code}
+          position="static"
+          className="!p-1 absolute top-2 right-2 z-10 opacity-0 group-hover/code:opacity-100 group-focus-within/code:opacity-100 [@media(hover:none)]:opacity-100 transition-opacity"
+        />
       )}
-
-      {/* Copy button — top-right, ghost style, appears on hover */}
-      <CopyButton
-        text={code}
-        position="static"
-        className="!p-1 absolute top-2 right-2 z-10 opacity-0 group-hover/code:opacity-100 [@media(hover:none)]:opacity-100 transition-opacity"
-      />
 
       {/* Scrollable content */}
       <div className={scrollClasses} style={maxHeight ? { maxHeight } : undefined}>
