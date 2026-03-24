@@ -213,7 +213,7 @@ export const ReasoningPartView = memo(function ReasoningPartView({ part, isStrea
 
   return (
     <div
-      className={`ring-1 ring-inset ring-border-300/20 rounded-xl overflow-hidden transition-all duration-300 ease-out ${
+      className={`ring-1 ring-inset ring-border-300/20 rounded-lg overflow-hidden transition-all duration-300 ease-out ${
         expanded ? 'w-full' : 'w-[260px]'
       }`}
     >

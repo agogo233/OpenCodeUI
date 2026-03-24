@@ -245,7 +245,7 @@ export const ToolPartView = memo(function ToolPartView({
         {/* Content column */}
         <div className="min-w-0">
           <button
-            className="flex items-center gap-2 w-full h-9 text-left px-2 hover:bg-bg-200/40 rounded-lg transition-colors group/header"
+            className="flex items-center gap-2 w-full h-9 text-left px-2 hover:bg-bg-200/40 rounded-sm transition-colors group/header"
             onClick={() => setExpanded(!expanded)}
           >
             <div className="flex items-baseline gap-2 overflow-hidden flex-1 min-w-0">
@@ -322,7 +322,7 @@ export const ToolPartView = memo(function ToolPartView({
       <div className="flex-1 min-w-0">
         {/* Header - h-9 和 timeline 图标行等高 */}
         <button
-          className="flex items-center gap-2.5 w-full h-9 text-left px-2 hover:bg-bg-200/40 rounded-lg transition-colors group/header"
+          className="flex items-center gap-2.5 w-full h-9 text-left px-2 hover:bg-bg-200/40 rounded-sm transition-colors group/header"
           onClick={() => setExpanded(!expanded)}
         >
           <div className="flex items-baseline gap-2 overflow-hidden flex-1 min-w-0">

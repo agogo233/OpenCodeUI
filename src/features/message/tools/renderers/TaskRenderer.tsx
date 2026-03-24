@@ -111,7 +111,7 @@ export const TaskRenderer = memo(function TaskRenderer({ part }: ToolRendererPro
               <div className="pt-2 space-y-3">
                 {/* Prompt */}
                 {prompt && (
-                  <div className="text-xs text-text-400 bg-bg-200/30 rounded-md px-3 py-2 whitespace-pre-wrap">
+                  <div className="text-xs text-text-400 bg-bg-200/30 rounded-sm px-3 py-2 whitespace-pre-wrap">
                     {prompt.length > 300 ? prompt.slice(0, 300) + '...' : prompt}
                   </div>
                 )}
@@ -317,7 +317,7 @@ const SubSessionView = memo(function SubSessionView({ sessionId }: SubSessionVie
   }
 
   return (
-    <div className="rounded-lg bg-bg-100/50 border border-border-200/30 overflow-hidden">
+    <div className="rounded-md bg-bg-100/50 border border-border-200/30 overflow-hidden">
       {/* Messages */}
       <div
         ref={scrollRef}
@@ -356,7 +356,7 @@ const MessageItem = memo(function MessageItem({ message, isLast }: MessageItemPr
   if (isUser) {
     return (
       <div className="flex justify-end">
-        <div className="max-w-[85%] px-2.5 py-1.5 rounded-lg bg-bg-300 text-text-100 text-[11px] whitespace-pre-wrap break-words">
+        <div className="max-w-[85%] px-2.5 py-1.5 rounded-md bg-bg-300 text-text-100 text-[11px] whitespace-pre-wrap break-words">
           {textContent}
         </div>
       </div>
@@ -419,7 +419,7 @@ const ToolBadge = memo(function ToolBadge({ tool }: { tool: ToolPart }) {
 
 function MessageSkeleton() {
   return (
-    <div className="rounded-lg bg-bg-100/50 border border-border-200/30 p-3 space-y-2">
+    <div className="rounded-md bg-bg-100/50 border border-border-200/30 p-3 space-y-2">
       <div className="h-3 bg-bg-300/50 rounded animate-pulse w-3/4" />
       <div className="h-3 bg-bg-300/50 rounded animate-pulse w-1/2" />
       <div className="h-3 bg-bg-300/50 rounded animate-pulse w-2/3" />

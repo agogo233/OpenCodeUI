@@ -43,7 +43,7 @@ export const SubtaskPartView = memo(function SubtaskPartView({ part }: SubtaskPa
   }
 
   return (
-    <div className="rounded-xl border border-border-200/60 bg-bg-100/50 overflow-hidden">
+    <div className="rounded-md border border-border-200/60 bg-bg-100/50 overflow-hidden">
       {/* Header */}
       <div
         className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-bg-200/30 transition-colors"
@@ -90,7 +90,7 @@ export const SubtaskPartView = memo(function SubtaskPartView({ part }: SubtaskPa
                 e.stopPropagation()
                 handleEnter()
               }}
-              className="px-2.5 py-1 text-xs font-medium text-text-300 hover:text-text-100 hover:bg-bg-200 rounded-lg transition-colors"
+              className="px-2.5 py-1 text-xs font-medium text-text-300 hover:text-text-100 hover:bg-bg-200 rounded-sm transition-colors"
             >
               {t('subtask.enter')}
             </button>
@@ -139,7 +139,7 @@ export const SubtaskPartView = memo(function SubtaskPartView({ part }: SubtaskPa
                 <div className="pt-2 border-t border-border-200/30">
                   <button
                     onClick={handleEnter}
-                    className="w-full flex items-center justify-center gap-2 py-2 text-xs font-medium text-accent-main-100 hover:bg-accent-main-100/10 rounded-lg transition-colors"
+                    className="w-full flex items-center justify-center gap-2 py-2 text-xs font-medium text-accent-main-100 hover:bg-accent-main-100/10 rounded-sm transition-colors"
                   >
                     <ReturnIcon size={14} />
                     {t('subtask.viewFullSession')}

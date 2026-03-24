@@ -170,7 +170,7 @@ export const ContentBlock = memo(function ContentBlock({
   const headerClass = isError ? 'bg-danger-100/8 hover:bg-danger-100/12' : 'bg-bg-200/40 hover:bg-bg-200/60'
 
   return (
-    <div className={`rounded-lg overflow-hidden text-xs contain-content ${containerClass}`}>
+    <div className={`rounded-md overflow-hidden text-xs contain-content ${containerClass}`}>
       {/* Header */}
       <div
         className={`flex items-center gap-2 px-3 h-8 select-none transition-colors ${
