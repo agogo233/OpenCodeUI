@@ -1017,7 +1017,7 @@ function InputBoxComponent({
                       </div>
 
                       {/* Text Input - 简单的 textarea，直接显示文本 */}
-                      <div className="px-4 pt-4 pb-2">
+                      <div className="pt-4 pb-2">
                         <textarea
                           ref={textareaRef}
                           value={text}
@@ -1029,7 +1029,7 @@ function InputBoxComponent({
                           onBlur={handleBlur}
                           disabled={inputDisabled}
                           placeholder={isMobile ? t('inputBox.replyToAgentMobile') : t('inputBox.replyToAgent')}
-                          className="w-full resize-none focus:outline-none focus:ring-0 bg-transparent text-text-100 placeholder:text-text-400 custom-scrollbar"
+                          className="w-full resize-none focus:outline-none focus:ring-0 bg-transparent text-text-100 placeholder:text-text-400 custom-scrollbar px-4"
                           style={{
                             ...TEXT_STYLE,
                             minHeight: '24px',

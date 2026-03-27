@@ -321,16 +321,17 @@ body {
 /* ============================================
  * 全局 Overlay Scrollbar
  * ============================================
- * 原生滚动条已由 :where() 全局隐藏（textarea 除外），
- * 自绘 thumb 由 overlayScrollbar.ts 运行时注入。
+ * 原生滚动条全局隐藏，自绘 thumb 由 overlayScrollbar.ts 注入。
+ * textarea 无法注入子元素所以没有 overlay thumb，
+ * 但原生滚动条一样隐藏——textarea 内容靠滑动/键盘滚动。
  *
  * 下方旧 class 保留为兼容空壳，仅声明 overflow 方向，
  * 不再包含任何原生滚动条样式。
  */
-:where(:not(textarea)) {
+* {
   scrollbar-width: none;
 }
-:where(:not(textarea))::-webkit-scrollbar {
+*::-webkit-scrollbar {
   display: none;
 }
 

@@ -32,7 +32,13 @@ const entries = new Map<HTMLElement, Entry>()
 // ── 判断元素是否可垂直滚动 ──────────────────────────────
 function isScrollableY(el: HTMLElement): boolean {
   if (el === document.documentElement || el === document.body) return false
-  if (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT') return false
+  if (el.tagName === 'INPUT') return false
+
+  // textarea: 只要内容溢出就算可滚动（不管 overflow 值）
+  if (el.tagName === 'TEXTAREA') {
+    return el.scrollHeight > el.clientHeight + 1
+  }
+
   const oy = getComputedStyle(el).overflowY
   if (oy !== 'auto' && oy !== 'scroll' && oy !== 'overlay') return false
   return el.scrollHeight > el.clientHeight + 1
