@@ -28,9 +28,15 @@ const FADE_MS = 800
 
 // ── 方向判断 ────────────────────────────────────────────
 
+/** 带 no-scrollbar / scrollbar-none 的元素故意不要滚动条，跳过 */
+function wantsNoScrollbar(el: HTMLElement): boolean {
+  return el.classList.contains('no-scrollbar') || el.classList.contains('scrollbar-none')
+}
+
 function isScrollableY(el: HTMLElement): boolean {
   if (el === document.documentElement || el === document.body) return false
   if (el.tagName === 'INPUT') return false
+  if (wantsNoScrollbar(el)) return false
   if (el.tagName === 'TEXTAREA') return el.scrollHeight > el.clientHeight + 1
 
   const oy = getComputedStyle(el).overflowY
@@ -41,6 +47,7 @@ function isScrollableY(el: HTMLElement): boolean {
 function isScrollableX(el: HTMLElement): boolean {
   if (el === document.documentElement || el === document.body) return false
   if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') return false
+  if (wantsNoScrollbar(el)) return false
 
   const ox = getComputedStyle(el).overflowX
   if (ox !== 'auto' && ox !== 'scroll' && ox !== 'overlay') return false
