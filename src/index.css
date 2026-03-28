@@ -368,7 +368,7 @@ body {
   overflow-y: hidden;
 }
 
-/* ── Overlay thumb ── */
+/* ── Overlay thumb (vertical, default) ── */
 .os-thumb {
   position: absolute;
   top: 0;
@@ -405,6 +405,34 @@ body {
 .os-thumb.os-dragging::after {
   background-color: hsl(var(--border-300) / 0.6);
   width: 6px;
+}
+
+/* ── Overlay thumb (horizontal) ── */
+.os-thumb.os-thumb-x {
+  top: auto;
+  left: 0;
+  bottom: 0;
+  width: auto;
+  height: 12px;
+}
+
+.os-thumb.os-thumb-x::after {
+  left: 0;
+  right: 0;
+  top: 50%;
+  bottom: auto;
+  transform: translateY(-50%);
+  width: auto;
+  height: 4px;
+  transition:
+    background-color 150ms ease,
+    height 120ms ease;
+}
+
+.os-thumb.os-thumb-x:hover::after,
+.os-thumb.os-thumb-x.os-dragging::after {
+  width: auto;
+  height: 6px;
 }
 
 /* ============================================
