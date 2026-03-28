@@ -141,7 +141,7 @@ export const CollapsedCapsule = memo(function CollapsedCapsule({
       <button
         type="button"
         onClick={onExpand}
-        className="flex items-center gap-1.5 px-3 h-[32px] rounded-full bg-bg-000/95 backdrop-blur-md border border-border-200/50 shadow-lg shadow-black/5 text-text-300 hover:text-text-200 hover:bg-bg-000 active:scale-95 transition-all"
+        className="flex items-center gap-1.5 px-3 h-[32px] rounded-full glass border border-border-200/50 shadow-lg shadow-black/5 text-text-300 hover:text-text-200 hover:bg-bg-000 active:scale-95 transition-all"
       >
         <ArrowUpIcon size={14} />
         <span className="text-[11px]">{t('inputActions.reply')}</span>
