@@ -271,6 +271,11 @@ export function useGlobalEvents(callbacks?: GlobalEventsCallbacks, directories?:
         if (session.parentID) {
           childSessionStore.registerChildSession(session)
         }
+
+        // 同步标题到 messageStore，让 Header 等依赖 messageStore 的组件实时更新
+        if (session.title && messageStore.getSessionState(session.id)) {
+          messageStore.updateSessionMetadata(session.id, { title: session.title })
+        }
       },
 
       // ============================================
