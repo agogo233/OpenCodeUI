@@ -16,7 +16,7 @@
 import { useRef, useEffect, useState, useCallback, useMemo } from 'react'
 import { Trans, useTranslation } from 'react-i18next'
 
-import { ChatArea, InputBox, PermissionDialog, QuestionDialog, type ChatAreaHandle } from '.'
+import { ChatArea, Header, InputBox, PermissionDialog, QuestionDialog, type ChatAreaHandle } from '.'
 import { type ModelSelectorHandle } from './ModelSelector'
 import { OutlineIndex } from '../../components/OutlineIndex'
 import { PaneHeader } from './PaneHeader'
@@ -27,7 +27,7 @@ import { ChatViewportProvider, type ChatViewportValue } from './chatViewport'
 import { SessionNavigationContext } from '../../contexts/SessionNavigationContext'
 import { paneLayoutStore } from '../../store/paneLayoutStore'
 import { autoApproveStore } from '../../store/autoApproveStore'
-import { messageStore } from '../../store'
+import { messageStore, paneControllerStore } from '../../store'
 import { restoreModelSelection } from '../../utils/sessionHelpers'
 import { findModelByKey } from '../../utils/modelUtils'
 import { useTheme } from '../../hooks/useTheme'
@@ -38,6 +38,11 @@ interface ChatPaneProps {
   sessionId: string | null
   isFocused: boolean
   paneCount: number
+  displayMode: 'single' | 'split'
+  onOpenSidebar?: () => void
+  onSplitPane?: () => void
+  navigatePaneToSession: (paneId: string, sessionId: string, directory?: string) => void
+  navigatePaneHome: (paneId: string) => void
 }
 
 // ============================================
@@ -89,7 +94,17 @@ const PANE_VIEWPORT: ChatViewportValue = {
   },
 }
 
-export function ChatPane({ paneId, sessionId, isFocused, paneCount }: ChatPaneProps) {
+export function ChatPane({
+  paneId,
+  sessionId,
+  isFocused,
+  paneCount,
+  displayMode,
+  onOpenSidebar,
+  onSplitPane,
+  navigatePaneToSession,
+  navigatePaneHome,
+}: ChatPaneProps) {
   const { t } = useTranslation(['chat', 'common'])
 
   // ============================================
@@ -137,17 +152,15 @@ export function ChatPane({ paneId, sessionId, isFocused, paneCount }: ChatPanePr
   // Pane-local navigation
   // ============================================
   const navigateToSession = useCallback(
-    (sid: string) => {
-      paneLayoutStore.setPaneSession(paneId, sid)
+    (sid: string, directory?: string) => {
+      navigatePaneToSession(paneId, sid, directory)
     },
-    [paneId],
+    [paneId, navigatePaneToSession],
   )
 
   const navigateHome = useCallback(() => {
-    paneLayoutStore.setPaneSession(paneId, null)
-  }, [paneId])
-
-  const navigationCtx = useMemo(() => ({ navigateToSession }), [navigateToSession])
+    navigatePaneHome(paneId)
+  }, [paneId, navigatePaneHome])
 
   // ============================================
   // Visible Message IDs (for outline index)
@@ -226,17 +239,25 @@ export function ChatPane({ paneId, sessionId, isFocused, paneCount }: ChatPanePr
     handleForkMessage,
     handleNewSession,
     handleVisibleMessageIdsChange,
+    handleArchiveSession,
+    handlePreviousSession,
+    handleNextSession,
+    handleCopyLastResponse,
     restoreAgentFromMessage,
   } = useChatSession({
+    paneId,
     chatAreaRef,
     currentModel,
     refetchModels,
     sessionId,
     navigateToSession,
     navigateHome,
-    skipGlobalSync: true,
-    consumerId: paneId,
   })
+
+  const navigationCtx = useMemo(
+    () => ({ navigateToSession, currentSessionId: routeSessionId, currentDirectory: effectiveDirectory }),
+    [navigateToSession, routeSessionId, effectiveDirectory],
+  )
 
   // ============================================
   // Protect session from eviction while this pane is viewing it
@@ -255,7 +276,7 @@ export function ChatPane({ paneId, sessionId, isFocused, paneCount }: ChatPanePr
   // ============================================
   // Cancel Hint
   // ============================================
-  const { showCancelHint } = useCancelHint(isStreaming, handleAbort)
+  const { showCancelHint, handleCancelMessage } = useCancelHint(isStreaming, handleAbort)
 
   // ============================================
   // Visible IDs bridge
@@ -297,6 +318,14 @@ export function ChatPane({ paneId, sessionId, isFocused, paneCount }: ChatPanePr
     },
     [setSelectedAgent, syncModelForAgent],
   )
+
+  const handleToggleAgentWithSync = useCallback(() => {
+    const primaryAgents = agents.filter(a => a.mode !== 'subagent' && !a.hidden)
+    if (primaryAgents.length <= 1) return
+    const currentIndex = primaryAgents.findIndex(a => a.name === selectedAgent)
+    const nextIndex = (currentIndex + 1) % primaryAgents.length
+    handleAgentChange(primaryAgents[nextIndex].name)
+  }, [agents, selectedAgent, handleAgentChange])
 
   // ============================================
   // Model Restoration Effect
@@ -346,6 +375,97 @@ export function ChatPane({ paneId, sessionId, isFocused, paneCount }: ChatPanePr
     paneLayoutStore.focusPane(paneId)
   }, [paneId])
 
+  const handleToggleFullAuto = useCallback(() => {
+    const mode = autoApproveStore.getPaneFullAutoMode(paneId)
+    if (mode === 'off') {
+      autoApproveStore.setPaneFullAutoMode(paneId, 'session')
+      return
+    }
+    autoApproveStore.setPaneFullAutoMode(paneId, 'off')
+  }, [paneId])
+
+  const openModelSelector = useCallback(() => {
+    modelSelectorRef.current?.openMenu()
+  }, [])
+
+  const contextLimit = currentModel?.contextLimit
+
+  const controllerActionsRef = useRef({
+    newSession: handleNewSession,
+    archiveSession: handleArchiveSession,
+    previousSession: handlePreviousSession,
+    nextSession: handleNextSession,
+    toggleAgent: handleToggleAgentWithSync,
+    copyLastResponse: handleCopyLastResponse,
+    cancelMessage: handleCancelMessage,
+    openModelSelector,
+    toggleFullAuto: handleToggleFullAuto,
+  })
+
+  useEffect(() => {
+    controllerActionsRef.current = {
+      newSession: handleNewSession,
+      archiveSession: handleArchiveSession,
+      previousSession: handlePreviousSession,
+      nextSession: handleNextSession,
+      toggleAgent: handleToggleAgentWithSync,
+      copyLastResponse: handleCopyLastResponse,
+      cancelMessage: handleCancelMessage,
+      openModelSelector,
+      toggleFullAuto: handleToggleFullAuto,
+    }
+  }, [
+    handleNewSession,
+    handleArchiveSession,
+    handlePreviousSession,
+    handleNextSession,
+    handleToggleAgentWithSync,
+    handleCopyLastResponse,
+    handleCancelMessage,
+    openModelSelector,
+    handleToggleFullAuto,
+  ])
+
+  const stableControllerActions = useMemo(
+    () => ({
+      newSession: () => controllerActionsRef.current.newSession(),
+      archiveSession: () => controllerActionsRef.current.archiveSession(),
+      previousSession: () => controllerActionsRef.current.previousSession(),
+      nextSession: () => controllerActionsRef.current.nextSession(),
+      toggleAgent: () => controllerActionsRef.current.toggleAgent(),
+      copyLastResponse: () => controllerActionsRef.current.copyLastResponse(),
+      cancelMessage: () => controllerActionsRef.current.cancelMessage(),
+      openModelSelector: () => controllerActionsRef.current.openModelSelector(),
+      toggleFullAuto: () => controllerActionsRef.current.toggleFullAuto(),
+    }),
+    [],
+  )
+
+  useEffect(() => {
+    return () => {
+      paneControllerStore.removeController(paneId)
+    }
+  }, [paneId])
+
+  useEffect(() => {
+    paneControllerStore.setController(paneId, {
+      paneId,
+      sessionId: routeSessionId,
+      effectiveDirectory: effectiveDirectory || '',
+      contextLimit,
+      newSession: stableControllerActions.newSession,
+      archiveSession: stableControllerActions.archiveSession,
+      previousSession: stableControllerActions.previousSession,
+      nextSession: stableControllerActions.nextSession,
+      toggleAgent: stableControllerActions.toggleAgent,
+      copyLastResponse: stableControllerActions.copyLastResponse,
+      cancelMessage: stableControllerActions.cancelMessage,
+      openModelSelector: stableControllerActions.openModelSelector,
+      toggleFullAuto: stableControllerActions.toggleFullAuto,
+      isStreaming,
+    })
+  }, [paneId, routeSessionId, effectiveDirectory, contextLimit, stableControllerActions, isStreaming])
+
   // ============================================
   // Dialog Collapsed State
   // ============================================
@@ -393,19 +513,181 @@ export function ChatPane({ paneId, sessionId, isFocused, paneCount }: ChatPanePr
   // ============================================
   // Render
   // ============================================
+  const chatContent = (
+    <div className="flex-1 relative overflow-hidden flex flex-col min-h-0">
+      {displayMode === 'single' && (
+        <div className="absolute top-0 left-0 right-0 z-20 pointer-events-none">
+          <div className="pointer-events-auto">
+            <Header
+              models={models}
+              modelsLoading={modelsLoading}
+              selectedModelKey={selectedModelKey}
+              onModelChange={handleModelChange}
+              onOpenSidebar={onOpenSidebar}
+              onSplitPane={onSplitPane}
+              modelSelectorRef={modelSelectorRef}
+            />
+          </div>
+        </div>
+      )}
 
-  return (
-    <ChatViewportProvider value={PANE_VIEWPORT}>
-      <SessionNavigationContext.Provider value={navigationCtx}>
-        <div
-          className={`h-full flex flex-col overflow-hidden rounded-lg transition-all duration-200 ${
-            isFocused
-              ? 'ring-1 ring-accent-main-100/60 bg-bg-100'
-              : 'ring-1 ring-border-200/30 bg-bg-100 hover:ring-border-200/50'
-          }`}
-          onClick={handlePaneFocus}
-        >
-          {/* Pane Header */}
+      <div className="absolute inset-0">
+        <InlineToolRequestContext.Provider value={inlineToolRequestCtx}>
+          <ChatArea
+            ref={chatAreaRef}
+            messages={messages}
+            sessionId={routeSessionId}
+            isStreaming={isStreaming}
+            allowStreamingLayoutAnimation={isAtBottom}
+            loadState={loadState}
+            hasMoreHistory={hasMoreHistory}
+            onLoadMore={loadMoreHistory}
+            onUndo={handleUndoWithAnimation}
+            onFork={handleForkMessage}
+            canUndo={canUndo}
+            registerMessage={registerMessage}
+            retryStatus={retryStatus}
+            bottomPadding={inputBoxHeight}
+            onVisibleMessageIdsChange={handleVisibleIdsChange}
+            onAtBottomChange={setIsAtBottom}
+          />
+        </InlineToolRequestContext.Provider>
+      </div>
+
+      <OutlineIndex
+        messages={messages}
+        visibleMessageIds={visibleMessageIds}
+        onScrollToMessageId={handleOutlineScrollToMessage}
+      />
+
+      <div ref={inputBoxWrapperRef} className="absolute bottom-0 left-0 right-0 z-10 pointer-events-none">
+        {(showCancelHint || (fullAutoHint && !showCancelHint)) && (
+          <div className="absolute bottom-full inset-x-0 flex justify-center pb-2 pointer-events-none z-20">
+            <div className="px-3 py-1.5 glass border border-border-200/60 rounded-lg shadow-lg text-xs text-text-300 animate-in fade-in slide-in-from-bottom-2 duration-150">
+              {showCancelHint ? (
+                <Trans
+                  i18nKey="chat:hints.pressEscAgain"
+                  components={{
+                    1: (
+                      <kbd className="mx-0.5 px-1.5 py-0.5 bg-bg-200 border border-border-200 rounded text-[11px] font-mono font-medium text-text-200" />
+                    ),
+                  }}
+                />
+              ) : (
+                fullAutoHint
+              )}
+            </div>
+          </div>
+        )}
+        <InputBox
+          paneId={paneId}
+          onSend={handleSend}
+          onAbort={handleAbort}
+          onCommand={handleCommand}
+          onNewChat={handleNewSession}
+          disabled={false}
+          isStreaming={isStreaming}
+          agents={agents}
+          selectedAgent={selectedAgent}
+          onAgentChange={handleAgentChange}
+          variants={currentModel?.variants ?? []}
+          selectedVariant={selectedVariant}
+          onVariantChange={handleVariantChange}
+          fileCapabilities={
+            currentModel
+              ? {
+                  image: currentModel.supportsImages,
+                  pdf: currentModel.supportsPdf,
+                  audio: currentModel.supportsAudio,
+                  video: currentModel.supportsVideo,
+                }
+              : undefined
+          }
+          models={models}
+          selectedModelKey={selectedModelKey}
+          onModelChange={handleModelChange}
+          modelsLoading={modelsLoading}
+          modelSelectorRef={modelSelectorRef}
+          rootPath={effectiveDirectory}
+          sessionId={routeSessionId}
+          revertedText={revertedMessage?.text}
+          revertedAttachments={revertedMessage?.attachments}
+          canRedo={canRedo}
+          revertSteps={redoSteps}
+          onRedo={handleRedoWithAnimation}
+          onRedoAll={handleRedoAll}
+          onClearRevert={clearRevert}
+          registerInputBox={registerInputBox}
+          isAtBottom={isAtBottom}
+          showScrollToBottom={!isAtBottom}
+          onScrollToBottom={() => chatAreaRef.current?.scrollToBottom()}
+          collapsedPermission={
+            !inlineToolRequests && pendingPermissionRequests.length > 0 && permissionCollapsed
+              ? {
+                  label: t('chat:permissionDialog.permission', {
+                    permission: pendingPermissionRequests[0].permission,
+                  }),
+                  queueLength: pendingPermissionRequests.length,
+                  onExpand: () => setPermissionCollapsed(false),
+                }
+              : undefined
+          }
+          collapsedQuestion={
+            !inlineToolRequests &&
+            pendingPermissionRequests.length === 0 &&
+            pendingQuestionRequests.length > 0 &&
+            questionCollapsed
+              ? {
+                  label: t('chat:questionDialog.title'),
+                  queueLength: pendingQuestionRequests.length,
+                  onExpand: () => setQuestionCollapsed(false),
+                }
+              : undefined
+          }
+        />
+      </div>
+
+      {!inlineToolRequests && pendingPermissionRequests.length > 0 && (
+        <PermissionDialog
+          request={pendingPermissionRequests[0]}
+          onReply={reply => handlePermissionReply(pendingPermissionRequests[0].id, reply, effectiveDirectory)}
+          queueLength={pendingPermissionRequests.length}
+          isReplying={isReplying}
+          currentSessionId={routeSessionId}
+          collapsed={permissionCollapsed}
+          onCollapsedChange={setPermissionCollapsed}
+        />
+      )}
+
+      {!inlineToolRequests && pendingPermissionRequests.length === 0 && pendingQuestionRequests.length > 0 && (
+        <QuestionDialog
+          request={pendingQuestionRequests[0]}
+          onReply={answers => handleQuestionReply(pendingQuestionRequests[0].id, answers, effectiveDirectory)}
+          onReject={() => handleQuestionReject(pendingQuestionRequests[0].id, effectiveDirectory)}
+          queueLength={pendingQuestionRequests.length}
+          isReplying={isReplying}
+          collapsed={questionCollapsed}
+          onCollapsedChange={setQuestionCollapsed}
+        />
+      )}
+    </div>
+  )
+
+  const content = (
+    <SessionNavigationContext.Provider value={navigationCtx}>
+      <div
+        className={
+          displayMode === 'split'
+            ? `h-full flex flex-col overflow-hidden rounded-lg transition-all duration-200 ${
+                isFocused
+                  ? 'ring-1 ring-accent-main-100/60 bg-bg-100'
+                  : 'ring-1 ring-border-200/30 bg-bg-100 hover:ring-border-200/50'
+              }`
+            : 'h-full flex flex-col overflow-hidden bg-bg-100'
+        }
+        onClick={handlePaneFocus}
+      >
+        {displayMode === 'split' && (
           <PaneHeader
             paneId={paneId}
             sessionId={routeSessionId}
@@ -413,155 +695,15 @@ export function ChatPane({ paneId, sessionId, isFocused, paneCount }: ChatPanePr
             paneCount={paneCount}
             onFocus={handlePaneFocus}
           />
-
-          {/* Chat Content */}
-          <div className="flex-1 relative overflow-hidden flex flex-col min-h-0">
-            {/* Scrollable Area */}
-            <div className="absolute inset-0">
-              <InlineToolRequestContext.Provider value={inlineToolRequestCtx}>
-                <ChatArea
-                  ref={chatAreaRef}
-                  messages={messages}
-                  sessionId={routeSessionId}
-                  isStreaming={isStreaming}
-                  allowStreamingLayoutAnimation={isAtBottom}
-                  loadState={loadState}
-                  hasMoreHistory={hasMoreHistory}
-                  onLoadMore={loadMoreHistory}
-                  onUndo={handleUndoWithAnimation}
-                  onFork={handleForkMessage}
-                  canUndo={canUndo}
-                  registerMessage={registerMessage}
-                  retryStatus={retryStatus}
-                  bottomPadding={inputBoxHeight}
-                  onVisibleMessageIdsChange={handleVisibleIdsChange}
-                  onAtBottomChange={setIsAtBottom}
-                />
-              </InlineToolRequestContext.Provider>
-            </div>
-
-            {/* Outline Index */}
-            <OutlineIndex
-              messages={messages}
-              visibleMessageIds={visibleMessageIds}
-              onScrollToMessageId={handleOutlineScrollToMessage}
-            />
-
-            {/* Floating Input Box */}
-            <div ref={inputBoxWrapperRef} className="absolute bottom-0 left-0 right-0 z-10 pointer-events-none">
-              {/* Hints */}
-              {(showCancelHint || (fullAutoHint && !showCancelHint)) && (
-                <div className="absolute bottom-full inset-x-0 flex justify-center pb-2 pointer-events-none z-20">
-                  <div className="px-3 py-1.5 glass border border-border-200/60 rounded-lg shadow-lg text-xs text-text-300 animate-in fade-in slide-in-from-bottom-2 duration-150">
-                    {showCancelHint ? (
-                      <Trans
-                        i18nKey="chat:hints.pressEscAgain"
-                        components={{
-                          1: (
-                            <kbd className="mx-0.5 px-1.5 py-0.5 bg-bg-200 border border-border-200 rounded text-[11px] font-mono font-medium text-text-200" />
-                          ),
-                        }}
-                      />
-                    ) : (
-                      fullAutoHint
-                    )}
-                  </div>
-                </div>
-              )}
-              <InputBox
-                onSend={handleSend}
-                onAbort={handleAbort}
-                onCommand={handleCommand}
-                onNewChat={handleNewSession}
-                disabled={false}
-                isStreaming={isStreaming}
-                agents={agents}
-                selectedAgent={selectedAgent}
-                onAgentChange={handleAgentChange}
-                variants={currentModel?.variants ?? []}
-                selectedVariant={selectedVariant}
-                onVariantChange={handleVariantChange}
-                fileCapabilities={
-                  currentModel
-                    ? {
-                        image: currentModel.supportsImages,
-                        pdf: currentModel.supportsPdf,
-                        audio: currentModel.supportsAudio,
-                        video: currentModel.supportsVideo,
-                      }
-                    : undefined
-                }
-                models={models}
-                selectedModelKey={selectedModelKey}
-                onModelChange={handleModelChange}
-                modelsLoading={modelsLoading}
-                modelSelectorRef={modelSelectorRef}
-                rootPath={effectiveDirectory}
-                sessionId={routeSessionId}
-                revertedText={revertedMessage?.text}
-                revertedAttachments={revertedMessage?.attachments}
-                canRedo={canRedo}
-                revertSteps={redoSteps}
-                onRedo={handleRedoWithAnimation}
-                onRedoAll={handleRedoAll}
-                onClearRevert={clearRevert}
-                registerInputBox={registerInputBox}
-                isAtBottom={isAtBottom}
-                showScrollToBottom={!isAtBottom}
-                onScrollToBottom={() => chatAreaRef.current?.scrollToBottom()}
-                collapsedPermission={
-                  !inlineToolRequests && pendingPermissionRequests.length > 0 && permissionCollapsed
-                    ? {
-                        label: t('chat:permissionDialog.permission', {
-                          permission: pendingPermissionRequests[0].permission,
-                        }),
-                        queueLength: pendingPermissionRequests.length,
-                        onExpand: () => setPermissionCollapsed(false),
-                      }
-                    : undefined
-                }
-                collapsedQuestion={
-                  !inlineToolRequests &&
-                  pendingPermissionRequests.length === 0 &&
-                  pendingQuestionRequests.length > 0 &&
-                  questionCollapsed
-                    ? {
-                        label: t('chat:questionDialog.title'),
-                        queueLength: pendingQuestionRequests.length,
-                        onExpand: () => setQuestionCollapsed(false),
-                      }
-                    : undefined
-                }
-              />
-            </div>
-
-            {/* Permission / Question Dialogs */}
-            {!inlineToolRequests && pendingPermissionRequests.length > 0 && (
-              <PermissionDialog
-                request={pendingPermissionRequests[0]}
-                onReply={reply => handlePermissionReply(pendingPermissionRequests[0].id, reply, effectiveDirectory)}
-                queueLength={pendingPermissionRequests.length}
-                isReplying={isReplying}
-                currentSessionId={routeSessionId}
-                collapsed={permissionCollapsed}
-                onCollapsedChange={setPermissionCollapsed}
-              />
-            )}
-
-            {!inlineToolRequests && pendingPermissionRequests.length === 0 && pendingQuestionRequests.length > 0 && (
-              <QuestionDialog
-                request={pendingQuestionRequests[0]}
-                onReply={answers => handleQuestionReply(pendingQuestionRequests[0].id, answers, effectiveDirectory)}
-                onReject={() => handleQuestionReject(pendingQuestionRequests[0].id, effectiveDirectory)}
-                queueLength={pendingQuestionRequests.length}
-                isReplying={isReplying}
-                collapsed={questionCollapsed}
-                onCollapsedChange={setQuestionCollapsed}
-              />
-            )}
-          </div>
-        </div>
-      </SessionNavigationContext.Provider>
-    </ChatViewportProvider>
+        )}
+        {chatContent}
+      </div>
+    </SessionNavigationContext.Provider>
   )
+
+  if (displayMode === 'split') {
+    return <ChatViewportProvider value={PANE_VIEWPORT}>{content}</ChatViewportProvider>
+  }
+
+  return content
 }

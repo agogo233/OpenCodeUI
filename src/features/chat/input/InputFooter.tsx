@@ -12,10 +12,10 @@ import type { TodoItem } from '../../../types/api/event'
 // Full Auto 状态 hook
 // ============================================
 
-function useFullAutoMode(): FullAutoMode {
+function useFullAutoMode(paneId?: string): FullAutoMode {
   return useSyncExternalStore(
     cb => autoApproveStore.onFullAutoChange(cb),
-    () => autoApproveStore.fullAutoMode,
+    () => (paneId ? autoApproveStore.getPaneFullAutoMode(paneId) : autoApproveStore.fullAutoMode),
   )
 }
 
@@ -26,12 +26,18 @@ const TODO_SWAP_DURATION_MS = 260
 // ============================================
 
 interface InputFooterProps {
+  paneId?: string
   sessionId?: string | null
   onNewChat?: () => void
   inputContainerRef?: RefObject<HTMLDivElement | null>
 }
 
-export const InputFooter = memo(function InputFooter({ sessionId, onNewChat, inputContainerRef }: InputFooterProps) {
+export const InputFooter = memo(function InputFooter({
+  paneId,
+  sessionId,
+  onNewChat,
+  inputContainerRef,
+}: InputFooterProps) {
   const { t } = useTranslation(['chat', 'common'])
   const todos = useTodos(sessionId ?? null)
   const stats = useTodoStats(sessionId ?? null)
@@ -41,7 +47,7 @@ export const InputFooter = memo(function InputFooter({ sessionId, onNewChat, inp
   const loadedRef = useRef<string | null>(null)
   const closeTimerRef = useRef<number | null>(null)
   const openingFrameRef = useRef<number | null>(null)
-  const fullAutoMode = useFullAutoMode()
+  const fullAutoMode = useFullAutoMode(paneId)
 
   // 加载 session 时拉取初始 todos
   useEffect(() => {
@@ -191,7 +197,13 @@ export const InputFooter = memo(function InputFooter({ sessionId, onNewChat, inp
       {/* Full Auto 三态切换: off → session → global → off */}
       <button
         onClick={() => {
-          if (fullAutoMode === 'off') {
+          if (paneId) {
+            if (fullAutoMode === 'off') {
+              autoApproveStore.setPaneFullAutoMode(paneId, 'session')
+            } else {
+              autoApproveStore.setPaneFullAutoMode(paneId, 'off')
+            }
+          } else if (fullAutoMode === 'off') {
             autoApproveStore.setFullAutoMode('session')
           } else if (fullAutoMode === 'session') {
             autoApproveStore.setFullAutoMode('global')

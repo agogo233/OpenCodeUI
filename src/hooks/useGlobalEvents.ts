@@ -110,6 +110,17 @@ export function hasConsumerForSession(sessionId: string): boolean {
   return false
 }
 
+/** 检查是否有“其他”消费者仍在使用该 sessionId（排除当前 pane 自己） */
+export function hasOtherConsumerForSession(sessionId: string, consumerId: string): boolean {
+  for (const [id, consumer] of sessionConsumers.entries()) {
+    if (id === consumerId) continue
+    if (!consumer.sessionId) continue
+    if (consumer.sessionId === sessionId) return true
+    if (childSessionStore.belongsToSession(sessionId, consumer.sessionId)) return true
+  }
+  return false
+}
+
 // ============================================
 // 待处理请求缓存 - 处理 permission/question 事件先于 session.created 到达的时序问题
 // 同一 session 可能有多个 pending 请求，所以用数组

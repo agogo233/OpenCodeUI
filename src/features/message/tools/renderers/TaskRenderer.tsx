@@ -25,6 +25,7 @@ const EMPTY_MESSAGES: Message[] = []
 
 export const TaskRenderer = memo(function TaskRenderer({ part }: ToolRendererProps) {
   const { t } = useTranslation('message')
+  const { currentSessionId, currentDirectory } = useSessionNavigation()
   const { state } = part
   const [expanded, setExpanded] = useState(() => state.status === 'running' || state.status === 'pending')
   const shouldRenderBody = useDelayedRender(expanded)
@@ -51,12 +52,12 @@ export const TaskRenderer = memo(function TaskRenderer({ part }: ToolRendererPro
       e.stopPropagation()
       if (!targetSessionId) return
       const childInfo = childSessionStore.getSessionInfo(targetSessionId)
-      const parentSessionId = childInfo?.parentID || messageStore.getCurrentSessionId()
+      const parentSessionId = childInfo?.parentID || currentSessionId || null
       const parentState = parentSessionId ? messageStore.getSessionState(parentSessionId) : null
-      const directory = parentState?.directory || ''
+      const directory = parentState?.directory || currentDirectory || ''
       abortSession(targetSessionId, directory)
     },
-    [targetSessionId],
+    [targetSessionId, currentSessionId, currentDirectory],
   )
 
   // 运行时自动展开
@@ -162,20 +163,20 @@ const TaskHeader = memo(function TaskHeader({
   onStop,
 }: TaskHeaderProps) {
   const { t } = useTranslation('message')
-  const { navigateToSession } = useSessionNavigation()
+  const { navigateToSession, currentSessionId, currentDirectory } = useSessionNavigation()
   const handleOpenSession = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation()
       if (!sessionId) return
 
       const childInfo = childSessionStore.getSessionInfo(sessionId)
-      const parentSessionId = childInfo?.parentID || messageStore.getCurrentSessionId()
+      const parentSessionId = childInfo?.parentID || currentSessionId || null
       const parentState = parentSessionId ? messageStore.getSessionState(parentSessionId) : null
-      const directory = parentState?.directory || ''
+      const directory = parentState?.directory || currentDirectory || ''
 
       navigateToSession(sessionId, directory || undefined)
     },
-    [sessionId, navigateToSession],
+    [sessionId, navigateToSession, currentSessionId, currentDirectory],
   )
 
   const isRunning = status === 'running' || status === 'pending'

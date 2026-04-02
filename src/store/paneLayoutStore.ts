@@ -37,6 +37,7 @@ export type PaneNode = PaneLeaf | PaneSplit
 export interface PaneLayoutSnapshot {
   root: PaneNode
   focusedPaneId: string | null
+  focusedSessionId: string | null
   /** Total number of leaves */
   paneCount: number
   /** Whether split mode is active (paneCount > 1) */
@@ -162,9 +163,11 @@ function createPaneLayoutStore() {
 
   function _snapshot(): PaneLayoutSnapshot {
     const count = countLeaves(_root)
+    const focusedLeaf = _focusedPaneId ? findLeaf(_root, _focusedPaneId) : null
     return {
       root: _root,
       focusedPaneId: _focusedPaneId,
+      focusedSessionId: focusedLeaf?.sessionId ?? null,
       paneCount: count,
       isSplit: count > 1,
     }
@@ -196,6 +199,14 @@ function createPaneLayoutStore() {
 
     getFocusedPaneId() {
       return _focusedPaneId
+    },
+
+    getFocusedLeaf() {
+      return _focusedPaneId ? findLeaf(_root, _focusedPaneId) : null
+    },
+
+    getFocusedSessionId() {
+      return _focusedPaneId ? (findLeaf(_root, _focusedPaneId)?.sessionId ?? null) : null
     },
 
     findLeaf(paneId: string) {
@@ -230,6 +241,11 @@ function createPaneLayoutStore() {
       if (!leaf || leaf.sessionId === sessionId) return
       _root = replaceNode(_root, paneId, { ...leaf, sessionId })
       _refreshSnapshot()
+    },
+
+    setFocusedSession(sessionId: string | null) {
+      if (!_focusedPaneId) return
+      this.setPaneSession(_focusedPaneId, sessionId)
     },
 
     /**

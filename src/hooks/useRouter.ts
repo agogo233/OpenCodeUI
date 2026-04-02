@@ -91,10 +91,11 @@ export function useRouter() {
 
   // 替换当前路由（不产生历史记录）
   const replaceSession = useCallback(
-    (sessionId: string | null) => {
-      const newHash = buildHash(sessionId, route.directory)
+    (sessionId: string | null, directory?: string) => {
+      const dir = directory !== undefined ? normalizeToForwardSlash(directory) || undefined : route.directory
+      const newHash = buildHash(sessionId, dir)
       window.history.replaceState(null, '', newHash)
-      setRoute({ sessionId, directory: route.directory })
+      setRoute({ sessionId, directory: dir })
     },
     [route.directory],
   )
