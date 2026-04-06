@@ -22,7 +22,7 @@ interface SessionChildrenSlotProps {
   // ---- 编辑模式 ----
   isEditMode?: boolean
   selectedSessionIds?: Set<string>
-  onToggleSessionSelection?: (sessionId: string) => void
+  onToggleSessionSelection?: (sessionId: string, options?: { shiftKey?: boolean }) => void
 }
 
 export function SessionChildrenSlot({
@@ -88,6 +88,7 @@ export function SessionChildrenSlot({
   }, [deleteConfirm.sessionId, selectedSessionId, onDeleteSelected])
 
   const list = fetchAll ? fetched : givenChildren
+
   if (!list?.length && !loading) return null
 
   return (
@@ -111,7 +112,9 @@ export function SessionChildrenSlot({
             showDirectory={false}
             isEditMode={isEditMode}
             isChecked={selectedSessionIds?.has(child.id)}
-            onToggleCheck={onToggleSessionSelection ? () => onToggleSessionSelection(child.id) : undefined}
+            onToggleCheck={
+              onToggleSessionSelection ? options => onToggleSessionSelection(child.id, options) : undefined
+            }
           />
         ))
       )}

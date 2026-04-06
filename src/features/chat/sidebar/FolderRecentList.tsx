@@ -41,8 +41,8 @@ interface FolderRecentListProps {
   isEditMode?: boolean
   selectedSessionIds?: Set<string>
   selectedProjectIds?: Set<string>
-  onToggleSessionSelection?: (sessionId: string) => void
-  onToggleProjectSelection?: (projectId: string) => void
+  onToggleSessionSelection?: (sessionId: string, options?: { shiftKey?: boolean }) => void
+  onToggleProjectSelection?: (projectId: string, options?: { shiftKey?: boolean }) => void
 }
 
 interface PendingDeleteSession {
@@ -416,7 +416,7 @@ export function FolderRecentList({
 
   return (
     <>
-      <div className="h-full overflow-y-auto custom-scrollbar px-1.5 py-1">
+      <div className="h-full overflow-y-auto custom-scrollbar px-1.5 py-1 select-none">
         {projects.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center px-6 text-center text-text-400 opacity-70">
             <p className="text-xs font-medium text-text-300">{t('sidebar.noProjectFoldersYet')}</p>
@@ -457,7 +457,7 @@ export function FolderRecentList({
                   isEditMode={isEditMode}
                   isProjectChecked={selectedProjectIds?.has(project.id)}
                   onToggleProjectCheck={
-                    onToggleProjectSelection ? () => onToggleProjectSelection(project.id) : undefined
+                    onToggleProjectSelection ? options => onToggleProjectSelection(project.id, options) : undefined
                   }
                   selectedSessionIds={selectedSessionIds}
                   onToggleSessionSelection={onToggleSessionSelection}
@@ -515,9 +515,9 @@ interface FolderRecentSectionProps {
   // ---- 编辑模式 ----
   isEditMode?: boolean
   isProjectChecked?: boolean
-  onToggleProjectCheck?: () => void
+  onToggleProjectCheck?: (options?: { shiftKey?: boolean }) => void
   selectedSessionIds?: Set<string>
-  onToggleSessionSelection?: (sessionId: string) => void
+  onToggleSessionSelection?: (sessionId: string, options?: { shiftKey?: boolean }) => void
 }
 
 function FolderRecentSection({
@@ -586,6 +586,11 @@ function FolderRecentSection({
     [sessions, onRequestDeleteSession, removeLocalSession],
   )
 
+  const handleProjectCheckClick = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    onToggleProjectCheck?.({ shiftKey: e.shiftKey })
+  }
+
   const projectName = project.name || getDirectoryName(project.worktree) || project.worktree
   const FolderDisplayIcon = isExpanded ? FolderOpenIcon : FolderIcon
 
@@ -601,31 +606,36 @@ function FolderRecentSection({
         }`}
       >
         {/* 文件夹行 */}
-        <div className="relative flex w-full items-center rounded-md hover:bg-bg-200/40 transition-colors duration-150">
+        <div className="relative flex w-full items-center rounded-md hover:bg-bg-200/40 transition-colors duration-150 select-none">
           {/* 选中左侧色条 */}
           {isEditMode && isProjectChecked && (
             <span className="absolute left-0 top-1.5 bottom-1.5 w-[2px] rounded-full bg-accent-main-100" />
           )}
           {/* 编辑模式：项目 checkbox */}
           {isEditMode && (
-            <span
-              onClick={e => {
+            <button
+              type="button"
+              aria-pressed={isProjectChecked}
+              data-selection-kind="project"
+              data-selection-id={project.id}
+              onMouseDown={e => {
+                e.preventDefault()
                 e.stopPropagation()
-                onToggleProjectCheck?.()
               }}
-              className={`shrink-0 flex items-center justify-center w-3.5 h-3.5 ml-2 rounded-full cursor-default transition-colors ${
+              onClick={handleProjectCheckClick}
+              className={`shrink-0 flex items-center justify-center w-3.5 h-3.5 ml-2 rounded-full cursor-pointer transition-colors ${
                 isProjectChecked ? 'bg-accent-main-100' : 'border border-text-500/50 hover:border-text-400'
               }`}
             >
               {isProjectChecked && <CheckIcon size={9} className="text-white" />}
-            </span>
+            </button>
           )}
           <button
             onClick={() => {
               if (!isEditMode) onSelectProject()
               onToggle()
             }}
-            className={`flex flex-1 min-w-0 items-center gap-1.5 ${isEditMode ? 'pl-1.5' : 'pl-2'} pr-2 py-1.5 text-left cursor-default`}
+            className={`flex flex-1 min-w-0 items-center gap-1.5 ${isEditMode ? 'pl-1.5' : 'pl-2'} pr-2 py-1.5 text-left cursor-default select-none`}
             title={project.worktree}
           >
             <FolderDisplayIcon size={15} className="shrink-0 text-text-400" />
@@ -681,7 +691,9 @@ function FolderRecentSection({
                         isEditMode={isEditMode}
                         isChecked={selectedSessionIds?.has(session.id)}
                         onToggleCheck={
-                          onToggleSessionSelection ? () => onToggleSessionSelection(session.id) : undefined
+                          onToggleSessionSelection
+                            ? options => onToggleSessionSelection(session.id, options)
+                            : undefined
                         }
                       />
                       {onSelectChildSession &&

@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState, useEffect } from 'react'
+import { useCallback, useMemo, useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { SessionList } from '../../sessions'
 import { FolderRecentList } from './FolderRecentList'
@@ -62,6 +62,17 @@ interface ProjectItem {
   canReorder?: boolean
 }
 
+function getSelectionRange(visibleIds: string[], anchorId: string, targetId: string) {
+  const startIndex = visibleIds.indexOf(anchorId)
+  const endIndex = visibleIds.indexOf(targetId)
+
+  if (startIndex === -1 || endIndex === -1) return null
+
+  const from = Math.min(startIndex, endIndex)
+  const to = Math.max(startIndex, endIndex)
+  return visibleIds.slice(from, to + 1)
+}
+
 export function SidePanel({
   onNewSession,
   onSelectSession,
@@ -98,37 +109,86 @@ export function SidePanel({
   const [isEditMode, setIsEditMode] = useState(false)
   const [selectedSessionIds, setSelectedSessionIds] = useState<Set<string>>(new Set())
   const [selectedProjectIds, setSelectedProjectIds] = useState<Set<string>>(new Set())
+  const sessionSelectionAnchorIdRef = useRef<string | null>(null)
+  const projectSelectionAnchorIdRef = useRef<string | null>(null)
+  const recentsSelectionRootRef = useRef<HTMLDivElement>(null)
   // 批量删除确认弹窗
   const [batchDeleteSessionConfirm, setBatchDeleteSessionConfirm] = useState(false)
   const [batchRemoveProjectConfirm, setBatchRemoveProjectConfirm] = useState(false)
   const [isBatchDeleting, setIsBatchDeleting] = useState(false)
 
-  const toggleSessionSelection = useCallback((sessionId: string) => {
-    setSelectedSessionIds(prev => {
-      const next = new Set(prev)
-      if (next.has(sessionId)) next.delete(sessionId)
-      else next.add(sessionId)
-      return next
-    })
+  const getVisibleSelectionIds = useCallback((kind: 'session' | 'project') => {
+    const root = recentsSelectionRootRef.current
+    if (!root) return []
+
+    return Array.from(root.querySelectorAll<HTMLElement>(`[data-selection-kind="${kind}"]`))
+      .filter(element => element.getClientRects().length > 0)
+      .map(element => element.dataset.selectionId)
+      .filter((id): id is string => Boolean(id))
   }, [])
 
-  const toggleProjectSelection = useCallback((projectId: string) => {
-    setSelectedProjectIds(prev => {
-      const next = new Set(prev)
-      if (next.has(projectId)) next.delete(projectId)
-      else next.add(projectId)
-      return next
-    })
-  }, [])
+  const toggleSessionSelection = useCallback(
+    (sessionId: string, options?: { shiftKey?: boolean }) => {
+      const anchorId = sessionSelectionAnchorIdRef.current
+      const visibleIds = getVisibleSelectionIds('session')
+
+      setSelectedSessionIds(prev => {
+        if (options?.shiftKey && anchorId) {
+          const range = getSelectionRange(visibleIds, anchorId, sessionId)
+          if (range) {
+            const next = new Set(prev)
+            for (const id of range) next.add(id)
+            return next
+          }
+        }
+
+        const next = new Set(prev)
+        if (next.has(sessionId)) next.delete(sessionId)
+        else next.add(sessionId)
+        return next
+      })
+      sessionSelectionAnchorIdRef.current = sessionId
+    },
+    [getVisibleSelectionIds],
+  )
+
+  const toggleProjectSelection = useCallback(
+    (projectId: string, options?: { shiftKey?: boolean }) => {
+      const anchorId = projectSelectionAnchorIdRef.current
+      const visibleIds = getVisibleSelectionIds('project')
+
+      setSelectedProjectIds(prev => {
+        if (options?.shiftKey && anchorId) {
+          const range = getSelectionRange(visibleIds, anchorId, projectId)
+          if (range) {
+            const next = new Set(prev)
+            for (const id of range) next.add(id)
+            return next
+          }
+        }
+
+        const next = new Set(prev)
+        if (next.has(projectId)) next.delete(projectId)
+        else next.add(projectId)
+        return next
+      })
+      projectSelectionAnchorIdRef.current = projectId
+    },
+    [getVisibleSelectionIds],
+  )
 
   const exitEditMode = useCallback(() => {
     setIsEditMode(false)
     setSelectedSessionIds(new Set())
     setSelectedProjectIds(new Set())
+    sessionSelectionAnchorIdRef.current = null
+    projectSelectionAnchorIdRef.current = null
   }, [])
 
   const enterEditMode = useCallback(() => {
     setIsEditMode(true)
+    sessionSelectionAnchorIdRef.current = null
+    projectSelectionAnchorIdRef.current = null
   }, [])
 
   const showLabels = isExpanded || isMobile
@@ -452,6 +512,7 @@ export function SidePanel({
 
     await refresh()
     setSelectedSessionIds(new Set())
+    sessionSelectionAnchorIdRef.current = null
     setBatchDeleteSessionConfirm(false)
     setIsBatchDeleting(false)
 
@@ -467,6 +528,7 @@ export function SidePanel({
       removeDirectory(projectId)
     }
     setSelectedProjectIds(new Set())
+    projectSelectionAnchorIdRef.current = null
     setBatchRemoveProjectConfirm(false)
   }, [selectedProjectIds, removeDirectory])
 
@@ -714,6 +776,7 @@ export function SidePanel({
             {/* 编辑按钮 — 只在 Recents tab 显示 */}
             {sidebarTab === 'recents' && (
               <button
+                onMouseDown={e => e.preventDefault()}
                 onClick={isEditMode ? exitEditMode : enterEditMode}
                 className={`ml-auto p-1 rounded-md transition-colors duration-150 ${
                   isEditMode
@@ -759,7 +822,7 @@ export function SidePanel({
 
           {/* Recents Tab */}
           {sidebarTab === 'recents' && (
-            <div className="flex-1 overflow-hidden">
+            <div ref={recentsSelectionRootRef} className="flex-1 overflow-hidden">
               {sidebarFolderRecents && !search ? (
                 <FolderRecentList
                   projects={folderProjects}
