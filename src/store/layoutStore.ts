@@ -7,6 +7,7 @@ export type PanelPosition = 'bottom' | 'right'
 
 // 面板内容类型
 export type PanelTabType = 'terminal' | 'files' | 'changes' | 'mcp' | 'skill' | 'worktree'
+type PersistedPanelTabType = Exclude<PanelTabType, 'terminal'>
 
 // 统一的面板标签
 export interface PanelTab {
@@ -68,8 +69,143 @@ const STORAGE_KEY_SIDEBAR = 'opencode-sidebar-expanded'
 const STORAGE_KEY_SIDEBAR_FOLDER_RECENTS = 'opencode-sidebar-folder-recents'
 const STORAGE_KEY_SIDEBAR_FOLDER_RECENTS_SHOW_DIFF = 'opencode-sidebar-folder-recents-show-diff'
 const STORAGE_KEY_SIDEBAR_SHOW_CHILD_SESSIONS = 'opencode-sidebar-show-child-sessions'
+const STORAGE_KEY_PANEL_LAYOUT = 'opencode-panel-layout'
+const STORAGE_KEY_TERMINAL_LAYOUT = 'opencode-terminal-layout'
 
-class LayoutStore {
+interface PersistedPanelTab {
+  id: string
+  type: PersistedPanelTabType
+  position: PanelPosition
+  title?: string
+}
+
+interface PersistedPanelLayout {
+  version: 1
+  panelTabs: PersistedPanelTab[]
+  activeTabId: LayoutState['activeTabId']
+  rightPanelOpen: boolean
+  bottomPanelOpen: boolean
+}
+
+interface PersistedTerminalDirectoryLayout {
+  order: Record<PanelPosition, string[]>
+  activeTabId: LayoutState['activeTabId']
+}
+
+interface PersistedTerminalLayoutMap {
+  version: 1
+  directories: Record<string, PersistedTerminalDirectoryLayout>
+}
+
+const PANEL_POSITIONS: PanelPosition[] = ['bottom', 'right']
+const PERSISTED_PANEL_TAB_TYPES: PersistedPanelTabType[] = ['files', 'changes', 'mcp', 'skill', 'worktree']
+
+function isPanelPosition(value: unknown): value is PanelPosition {
+  return typeof value === 'string' && PANEL_POSITIONS.includes(value as PanelPosition)
+}
+
+function isPersistedPanelTabType(value: unknown): value is PersistedPanelTabType {
+  return typeof value === 'string' && PERSISTED_PANEL_TAB_TYPES.includes(value as PersistedPanelTabType)
+}
+
+function normalizePersistedPanelTab(tab: PersistedPanelTab): PanelTab {
+  if (tab.type === 'files') {
+    return {
+      id: tab.id,
+      type: 'files',
+      position: tab.position,
+      title: tab.title,
+      previewFile: null,
+      previewFiles: [],
+    }
+  }
+
+  return {
+    id: tab.id,
+    type: tab.type,
+    position: tab.position,
+    title: tab.title,
+  }
+}
+
+function sanitizePersistedPanelLayout(raw: unknown): PersistedPanelLayout | null {
+  if (!raw || typeof raw !== 'object') return null
+
+  const data = raw as Partial<PersistedPanelLayout>
+  if (
+    data.version !== 1 ||
+    !Array.isArray(data.panelTabs) ||
+    !data.activeTabId ||
+    typeof data.activeTabId !== 'object'
+  ) {
+    return null
+  }
+
+  const seenIds = new Set<string>()
+  const panelTabs: PersistedPanelTab[] = []
+  for (const item of data.panelTabs) {
+    if (!item || typeof item !== 'object') continue
+    const tab = item as Partial<PersistedPanelTab>
+    if (typeof tab.id !== 'string' || !tab.id || seenIds.has(tab.id)) continue
+    if (!isPersistedPanelTabType(tab.type) || !isPanelPosition(tab.position)) continue
+    if (tab.title !== undefined && typeof tab.title !== 'string') continue
+    seenIds.add(tab.id)
+    panelTabs.push({ id: tab.id, type: tab.type, position: tab.position, title: tab.title })
+  }
+
+  return {
+    version: 1,
+    panelTabs,
+    activeTabId: {
+      bottom: typeof data.activeTabId.bottom === 'string' ? data.activeTabId.bottom : null,
+      right: typeof data.activeTabId.right === 'string' ? data.activeTabId.right : null,
+    },
+    rightPanelOpen: data.rightPanelOpen === true,
+    bottomPanelOpen: data.bottomPanelOpen === true,
+  }
+}
+
+function sanitizePersistedTerminalLayoutMap(raw: unknown): PersistedTerminalLayoutMap {
+  if (!raw || typeof raw !== 'object') {
+    return { version: 1, directories: {} }
+  }
+
+  const data = raw as Partial<PersistedTerminalLayoutMap>
+  if (data.version !== 1 || !data.directories || typeof data.directories !== 'object') {
+    return { version: 1, directories: {} }
+  }
+
+  const directories: Record<string, PersistedTerminalDirectoryLayout> = {}
+
+  for (const [directory, value] of Object.entries(data.directories)) {
+    if (!directory || !value || typeof value !== 'object') continue
+    const entry = value as Partial<PersistedTerminalDirectoryLayout>
+    const rawOrder = entry.order
+    const rawActiveTabId = entry.activeTabId
+    if (!rawOrder || typeof rawOrder !== 'object' || !rawActiveTabId || typeof rawActiveTabId !== 'object') continue
+
+    const order = {
+      bottom: Array.isArray(rawOrder.bottom)
+        ? rawOrder.bottom.filter((id): id is string => typeof id === 'string' && id.length > 0)
+        : [],
+      right: Array.isArray(rawOrder.right)
+        ? rawOrder.right.filter((id): id is string => typeof id === 'string' && id.length > 0)
+        : [],
+    }
+
+    directories[directory] = {
+      order,
+      activeTabId: {
+        bottom: typeof rawActiveTabId.bottom === 'string' ? rawActiveTabId.bottom : null,
+        right: typeof rawActiveTabId.right === 'string' ? rawActiveTabId.right : null,
+      },
+    }
+  }
+
+  return { version: 1, directories }
+}
+
+export class LayoutStore {
   private state: LayoutState = {
     panelTabs: [
       // 默认 tabs: files 和 changes 在右侧面板
@@ -90,6 +226,55 @@ class LayoutStore {
     bottomPanelHeight: 250,
   }
   private subscribers = new Set<Subscriber>()
+  private currentTerminalDirectory: string | null = null
+
+  private persistPanelLayout() {
+    try {
+      const persisted: PersistedPanelLayout = {
+        version: 1,
+        panelTabs: this.state.panelTabs
+          .filter((tab): tab is PanelTab & { type: PersistedPanelTabType } => tab.type !== 'terminal')
+          .map(tab => ({
+            id: tab.id,
+            type: tab.type,
+            position: tab.position,
+            title: tab.title,
+          })),
+        activeTabId: { ...this.state.activeTabId },
+        rightPanelOpen: this.state.rightPanelOpen,
+        bottomPanelOpen: this.state.bottomPanelOpen,
+      }
+      localStorage.setItem(STORAGE_KEY_PANEL_LAYOUT, JSON.stringify(persisted))
+    } catch {
+      // ignore
+    }
+  }
+
+  private readTerminalLayoutMap(): PersistedTerminalLayoutMap {
+    try {
+      return sanitizePersistedTerminalLayoutMap(JSON.parse(localStorage.getItem(STORAGE_KEY_TERMINAL_LAYOUT) ?? 'null'))
+    } catch {
+      return { version: 1, directories: {} }
+    }
+  }
+
+  private persistTerminalLayout() {
+    if (!this.currentTerminalDirectory) return
+
+    try {
+      const layoutMap = this.readTerminalLayoutMap()
+      layoutMap.directories[this.currentTerminalDirectory] = {
+        order: {
+          bottom: this.getTabsForPosition('bottom').map(tab => tab.id),
+          right: this.getTabsForPosition('right').map(tab => tab.id),
+        },
+        activeTabId: { ...this.state.activeTabId },
+      }
+      localStorage.setItem(STORAGE_KEY_TERMINAL_LAYOUT, JSON.stringify(layoutMap))
+    } catch {
+      // ignore
+    }
+  }
 
   constructor() {
     // 从 localStorage 恢复状态
@@ -132,6 +317,17 @@ class LayoutStore {
           this.state.bottomPanelHeight = height
         }
       }
+
+      const savedPanelLayout = localStorage.getItem(STORAGE_KEY_PANEL_LAYOUT)
+      if (savedPanelLayout) {
+        const restored = sanitizePersistedPanelLayout(JSON.parse(savedPanelLayout))
+        if (restored) {
+          this.state.panelTabs = restored.panelTabs.map(normalizePersistedPanelTab)
+          this.state.activeTabId = { ...restored.activeTabId }
+          this.state.rightPanelOpen = restored.rightPanelOpen
+          this.state.bottomPanelOpen = restored.bottomPanelOpen
+        }
+      }
     } catch {
       // ignore
     }
@@ -147,6 +343,8 @@ class LayoutStore {
   }
 
   private notify() {
+    this.persistPanelLayout()
+    this.persistTerminalLayout()
     this.subscribers.forEach(fn => fn())
   }
 
@@ -582,6 +780,105 @@ class LayoutStore {
   // 兼容旧 API - Terminal Tabs
   // ============================================
 
+  setCurrentTerminalDirectory(directory?: string) {
+    this.currentTerminalDirectory = directory || null
+  }
+
+  syncTerminalSessions(directory: string | undefined, sessions: TerminalTab[]) {
+    this.currentTerminalDirectory = directory || null
+
+    const layoutMap = this.readTerminalLayoutMap()
+    const savedLayout = directory ? layoutMap.directories[directory] : undefined
+    const sessionById = new Map(
+      sessions.map(session => [
+        session.id,
+        {
+          id: session.id,
+          type: 'terminal' as const,
+          position: 'bottom' as PanelPosition,
+          ptyId: session.id,
+          title: session.title,
+          status: session.status,
+        },
+      ]),
+    )
+
+    const nonTerminalTabs = this.state.panelTabs.filter(tab => tab.type !== 'terminal')
+    const nonTerminalById = new Map(nonTerminalTabs.map(tab => [tab.id, tab]))
+
+    const orderByPosition: Record<PanelPosition, string[]> = {
+      bottom: savedLayout?.order.bottom ? [...savedLayout.order.bottom] : [],
+      right: savedLayout?.order.right ? [...savedLayout.order.right] : [],
+    }
+
+    for (const position of PANEL_POSITIONS) {
+      const currentIds = nonTerminalTabs.filter(tab => tab.position === position).map(tab => tab.id)
+      for (const id of currentIds) {
+        if (!orderByPosition[position].includes(id)) {
+          orderByPosition[position].push(id)
+        }
+      }
+    }
+
+    const assignedTerminalIds = new Set<string>()
+    const tabsByPosition: Record<PanelPosition, PanelTab[]> = {
+      bottom: [],
+      right: [],
+    }
+
+    for (const position of PANEL_POSITIONS) {
+      for (const id of orderByPosition[position]) {
+        const nonTerminalTab = nonTerminalById.get(id)
+        if (nonTerminalTab && nonTerminalTab.position === position) {
+          tabsByPosition[position].push(nonTerminalTab)
+          continue
+        }
+
+        const terminalTab = sessionById.get(id)
+        if (terminalTab && !assignedTerminalIds.has(id)) {
+          tabsByPosition[position].push({ ...terminalTab, position })
+          assignedTerminalIds.add(id)
+        }
+      }
+    }
+
+    for (const session of sessions) {
+      if (assignedTerminalIds.has(session.id)) continue
+      tabsByPosition.bottom.push({
+        id: session.id,
+        type: 'terminal',
+        position: 'bottom',
+        ptyId: session.id,
+        title: session.title,
+        status: session.status,
+      })
+    }
+
+    this.state.panelTabs = [...tabsByPosition.right, ...tabsByPosition.bottom]
+
+    for (const position of PANEL_POSITIONS) {
+      const currentActiveId = this.state.activeTabId[position]
+      const hasCurrentActive = currentActiveId
+        ? this.state.panelTabs.some(tab => tab.id === currentActiveId && tab.position === position)
+        : false
+
+      if (hasCurrentActive) {
+        continue
+      }
+
+      const savedActiveId = savedLayout?.activeTabId[position]
+      const hasSavedActive = savedActiveId
+        ? this.state.panelTabs.some(tab => tab.id === savedActiveId && tab.position === position)
+        : false
+
+      this.state.activeTabId[position] = hasSavedActive
+        ? (savedActiveId ?? null)
+        : (this.getTabsForPosition(position)[0]?.id ?? null)
+    }
+
+    this.notify()
+  }
+
   addTerminalTab(tab: TerminalTab, openPanel = true, position: PanelPosition = 'bottom') {
     const existing = this.state.panelTabs.find(t => t.id === tab.id && t.position === position)
     if (existing) {
@@ -625,8 +922,8 @@ class LayoutStore {
     this.reorderTabs('bottom', draggedId, targetId)
   }
 
-  getTerminalTabs(): TerminalTab[] {
-    return this.getTabsForPosition('bottom')
+  getTerminalTabs(position: PanelPosition = 'bottom'): TerminalTab[] {
+    return this.getTabsForPosition(position)
       .filter(t => t.type === 'terminal')
       .map(t => ({
         id: t.id,
