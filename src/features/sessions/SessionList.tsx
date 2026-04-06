@@ -495,21 +495,25 @@ export function SessionListItem({
         onTouchMove={isEditMode ? undefined : handleTouchMove}
         onTouchEnd={isEditMode ? undefined : handleTouchEnd}
         className={`group relative flex items-center gap-1.5 px-2 py-1.5 rounded-md cursor-default transition-colors duration-150 select-none ${
-          isEditMode && isChecked
-            ? 'bg-accent-main-100/10 text-text-100 ring-1 ring-accent-main-100/30'
-            : isSelected
-              ? 'bg-bg-200/80 text-text-100'
+          isSelected && !isEditMode
+            ? 'bg-bg-200/80 text-text-100'
+            : isEditMode && isChecked
+              ? 'text-text-100'
               : 'text-text-300 hover:bg-bg-200/40 hover:text-text-200'
         } ${showActions && !isEditMode ? 'bg-bg-200/40' : ''}`}
       >
+        {/* 选中左侧色条 */}
+        {isEditMode && isChecked && (
+          <span className="absolute left-0 top-1.5 bottom-1.5 w-[2px] rounded-full bg-accent-main-100" />
+        )}
         {/* 编辑模式：checkbox；普通模式：活跃状态圆点 */}
         {isEditMode ? (
           <span
-            className={`shrink-0 flex items-center justify-center w-3.5 h-3.5 rounded border transition-colors ${
-              isChecked ? 'bg-accent-main-100 border-accent-main-100' : 'border-text-500 hover:border-text-300'
+            className={`shrink-0 flex items-center justify-center w-3.5 h-3.5 rounded-full transition-colors ${
+              isChecked ? 'bg-accent-main-100' : 'border border-text-500/50 hover:border-text-400'
             }`}
           >
-            {isChecked && <CheckIcon size={10} className="text-white" />}
+            {isChecked && <CheckIcon size={9} className="text-white" />}
           </span>
         ) : (
           <span className="relative shrink-0 flex items-center justify-center w-3 h-3" title={statusIndicatorTitle}>
@@ -598,21 +602,21 @@ export function SessionListItem({
       onTouchMove={isEditMode ? undefined : handleTouchMove}
       onTouchEnd={isEditMode ? undefined : handleTouchEnd}
       className={`group relative flex items-start ${isCompact ? 'px-3 py-2' : 'px-3 py-2.5'} rounded-lg cursor-default transition-all duration-200 border border-transparent select-none ${
-        isEditMode && isChecked
-          ? 'bg-accent-main-100/10 ring-1 ring-accent-main-100/30'
-          : isSelected
-            ? 'bg-bg-000 shadow-sm ring-1 ring-border-200/50'
-            : 'hover:bg-bg-200/50'
+        isSelected && !isEditMode ? 'bg-bg-000 shadow-sm ring-1 ring-border-200/50' : 'hover:bg-bg-200/50'
       } ${showActions && !isEditMode ? 'bg-bg-200/50' : ''}`}
     >
+      {/* 选中左侧色条 */}
+      {isEditMode && isChecked && (
+        <span className="absolute left-0 top-2 bottom-2 w-[2px] rounded-full bg-accent-main-100" />
+      )}
       {/* 编辑模式 checkbox */}
       {isEditMode && (
         <span
-          className={`shrink-0 flex items-center justify-center w-4 h-4 mt-0.5 mr-2 rounded border transition-colors ${
-            isChecked ? 'bg-accent-main-100 border-accent-main-100' : 'border-text-500 hover:border-text-300'
+          className={`shrink-0 flex items-center justify-center w-4 h-4 mt-0.5 mr-2 rounded-full transition-colors ${
+            isChecked ? 'bg-accent-main-100' : 'border border-text-500/50 hover:border-text-400'
           }`}
         >
-          {isChecked && <CheckIcon size={12} className="text-white" />}
+          {isChecked && <CheckIcon size={11} className="text-white" />}
         </span>
       )}
       <div

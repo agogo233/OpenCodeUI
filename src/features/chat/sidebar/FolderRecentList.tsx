@@ -601,11 +601,11 @@ function FolderRecentSection({
         }`}
       >
         {/* 文件夹行 */}
-        <div
-          className={`relative flex w-full items-center rounded-md hover:bg-bg-200/40 transition-colors duration-150 ${
-            isEditMode && isProjectChecked ? 'bg-accent-main-100/10 ring-1 ring-accent-main-100/30' : ''
-          }`}
-        >
+        <div className="relative flex w-full items-center rounded-md hover:bg-bg-200/40 transition-colors duration-150">
+          {/* 选中左侧色条 */}
+          {isEditMode && isProjectChecked && (
+            <span className="absolute left-0 top-1.5 bottom-1.5 w-[2px] rounded-full bg-accent-main-100" />
+          )}
           {/* 编辑模式：项目 checkbox */}
           {isEditMode && (
             <span
@@ -613,11 +613,11 @@ function FolderRecentSection({
                 e.stopPropagation()
                 onToggleProjectCheck?.()
               }}
-              className={`shrink-0 flex items-center justify-center w-3.5 h-3.5 ml-2 rounded border cursor-default transition-colors ${
-                isProjectChecked ? 'bg-accent-main-100 border-accent-main-100' : 'border-text-500 hover:border-text-300'
+              className={`shrink-0 flex items-center justify-center w-3.5 h-3.5 ml-2 rounded-full cursor-default transition-colors ${
+                isProjectChecked ? 'bg-accent-main-100' : 'border border-text-500/50 hover:border-text-400'
               }`}
             >
-              {isProjectChecked && <CheckIcon size={10} className="text-white" />}
+              {isProjectChecked && <CheckIcon size={9} className="text-white" />}
             </span>
           )}
           <button
