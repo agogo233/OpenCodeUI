@@ -300,7 +300,7 @@ class MessageStore {
               text: this.extractUserText(m),
               attachments: this.extractUserAttachments(m),
               model: m.info.model,
-              variant: m.info.variant,
+              variant: m.info.model.variant,
               agent: m.info.agent,
             }
           }),

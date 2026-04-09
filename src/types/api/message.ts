@@ -20,23 +20,12 @@ import type {
   ToolState as SDKToolState,
   UserMessage as SDKUserMessage,
 } from '@opencode-ai/sdk/v2/client'
-import type { ErrorInfo } from './common'
-import type { FileDiff } from './file'
 
-export interface MessageSummary {
-  title?: string
-  body?: string
-  diffs?: FileDiff[]
-}
+export type MessageSummary = NonNullable<SDKUserMessage['summary']>
 
-export type UserMessage = Omit<SDKUserMessage, 'summary'> & {
-  summary?: MessageSummary
-  variant?: string
-}
+export type UserMessage = SDKUserMessage
 
-export type AssistantMessage = Omit<SDKAssistantMessage, 'error'> & {
-  error?: SDKAssistantMessage['error'] | ErrorInfo
-}
+export type AssistantMessage = SDKAssistantMessage
 
 export type Message = UserMessage | AssistantMessage
 

@@ -21,6 +21,7 @@ export interface TokenUsage {
 export interface ModelRef {
   providerID: string
   modelID: string
+  variant?: string
 }
 
 export interface PathInfo {
@@ -91,7 +92,6 @@ export interface UserMessageInfo {
   time: MessageTime
   agent: string
   model: ModelRef
-  variant?: string
   summary?: MessageSummary
 }
 

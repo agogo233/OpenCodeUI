@@ -250,7 +250,7 @@ export function useSessionManager({ sessionId, directory, onLoadComplete, onErro
             text: content.text,
             attachments: content.attachments,
             model: userInfo.model,
-            variant: userInfo.variant,
+            variant: userInfo.model.variant,
             agent: userInfo.agent,
           }
         })
