@@ -63,6 +63,8 @@
     "agentBehaviorDesc": "Execution defaults for tool actions",
     "autoApprove": "Auto-Approve",
     "autoApproveDesc": "Automatically approve tool requests with once permission on the frontend",
+    "queueFollowupMessages": "Queue Follow-Up Messages",
+    "queueFollowupMessagesDesc": "When the current session is still busy, keep new messages in a queue and send them automatically after the turn finishes",
     "sidebarRecents": "Sidebar Recents",
     "sidebarRecentsDesc": "Optional folder view for recent chats",
     "folderStyleRecents": "Folder-Style Recents",

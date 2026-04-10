@@ -8,6 +8,7 @@ import {
   type SessionListParams,
 } from '../api'
 import { childSessionStore } from '../store/childSessionStore'
+import { followupQueueStore } from '../store/followupQueueStore'
 import { todoStore } from '../store/todoStore'
 import { useDirectory } from './useDirectory'
 import { sessionErrorHandler, normalizeToForwardSlash, isSameDirectory, autoDetectPathStyle } from '../utils'
@@ -224,6 +225,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       await apiDeleteSession(id, targetDir)
       // 清理该 session 的子 session 记录，防止内存泄漏
       childSessionStore.clearChildren(id)
+      // 清理该 session 的排队消息
+      followupQueueStore.clearSession(id)
       setSessions(prev => prev.filter(s => s.id !== id))
     },
     [currentDirectory],

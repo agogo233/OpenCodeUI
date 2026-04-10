@@ -19,6 +19,7 @@ export function ChatSettings() {
   const [toolCardStyle, setToolCardStyle] = useState(themeStore.toolCardStyle)
   const [immersiveMode, setImmersiveMode] = useState(themeStore.immersiveMode)
   const [compactInlinePermission, setCompactInlinePermission] = useState(themeStore.compactInlinePermission)
+  const [queueFollowupMessages, setQueueFollowupMessages] = useState(themeStore.queueFollowupMessages)
   const isMobile = useIsMobile()
   void isMobile
 
@@ -33,6 +34,12 @@ export function ChatSettings() {
     const v = !collapseUserMessages
     setCollapseUserMessages(v)
     themeStore.setCollapseUserMessages(v)
+  }
+
+  const handleQueueFollowupMessagesToggle = () => {
+    const v = !queueFollowupMessages
+    setQueueFollowupMessages(v)
+    themeStore.setQueueFollowupMessages(v)
   }
 
   const handleReasoningDisplayModeChange = (mode: ReasoningDisplayMode) => {
@@ -102,6 +109,13 @@ export function ChatSettings() {
       <SettingsSection title={t('chat.agentBehavior')}>
         <SettingRow label={t('chat.autoApprove')} description={t('chat.autoApproveDesc')} onClick={handleAutoApprove}>
           <Toggle enabled={autoApprove} onChange={handleAutoApprove} />
+        </SettingRow>
+        <SettingRow
+          label={t('chat.queueFollowupMessages')}
+          description={t('chat.queueFollowupMessagesDesc')}
+          onClick={handleQueueFollowupMessagesToggle}
+        >
+          <Toggle enabled={queueFollowupMessages} onChange={handleQueueFollowupMessagesToggle} />
         </SettingRow>
         <SettingRow
           label={t('chat.collapseLongMessages')}

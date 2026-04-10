@@ -63,6 +63,8 @@
     "agentBehaviorDesc": "工具操作的执行默认值",
     "autoApprove": "自动放行",
     "autoApproveDesc": "开启后前端自动以 once 权限放行工具请求",
+    "queueFollowupMessages": "后续消息排队",
+    "queueFollowupMessagesDesc": "当前会话还在忙时，把新消息先放进队列，等这一轮结束后自动发送",
     "sidebarRecents": "侧边栏最近记录",
     "sidebarRecentsDesc": "最近对话的可选文件夹视图",
     "folderStyleRecents": "文件夹式最近记录",

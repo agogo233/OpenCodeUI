@@ -88,6 +88,7 @@ const DEFAULT_TOOL_CARD_STYLE: ToolCardStyle = 'classic'
 const DEFAULT_IMMERSIVE_MODE = false
 const DEFAULT_COMPACT_INLINE_PERMISSION = false
 const DEFAULT_GLASS_EFFECT = true
+const DEFAULT_QUEUE_FOLLOWUP_MESSAGES = false
 
 export interface ThemeState {
   /** 当前选中的主题风格 ID */
@@ -120,6 +121,8 @@ export interface ThemeState {
   compactInlinePermission: boolean
   /** 毛玻璃效果开关（backdrop-filter blur） */
   glassEffect: boolean
+  /** 忙碌时后续消息是否进入队列 */
+  queueFollowupMessages: boolean
 }
 
 // ============================================
@@ -141,6 +144,7 @@ const STORAGE_KEY_TOOL_CARD_STYLE = 'tool-card-style'
 const STORAGE_KEY_IMMERSIVE_MODE = 'immersive-mode'
 const STORAGE_KEY_COMPACT_INLINE_PERMISSION = 'compact-inline-permission'
 const STORAGE_KEY_GLASS_EFFECT = 'glass-effect'
+const STORAGE_KEY_QUEUE_FOLLOWUP_MESSAGES = 'queue-followup-messages'
 
 // ============================================
 // DOM Style Element IDs
@@ -210,6 +214,10 @@ class ThemeStore {
     const savedGlassEffect = localStorage.getItem(STORAGE_KEY_GLASS_EFFECT)
     const glassEffect = savedGlassEffect === null ? DEFAULT_GLASS_EFFECT : savedGlassEffect === 'true'
 
+    const savedQueueFollowupMessages = localStorage.getItem(STORAGE_KEY_QUEUE_FOLLOWUP_MESSAGES)
+    const queueFollowupMessages =
+      savedQueueFollowupMessages === null ? DEFAULT_QUEUE_FOLLOWUP_MESSAGES : savedQueueFollowupMessages === 'true'
+
     this.state = {
       presetId: savedPreset,
       colorMode: savedMode,
@@ -226,6 +234,7 @@ class ThemeStore {
       immersiveMode,
       compactInlinePermission,
       glassEffect,
+      queueFollowupMessages,
     }
   }
 
@@ -279,6 +288,9 @@ class ThemeStore {
   }
   get glassEffect() {
     return this.state.glassEffect
+  }
+  get queueFollowupMessages() {
+    return this.state.queueFollowupMessages
   }
 
   /** 获取当前主题预设（内置主题返回对象，自定义返回 undefined） */
@@ -436,6 +448,13 @@ class ThemeStore {
     this.state = { ...this.state, glassEffect: enabled }
     localStorage.setItem(STORAGE_KEY_GLASS_EFFECT, String(enabled))
     this.applyGlassClass()
+    this.emit()
+  }
+
+  setQueueFollowupMessages(enabled: boolean) {
+    if (this.state.queueFollowupMessages === enabled) return
+    this.state = { ...this.state, queueFollowupMessages: enabled }
+    localStorage.setItem(STORAGE_KEY_QUEUE_FOLLOWUP_MESSAGES, String(enabled))
     this.emit()
   }
 
