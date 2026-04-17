@@ -4,7 +4,6 @@ import { Button } from '../../../components/ui/Button'
 import { SunIcon, MoonIcon, SystemIcon, CheckIcon } from '../../../components/Icons'
 import { Toggle, SegmentedControl, SettingRow, SettingsSection } from './SettingsUI'
 import { useTheme } from '../../../hooks'
-import { layoutStore, useLayoutStore } from '../../../store'
 import { FONT_SCALE_MIN, FONT_SCALE_MAX } from '../../../store/themeStore'
 
 // ============================================
@@ -376,17 +375,11 @@ export function AppearanceSettings() {
   const {
     mode: themeMode,
     setThemeWithAnimation,
-    isWideMode,
-    toggleWideMode,
     presetId,
     setPresetWithAnimation,
     availablePresets,
     customCSS,
     setCustomCSS,
-    diffStyle,
-    setDiffStyle,
-    codeWordWrap,
-    setCodeWordWrap,
     glassEffect,
     setGlassEffect,
     uiFontScale,
@@ -394,8 +387,6 @@ export function AppearanceSettings() {
     codeFontScale,
     setCodeFontScale,
   } = useTheme()
-  const { sidebarFolderRecents, sidebarFolderRecentsShowDiff, sidebarShowChildSessions, wakeLock } = useLayoutStore()
-
   return (
     <div>
       {availablePresets.length > 0 && (
@@ -436,49 +427,12 @@ export function AppearanceSettings() {
         </div>
 
         <SettingRow
-          label={t('appearance.wideMode')}
-          description={t('appearance.wideModeDesc')}
-          onClick={toggleWideMode}
-        >
-          <Toggle enabled={isWideMode} onChange={toggleWideMode} />
-        </SettingRow>
-
-        <SettingRow
           label={t('appearance.glassEffect')}
           description={t('appearance.glassEffectDesc')}
           onClick={() => setGlassEffect(!glassEffect)}
         >
           <Toggle enabled={glassEffect} onChange={() => setGlassEffect(!glassEffect)} />
         </SettingRow>
-
-        <SettingRow
-          label={t('appearance.codeWordWrap')}
-          description={t('appearance.codeWordWrapDesc')}
-          onClick={() => setCodeWordWrap(!codeWordWrap)}
-        >
-          <Toggle enabled={codeWordWrap} onChange={() => setCodeWordWrap(!codeWordWrap)} />
-        </SettingRow>
-
-        <SettingRow
-          label={t('appearance.wakeLock')}
-          description={t('appearance.wakeLockDesc')}
-          onClick={() => layoutStore.setWakeLock(!wakeLock)}
-        >
-          <Toggle enabled={wakeLock} onChange={() => layoutStore.setWakeLock(!wakeLock)} />
-        </SettingRow>
-
-        <div>
-          <p className="text-[length:var(--fs-md)] text-text-100 mb-1.5">{t('appearance.diffStyle')}</p>
-          <SegmentedControl
-            value={diffStyle}
-            options={[
-              { value: 'markers', label: t('appearance.diffStyleMarkers') },
-              { value: 'changeBars', label: t('appearance.diffStyleChangeBars') },
-            ]}
-            onChange={v => setDiffStyle(v as 'markers' | 'changeBars')}
-          />
-          <p className="text-[length:var(--fs-xs)] text-text-500 mt-1">{t('appearance.diffStyleDesc')}</p>
-        </div>
 
         <div>
           <p className="text-[length:var(--fs-md)] text-text-100 mb-2">{t('appearance.uiFontScale')}</p>
@@ -513,41 +467,6 @@ export function AppearanceSettings() {
             <option value="en">{t('appearance.languages.en')}</option>
             <option value="zh-CN">{t('appearance.languages.zh-CN')}</option>
           </select>
-        </SettingRow>
-      </SettingsSection>
-
-      <SettingsSection title={t('appearance.sidebar')}>
-        <SettingRow
-          label={t('appearance.folderStyleRecents')}
-          description={t('appearance.folderStyleRecentsDesc')}
-          onClick={() => layoutStore.setSidebarFolderRecents(!sidebarFolderRecents)}
-        >
-          <Toggle
-            enabled={sidebarFolderRecents}
-            onChange={() => layoutStore.setSidebarFolderRecents(!sidebarFolderRecents)}
-          />
-        </SettingRow>
-
-        <SettingRow
-          label={t('appearance.folderStyleRecentsShowDiff')}
-          description={t('appearance.folderStyleRecentsShowDiffDesc')}
-          onClick={() => layoutStore.setSidebarFolderRecentsShowDiff(!sidebarFolderRecentsShowDiff)}
-        >
-          <Toggle
-            enabled={sidebarFolderRecentsShowDiff}
-            onChange={() => layoutStore.setSidebarFolderRecentsShowDiff(!sidebarFolderRecentsShowDiff)}
-          />
-        </SettingRow>
-
-        <SettingRow
-          label={t('appearance.showChildSessions')}
-          description={t('appearance.showChildSessionsDesc')}
-          onClick={() => layoutStore.setSidebarShowChildSessions(!sidebarShowChildSessions)}
-        >
-          <Toggle
-            enabled={sidebarShowChildSessions}
-            onChange={() => layoutStore.setSidebarShowChildSessions(!sidebarShowChildSessions)}
-          />
         </SettingRow>
       </SettingsSection>
     </div>
