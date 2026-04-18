@@ -1,16 +1,19 @@
 /**
  * PaneDropOverlay — Visual hint for drag-to-split.
  *
- * Shown on top of a ChatPane while a session is being dragged over it.
- * Splits the pane area into 5 zones (top/bottom/left/right/center) with
- * a VS Code style diagonal split + central rectangle.
+ * Design:
+ * - Pure hit-test (`resolveDropZone`) is exported for the pane to call.
+ * - `PaneDropOverlay` is a ref-driven leaf component that owns the
+ *   `activeZone` state. The parent updates the zone via an imperative handle
+ *   (`setZone`), so high-frequency dragover events do NOT re-render the
+ *   expensive ChatPane subtree — only this tiny overlay re-renders.
  *
  * Hit testing:
  * - Center rectangle: inner 40% x 40% of the pane → replace session
  * - Outside: closest edge by normalized distance → split to that side
  */
 
-import { memo } from 'react'
+import { forwardRef, memo, useImperativeHandle, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 export type DropZone = 'top' | 'bottom' | 'left' | 'right' | 'center'
@@ -20,6 +23,11 @@ export interface DropPoint {
   xRel: number
   /** Normalized mouse Y position relative to the pane, 0-1 */
   yRel: number
+}
+
+export interface PaneDropOverlayHandle {
+  /** Update the active zone without re-rendering the parent. */
+  setZone(zone: DropZone | null): void
 }
 
 /** Inner half-size of the central replace zone, normalized */
@@ -52,17 +60,28 @@ export function resolveDropZone(point: DropPoint | null): DropZone | null {
   return 'bottom'
 }
 
-interface PaneDropOverlayProps {
-  /** Current active zone; null hides the overlay */
-  activeZone: DropZone | null
-}
-
 /**
- * Visual overlay. Renders highlight + label for the active zone.
- * Must be placed inside a `position: relative` parent (ChatPane root qualifies).
+ * Visual overlay. Listens to its own local state via imperative handle;
+ * parent never re-renders for zone updates.
+ *
+ * Must be placed inside a `position: relative` parent. The overlay itself
+ * is `pointer-events: none` so it does NOT interfere with normal UI clicks.
  */
-export const PaneDropOverlay = memo(function PaneDropOverlay({ activeZone }: PaneDropOverlayProps) {
+export const PaneDropOverlay = forwardRef<PaneDropOverlayHandle>(function PaneDropOverlay(_props, ref) {
   const { t } = useTranslation('chat')
+  const [activeZone, setActiveZone] = useState<DropZone | null>(null)
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      setZone(zone: DropZone | null) {
+        // Functional update keeps us from reading stale state and avoids a render
+        // when the zone hasn't actually changed.
+        setActiveZone(prev => (prev === zone ? prev : zone))
+      },
+    }),
+    [],
+  )
 
   if (!activeZone) return null
 
@@ -77,9 +96,12 @@ export const PaneDropOverlay = memo(function PaneDropOverlay({ activeZone }: Pan
             ? t('paneDrop.splitLeft')
             : t('paneDrop.splitRight')
 
-  // Highlight rectangle covers the area that will receive the new leaf (or the whole pane for replace).
+  return <DropZoneVisual zone={activeZone} label={label} />
+})
+
+const DropZoneVisual = memo(function DropZoneVisual({ zone, label }: { zone: DropZone; label: string }) {
   const highlightStyle: React.CSSProperties = (() => {
-    switch (activeZone) {
+    switch (zone) {
       case 'center':
         return { left: '20%', top: '20%', width: '60%', height: '60%' }
       case 'left':
@@ -95,16 +117,11 @@ export const PaneDropOverlay = memo(function PaneDropOverlay({ activeZone }: Pan
 
   return (
     <div className="pointer-events-none absolute inset-0 z-30">
-      {/* Dim the whole pane lightly */}
       <div className="absolute inset-0 bg-bg-000/10" />
-
-      {/* Zone highlight */}
       <div
         className="absolute rounded-md border-2 border-accent-main-100 bg-accent-main-100/15 transition-[left,top,width,height] duration-150 ease-out"
         style={highlightStyle}
       />
-
-      {/* Label */}
       <div className="absolute inset-0 flex items-center justify-center">
         <span className="px-3 py-1 rounded-md bg-bg-100/90 border border-border-200/60 text-[length:var(--fs-sm)] text-text-100 font-medium shadow-sm">
           {label}
