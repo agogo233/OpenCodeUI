@@ -13,7 +13,7 @@ import { ChatArea, Header, InputBox, PermissionDialog, QuestionDialog, type Chat
 import { type ModelSelectorHandle } from './ModelSelector'
 import { OutlineIndex } from '../../components/OutlineIndex'
 import { PaneHeader } from './PaneHeader'
-import { PaneDropOverlay, resolveDropZone, type DropZone } from './PaneDropOverlay'
+import { PaneDropOverlay, resolveDropZone, type DropZone, type PaneDropOverlayHandle } from './PaneDropOverlay'
 import { useChatSession, useModels, useModelSelection } from '../../hooks'
 import { useCancelHint } from '../../hooks/useCancelHint'
 import { InlineToolRequestContext, type InlineToolRequestContextValue } from './InlineToolRequestContext'
@@ -404,8 +404,37 @@ export const ChatPane = memo(function ChatPane({
   // ============================================
   // Drag & Drop — receive a session dragged from the sidebar list
   // Center drop → replace current session; edge drops → split in that direction
+  //
+  // IMPORTANT: zone state lives in PaneDropOverlay (imperative handle). We do
+  // NOT put it in ChatPane state — dragover fires every mouse move, and
+  // re-rendering ChatPane on each move is very expensive once several panes
+  // exist (ChatArea / messages / hooks). rAF also throttles DOM writes to one
+  // per frame for smoothness.
   // ============================================
-  const [dropZone, setDropZone] = useState<DropZone | null>(null)
+  const overlayRef = useRef<PaneDropOverlayHandle>(null)
+  const currentZoneRef = useRef<DropZone | null>(null)
+  const dropRafRef = useRef<number | null>(null)
+  const pendingZoneRef = useRef<DropZone | null>(null)
+
+  const writeZone = useCallback((zone: DropZone | null) => {
+    if (currentZoneRef.current === zone) return
+    currentZoneRef.current = zone
+    overlayRef.current?.setZone(zone)
+  }, [])
+
+  const cancelPendingZone = useCallback(() => {
+    if (dropRafRef.current !== null) {
+      cancelAnimationFrame(dropRafRef.current)
+      dropRafRef.current = null
+    }
+    pendingZoneRef.current = null
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      if (dropRafRef.current !== null) cancelAnimationFrame(dropRafRef.current)
+    }
+  }, [])
 
   const readSessionDragPayload = useCallback((e: React.DragEvent): { sessionId: string; directory: string } | null => {
     if (!e.dataTransfer.types.includes('text/x-session-id')) return null
@@ -426,24 +455,36 @@ export const ChatPane = memo(function ChatPane({
       if (rect.width === 0 || rect.height === 0) return
       const xRel = (e.clientX - rect.left) / rect.width
       const yRel = (e.clientY - rect.top) / rect.height
-      const zone = resolveDropZone({ xRel, yRel })
-      if (zone !== dropZone) setDropZone(zone)
+      pendingZoneRef.current = resolveDropZone({ xRel, yRel })
+
+      if (dropRafRef.current === null) {
+        dropRafRef.current = requestAnimationFrame(() => {
+          dropRafRef.current = null
+          writeZone(pendingZoneRef.current)
+        })
+      }
     },
-    [dropZone, splitPaneEnabled],
+    [splitPaneEnabled, writeZone],
   )
 
-  const handlePaneDragLeave = useCallback((e: React.DragEvent<HTMLDivElement>) => {
-    // Ignore bubbles that stay within the pane
-    const related = e.relatedTarget as Node | null
-    if (related && e.currentTarget.contains(related)) return
-    setDropZone(null)
-  }, [])
+  const handlePaneDragLeave = useCallback(
+    (e: React.DragEvent<HTMLDivElement>) => {
+      // Ignore bubbles that stay within the pane
+      const related = e.relatedTarget as Node | null
+      if (related && e.currentTarget.contains(related)) return
+      cancelPendingZone()
+      writeZone(null)
+    },
+    [cancelPendingZone, writeZone],
+  )
 
   const handlePaneDrop = useCallback(
     (e: React.DragEvent<HTMLDivElement>) => {
+      cancelPendingZone()
+      const zone = currentZoneRef.current
+      writeZone(null)
+
       const payload = readSessionDragPayload(e)
-      const zone = dropZone
-      setDropZone(null)
       if (!payload || !zone) return
       e.preventDefault()
 
@@ -461,7 +502,7 @@ export const ChatPane = memo(function ChatPane({
         navigatePaneToSession(newPaneId, payload.sessionId, payload.directory || undefined)
       }
     },
-    [dropZone, paneId, routeSessionId, navigatePaneToSession, readSessionDragPayload],
+    [paneId, routeSessionId, navigatePaneToSession, readSessionDragPayload, cancelPendingZone, writeZone],
   )
 
   const handleToggleFullAuto = useCallback(() => {
@@ -791,7 +832,7 @@ export const ChatPane = memo(function ChatPane({
           />
         )}
         {chatContent}
-        <PaneDropOverlay activeZone={dropZone} />
+        <PaneDropOverlay ref={overlayRef} />
       </div>
     </SessionNavigationContext.Provider>
   )
