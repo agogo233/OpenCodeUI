@@ -791,10 +791,10 @@ export const draculaTheme: ThemePreset = {
 const obsidianLight: ThemeColors = {
   background: {
     bg000: '0 0% 100%',
-    bg100: '0 0% 99%',
-    bg200: '0 0% 98%',
-    bg300: '0 0% 96%',
-    bg400: '0 0% 89%',
+    bg100: '0 0% 98%',
+    bg200: '0 0% 95%',
+    bg300: '0 0% 91%',
+    bg400: '0 0% 86%',
   },
   text: {
     text000: '0 0% 100%',
@@ -842,11 +842,11 @@ const obsidianLight: ThemeColors = {
 
 const obsidianDark: ThemeColors = {
   background: {
-    bg000: '0 0% 12%',
+    bg000: '0 0% 16%',
     bg100: '0 0% 13%',
-    bg200: '0 0% 14%',
-    bg300: '0 0% 15%',
-    bg400: '0 0% 16%',
+    bg200: '0 0% 10%',
+    bg300: '0 0% 8%',
+    bg400: '0 0% 5%',
   },
   text: {
     text000: '0 0% 100%',
