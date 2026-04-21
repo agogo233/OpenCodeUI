@@ -1,19 +1,19 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
   <path
-    d="M146 172 L292 256 L146 340"
+    d="M162 184 L286 256 L162 328"
     stroke="#d97706"
-    stroke-width="46"
+    stroke-width="40"
     stroke-linecap="round"
     stroke-linejoin="round"
     fill="none"
   />
   <line
-    x1="314"
-    y1="332"
-    x2="388"
-    y2="332"
+    x1="304"
+    y1="322"
+    x2="370"
+    y2="322"
     stroke="#d97706"
-    stroke-width="46"
+    stroke-width="40"
     stroke-linecap="round"
   />
 </svg>
