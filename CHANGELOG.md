@@ -1,5 +1,22 @@
 # Changelog
 
+## [v0.5.8] - 2026-04-21
+
+- fix: polish sidebar session and notification layout (51b22f2)
+- refactor: modularize settings backup snapshots (a9d59c6)
+- fix: reset project dialog state on reopen (b344278)
+- feat: add settings backup import and export (93ad2ab)
+- fix: rebalance obsidian surface contrast (0837734)
+- fix: separate system notification settings from sound config (ccc80e4)
+- feat: add separate system notification controls (3236d14)
+- feat: add Dracula theme preset (7623377)
+- fix: persist model selection across session restore (d8eb318)
+- fix: shrink launcher icon mark further for masked shells (4f3e99f)
+- fix: reduce app icon mark scale and drop custom Android splash (2552342)
+- fix: remove unsupported Android splash attr from canary build (21ea11a)
+- fix: shrink Android app icon foreground and add native splash theme (8325bfc)
+- feat: redesign app icons for desktop and Android (527d423)
+
 ## [v0.5.7] - 2026-04-19
 
 - fix: anchor toasts to the content area beneath desktop titlebar (fe15280)
