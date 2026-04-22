@@ -15,6 +15,8 @@ const {
   getSoundSnapshotMock,
   isSystemEnabledMock,
   activeSessionStoreMock,
+  applyServerConnectedTimestampMock,
+  getActiveServerIdMock,
 } = vi.hoisted(() => ({
   subscribeToEventsMock: vi.fn(),
   getSessionStatusMock: vi.fn(() => Promise.resolve({})),
@@ -26,6 +28,8 @@ const {
   notificationPushMock: vi.fn(),
   playNotificationSoundDedupedMock: vi.fn(),
   isSystemEnabledMock: vi.fn((type: string) => type !== 'permission'),
+  applyServerConnectedTimestampMock: vi.fn(),
+  getActiveServerIdMock: vi.fn(() => 'local'),
   getSoundSnapshotMock: vi.fn(() => ({
     currentSessionEnabled: true,
   })),
@@ -72,6 +76,10 @@ vi.mock('../store', () => ({
   },
   paneLayoutStore: {
     getFocusedSessionId: getFocusedSessionIdMock,
+  },
+  serverStore: {
+    applyServerConnectedTimestamp: applyServerConnectedTimestampMock,
+    getActiveServerId: getActiveServerIdMock,
   },
 }))
 
@@ -120,6 +128,8 @@ describe('useGlobalEvents', () => {
     playNotificationSoundDedupedMock.mockReset()
     getSoundSnapshotMock.mockReset()
     isSystemEnabledMock.mockReset()
+    applyServerConnectedTimestampMock.mockReset()
+    getActiveServerIdMock.mockReset()
     Object.values(activeSessionStoreMock).forEach(value => {
       if (typeof value === 'function' && 'mockClear' in value) value.mockClear()
     })
@@ -129,8 +139,25 @@ describe('useGlobalEvents', () => {
       currentSessionEnabled: true,
     })
     isSystemEnabledMock.mockImplementation((type: string) => type !== 'permission')
+    getActiveServerIdMock.mockReturnValue('local')
     activeSessionStoreMock.getSessionMeta.mockReturnValue({ title: 'Child Session', directory: '/workspace' })
     activeSessionStoreMock.getSnapshot.mockReturnValue({ statusMap: {} })
+  })
+
+  it('stores server clock calibration when server.connected arrives', async () => {
+    let callbacks: Parameters<typeof subscribeToEventsMock>[0] | undefined
+    subscribeToEventsMock.mockImplementation(cb => {
+      callbacks = cb
+      return vi.fn()
+    })
+
+    renderHook(() => useGlobalEvents())
+
+    await waitFor(() => expect(callbacks).toBeDefined())
+
+    callbacks!.onServerConnected?.({ timestamp: '2026-04-22T15:00:00.000Z' })
+
+    expect(applyServerConnectedTimestampMock).toHaveBeenCalledWith('local', '2026-04-22T15:00:00.000Z')
   })
 
   it('does not play current-session sound for child session events when parent session is focused', async () => {

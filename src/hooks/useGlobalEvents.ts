@@ -9,7 +9,7 @@
 // 4. 与具体 session 无关，处理所有 session 的事件
 
 import { useEffect, useRef } from 'react'
-import { messageStore, childSessionStore, paneLayoutStore } from '../store'
+import { messageStore, childSessionStore, paneLayoutStore, serverStore } from '../store'
 import { activeSessionStore } from '../store/activeSessionStore'
 import { notificationStore } from '../store/notificationStore'
 import { soundStore } from '../store/soundStore'
@@ -373,6 +373,10 @@ export function useGlobalEvents(directories?: string[]) {
         if (session.title && messageStore.getSessionState(session.id)) {
           messageStore.updateSessionMetadata(session.id, { title: session.title })
         }
+      },
+
+      onServerConnected: data => {
+        serverStore.applyServerConnectedTimestamp(serverStore.getActiveServerId(), data.timestamp)
       },
 
       // ============================================
