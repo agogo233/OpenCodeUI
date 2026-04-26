@@ -507,6 +507,8 @@ const PanelTabButton = memo(function PanelTabButton({
   return (
     <div
       data-tab-id={tab.id}
+      title={tab.type === 'terminal' ? label : undefined}
+      aria-label={tab.type === 'terminal' ? label : undefined}
       draggable
       onDragStart={handleDragStart}
       onDragOver={e => {
