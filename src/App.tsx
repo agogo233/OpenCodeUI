@@ -1,5 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { invoke } from '@tauri-apps/api/core'
 import { Sidebar } from './features/chat'
 import { ChatPane } from './features/chat/ChatPane'
 import { SplitContainer } from './features/chat/SplitContainer'
@@ -34,6 +35,7 @@ import { initNotificationSound } from './utils/notificationSoundBridge'
 import { createPtySession } from './api/pty'
 import type { TerminalTab } from './store/layoutStore'
 import type { SettingsTab } from './features/settings/SettingsDialog'
+import { isTauri, isTauriMobile } from './utils/tauri'
 
 const SettingsDialog = lazy(() =>
   import('./features/settings/SettingsDialog').then(module => ({ default: module.SettingsDialog })),
@@ -79,6 +81,14 @@ function App() {
   useEffect(() => {
     const cleanup = initNotificationSound()
     return cleanup
+  }, [])
+
+  useEffect(() => {
+    if (!isTauri() || isTauriMobile()) return
+
+    void invoke('desktop_window_ready').catch(() => {
+      // best effort only
+    })
   }, [])
 
   useEffect(() => {
