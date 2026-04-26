@@ -121,9 +121,6 @@ export function DesktopTitlebar() {
           <ChevronRightIcon size={14} />
         </button>
 
-        {/* 分隔线 */}
-        <div className="mx-1 my-2 w-px bg-border-200/50" />
-
         {/* 打开项目 */}
         <button
           type="button"
