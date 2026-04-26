@@ -12,6 +12,7 @@ import { getPtyConnectUrl, updatePtySession } from '../api/pty'
 import { layoutStore } from '../store/layoutStore'
 import { useInputCapabilities } from '../hooks/useInputCapabilities'
 import { logger } from '../utils/logger'
+import { parsePtyFrame } from '../utils/ptyProtocol'
 import { isTauri } from '../utils/tauri'
 
 // ============================================
@@ -283,6 +284,7 @@ export const Terminal = memo(function Terminal({ ptyId, directory, isActive }: T
   const terminalRef = useRef<XTerm | null>(null)
   const fitAddonRef = useRef<FitAddon | null>(null)
   const stickyModifiersRef = useRef<StickyModifiers>(createStickyModifiers())
+  const cursorRef = useRef(0)
   const transportSendRef = useRef<((data: string) => void) | null>(null)
   const transportDisconnectRef = useRef<(() => void) | null>(null)
   const resizeTimeoutRef = useRef<number | null>(null)
@@ -337,6 +339,7 @@ export const Terminal = memo(function Terminal({ ptyId, directory, isActive }: T
     if (!hasBeenActive) return
 
     mountedRef.current = true
+    cursorRef.current = 0
     let ws: WebSocket | null = null
     let wsConnectTimeout: number | null = null
     let disposeData: { dispose: () => void } | null = null
@@ -462,6 +465,7 @@ export const Terminal = memo(function Terminal({ ptyId, directory, isActive }: T
       if (!mountedRef.current) return
 
       fitAddon.fit()
+      const cursor = cursorRef.current
 
       if (useNativePtyBridge) {
         logger.log(
@@ -474,10 +478,18 @@ export const Terminal = memo(function Terminal({ ptyId, directory, isActive }: T
             connectTauriPty({
               ptyId,
               directory,
+              cursor,
               onConnected: handleConnected,
               onMessage: chunk => {
                 if (!mountedRef.current) return
-                terminal.write(chunk)
+                const frame = parsePtyFrame(chunk)
+                if (!frame) return
+                if (frame.kind === 'control') {
+                  cursorRef.current = frame.cursor
+                  return
+                }
+                terminal.write(frame.data)
+                cursorRef.current += frame.data.length
               },
               onDisconnected: handleDisconnected,
               onError: message => {
@@ -500,9 +512,10 @@ export const Terminal = memo(function Terminal({ ptyId, directory, isActive }: T
             handleDisconnected({ reason: message })
           })
       } else {
-        const wsUrl = getPtyConnectUrl(ptyId, directory)
+        const wsUrl = getPtyConnectUrl(ptyId, directory, { cursor })
         logger.log('[Terminal] Connecting to:', wsUrl, reconnectAttempt > 0 ? `(reconnect #${reconnectAttempt})` : '')
         ws = new WebSocket(wsUrl)
+        ws.binaryType = 'arraybuffer'
         transportSendRef.current = data => {
           if (ws && ws.readyState === WebSocket.OPEN) {
             ws.send(data)
@@ -514,7 +527,14 @@ export const Terminal = memo(function Terminal({ ptyId, directory, isActive }: T
 
         ws.onmessage = event => {
           if (!mountedRef.current) return
-          terminal.write(event.data)
+          const frame = parsePtyFrame(event.data as string | ArrayBuffer)
+          if (!frame) return
+          if (frame.kind === 'control') {
+            cursorRef.current = frame.cursor
+            return
+          }
+          terminal.write(frame.data)
+          cursorRef.current += frame.data.length
         }
 
         ws.onclose = e => {
