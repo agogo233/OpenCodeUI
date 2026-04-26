@@ -43,16 +43,10 @@ export function DesktopTitlebar() {
       {platform === 'macos' ? (
         <div className="h-full shrink-0" style={{ width: DESKTOP_MACOS_TRAFFIC_LIGHTS_WIDTH }} />
       ) : (
-        <div data-tauri-drag-region className="flex h-full min-w-0 items-center px-3 shrink-0">
-          <span className="truncate text-[12px] font-medium tracking-[0.01em] text-text-300">OpenCode</span>
-        </div>
+        <div data-tauri-drag-region className="h-full shrink-0 px-3" />
       )}
 
-      <div data-tauri-drag-region className="flex min-w-0 h-full items-center px-3">
-        {platform === 'macos' ? (
-          <span className="truncate text-[12px] font-medium tracking-[0.01em] text-text-300">OpenCode</span>
-        ) : null}
-      </div>
+      <div data-tauri-drag-region className="h-full min-w-0 px-3" />
 
       {platform === 'windows' ? (
         <div

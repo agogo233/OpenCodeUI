@@ -16,8 +16,8 @@
 
 import { memo, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
-import { DESKTOP_FULLSCREEN_LAYER_Z_INDEX, DESKTOP_MACOS_FULLSCREEN_HEADER_LEFT_INSET } from '../constants'
-import { getDesktopPlatform, usesCustomDesktopTitlebar } from '../utils/tauri'
+import { DESKTOP_FULLSCREEN_LAYER_Z_INDEX, DESKTOP_TITLEBAR_HEIGHT } from '../constants'
+import { usesCustomDesktopTitlebar } from '../utils/tauri'
 import { CloseIcon } from './Icons'
 import { ModalShell } from './ui/ModalShell'
 import type { ViewMode } from './DiffViewer'
@@ -57,17 +57,18 @@ export const FullscreenViewer = memo(function FullscreenViewer({
   zIndex,
 }: FullscreenViewerProps) {
   const { t } = useTranslation('common')
-  const isMacDesktopChrome = usesCustomDesktopTitlebar() && getDesktopPlatform() === 'macos'
+  const isDesktopChrome = usesCustomDesktopTitlebar()
 
   return (
-    <ModalShell isOpen={isOpen} onClose={onClose} zIndex={zIndex ?? DESKTOP_FULLSCREEN_LAYER_Z_INDEX}>
+    <ModalShell
+      isOpen={isOpen}
+      onClose={onClose}
+      zIndex={zIndex ?? DESKTOP_FULLSCREEN_LAYER_Z_INDEX}
+      style={isDesktopChrome ? { top: `calc(var(--safe-area-inset-top) + ${DESKTOP_TITLEBAR_HEIGHT}px)` } : undefined}
+    >
       <div className="w-full h-full flex flex-col bg-bg-100">
         {showHeader && (
-          <div
-            data-testid="fullscreen-viewer-header"
-            className="flex items-center h-11 px-4 border-b border-border-100/40 shrink-0 gap-3"
-            style={isMacDesktopChrome ? { paddingLeft: DESKTOP_MACOS_FULLSCREEN_HEADER_LEFT_INSET } : undefined}
-          >
+          <div data-testid="fullscreen-viewer-header" className="flex items-center h-11 px-4 border-b border-border-100/40 shrink-0 gap-3">
             {/* Left: title area */}
             <div className="flex items-center gap-3 min-w-0 flex-1">
               {title &&

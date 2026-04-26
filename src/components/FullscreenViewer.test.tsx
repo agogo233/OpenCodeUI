@@ -1,23 +1,19 @@
 import { act, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { DESKTOP_MACOS_FULLSCREEN_HEADER_LEFT_INSET } from '../constants'
+import { DESKTOP_TITLEBAR_HEIGHT } from '../constants'
 import { FullscreenViewer } from './FullscreenViewer'
 
-const { getDesktopPlatformMock, usesCustomDesktopTitlebarMock } = vi.hoisted(() => ({
-  getDesktopPlatformMock: vi.fn(() => 'other'),
+const { usesCustomDesktopTitlebarMock } = vi.hoisted(() => ({
   usesCustomDesktopTitlebarMock: vi.fn(() => false),
 }))
 
 vi.mock('../utils/tauri', () => ({
-  getDesktopPlatform: getDesktopPlatformMock,
   usesCustomDesktopTitlebar: usesCustomDesktopTitlebarMock,
 }))
 
 describe('FullscreenViewer', () => {
   beforeEach(() => {
-    getDesktopPlatformMock.mockReset()
     usesCustomDesktopTitlebarMock.mockReset()
-    getDesktopPlatformMock.mockReturnValue('other')
     usesCustomDesktopTitlebarMock.mockReturnValue(false)
     vi.useFakeTimers()
     vi.spyOn(window, 'requestAnimationFrame').mockImplementation(cb => {
@@ -82,8 +78,7 @@ describe('FullscreenViewer', () => {
     expect(screen.queryByText('closeEsc')).not.toBeInTheDocument()
   })
 
-  it('reserves space for macOS traffic lights in the fullscreen header', () => {
-    getDesktopPlatformMock.mockReturnValue('macos')
+  it('starts below the custom desktop titlebar when desktop chrome is enabled', () => {
     usesCustomDesktopTitlebarMock.mockReturnValue(true)
 
     render(
@@ -96,8 +91,8 @@ describe('FullscreenViewer', () => {
       vi.runAllTimers()
     })
 
-    expect(screen.getByTestId('fullscreen-viewer-header')).toHaveStyle({
-      paddingLeft: `${DESKTOP_MACOS_FULLSCREEN_HEADER_LEFT_INSET}px`,
+    expect(screen.getByRole('dialog')).toHaveStyle({
+      top: `calc(var(--safe-area-inset-top) + ${DESKTOP_TITLEBAR_HEIGHT}px)`,
     })
   })
 })
