@@ -11,10 +11,12 @@ interface MenuItemProps {
 
 export function MenuItem({ label, description, icon, disabled = false, selected = false, onClick }: MenuItemProps) {
   return (
-    <div
-      onClick={disabled ? undefined : onClick}
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
       className={`
-        px-2 py-2 rounded-lg flex items-start gap-2
+        w-full px-2 py-2 rounded-lg flex items-start gap-2 text-left bg-transparent border-none
         transition-all duration-150 select-none
         ${disabled ? 'text-text-500 cursor-not-allowed' : 'cursor-pointer hover:bg-bg-200 active:scale-[0.98]'}
         ${selected && !disabled ? 'text-text-100' : ''}
@@ -38,6 +40,6 @@ export function MenuItem({ label, description, icon, disabled = false, selected 
           <CheckIcon />
         </span>
       )}
-    </div>
+    </button>
   )
 }

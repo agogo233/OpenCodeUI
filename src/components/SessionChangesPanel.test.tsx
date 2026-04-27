@@ -193,6 +193,48 @@ describe('SessionChangesPanel', () => {
     expect(screen.getAllByText('branch.ts').length).toBeGreaterThan(0)
   })
 
+  it('supports keyboard navigation in the change mode menu and exposes toggle state', async () => {
+    render(<SessionChangesPanel sessionId="session-1" directory="/repo" />)
+
+    await act(async () => {
+      vi.runAllTimers()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: /Change mode:/ }))
+
+    await act(async () => {
+      vi.advanceTimersByTime(48)
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    const menu = screen.getByRole('menu', { name: 'Change mode' })
+    const sessionChangesOption = screen.getByRole('menuitemradio', { name: 'Session changes' })
+    const lastTurnOption = screen.getByRole('menuitemradio', { name: 'Last turn changes' })
+
+    expect(sessionChangesOption).toHaveFocus()
+    fireEvent.keyDown(menu, { key: 'ArrowDown' })
+    expect(lastTurnOption).toHaveFocus()
+
+    const treeButton = screen.getByRole('button', { name: 'Tree' })
+    const listButton = screen.getByRole('button', { name: 'List' })
+    const unifiedButton = screen.getByRole('button', { name: 'Unified' })
+    const splitButton = screen.getByRole('button', { name: 'Split' })
+
+    expect(treeButton).toHaveAttribute('aria-pressed', 'true')
+    expect(unifiedButton).toHaveAttribute('aria-pressed', 'true')
+
+    fireEvent.click(listButton)
+    fireEvent.click(splitButton)
+
+    expect(listButton).toHaveAttribute('aria-pressed', 'true')
+    expect(treeButton).toHaveAttribute('aria-pressed', 'false')
+    expect(splitButton).toHaveAttribute('aria-pressed', 'true')
+    expect(unifiedButton).toHaveAttribute('aria-pressed', 'false')
+  })
+
   it('offers git initialization when the project is not a git repository', async () => {
     getCurrentProject.mockResolvedValueOnce({
       id: 'global',

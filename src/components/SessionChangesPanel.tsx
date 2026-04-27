@@ -4,7 +4,7 @@
 // 支持拖拽调整高度，CSS 变量 + requestAnimationFrame 优化
 // ============================================
 
-import { memo, useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import { memo, useState, useEffect, useCallback, useRef, useMemo, useId } from 'react'
 import { useTranslation } from 'react-i18next'
 import { RetryIcon, ChevronRightIcon, MaximizeIcon, ClockIcon, GitBranchIcon, GitDiffIcon, LayersIcon } from './Icons'
 import { getMaterialIconUrl } from '../utils/materialIcons'
@@ -106,6 +106,8 @@ export const SessionChangesPanel = memo(function SessionChangesPanel({
   const selectedFileRef = useRef<string | null>(null)
   const changeMenuTriggerRef = useRef<HTMLButtonElement>(null)
   const changeMenuRef = useRef<HTMLDivElement>(null)
+  const changeMenuOptionRefs = useRef<Partial<Record<ChangeMode, HTMLButtonElement | null>>>({})
+  const changeMenuId = useId()
 
   const isAnyResizing = isPanelResizing || isResizing
   const setChangeMode = useCallback(
@@ -161,6 +163,10 @@ export const SessionChangesPanel = memo(function SessionChangesPanel({
   )
   const loading = projectLoading || initializingGit || loadingModes[changeMode]
 
+  const focusChangeMenuOption = useCallback((mode: ChangeMode) => {
+    changeMenuOptionRefs.current[mode]?.focus()
+  }, [])
+
   useEffect(() => {
     openDiffFilesRef.current = openDiffFiles
   }, [openDiffFiles])
@@ -183,6 +189,7 @@ export const SessionChangesPanel = memo(function SessionChangesPanel({
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         setChangeMenuOpen(false)
+        changeMenuTriggerRef.current?.focus()
       }
     }
 
@@ -193,6 +200,60 @@ export const SessionChangesPanel = memo(function SessionChangesPanel({
       document.removeEventListener('keydown', handleKeyDown)
     }
   }, [changeMenuOpen])
+
+  useEffect(() => {
+    if (!changeMenuOpen) return
+
+    const targetMode = changeOptions.includes(changeMode) ? changeMode : preferredChangeMode
+    let nestedFrameId: number | null = null
+    const frameId = requestAnimationFrame(() => {
+      nestedFrameId = requestAnimationFrame(() => {
+        focusChangeMenuOption(targetMode)
+      })
+    })
+
+    return () => {
+      cancelAnimationFrame(frameId)
+      if (nestedFrameId !== null) cancelAnimationFrame(nestedFrameId)
+    }
+  }, [changeMenuOpen, changeOptions, changeMode, focusChangeMenuOption, preferredChangeMode])
+
+  const handleChangeMenuKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLDivElement>) => {
+      if (changeOptions.length === 0) return
+
+      const currentIndex = changeOptions.findIndex(mode => changeMenuOptionRefs.current[mode] === document.activeElement)
+
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        setChangeMenuOpen(false)
+        changeMenuTriggerRef.current?.focus()
+        return
+      }
+
+      const focusByIndex = (index: number) => {
+        const targetMode = changeOptions[index]
+        if (targetMode) focusChangeMenuOption(targetMode)
+      }
+
+      if (event.key === 'ArrowDown') {
+        event.preventDefault()
+        const nextIndex = currentIndex === -1 ? 0 : (currentIndex + 1) % changeOptions.length
+        focusByIndex(nextIndex)
+      } else if (event.key === 'ArrowUp') {
+        event.preventDefault()
+        const nextIndex = currentIndex === -1 ? changeOptions.length - 1 : (currentIndex - 1 + changeOptions.length) % changeOptions.length
+        focusByIndex(nextIndex)
+      } else if (event.key === 'Home') {
+        event.preventDefault()
+        focusByIndex(0)
+      } else if (event.key === 'End') {
+        event.preventDefault()
+        focusByIndex(changeOptions.length - 1)
+      }
+    },
+    [changeOptions, focusChangeMenuOption],
+  )
 
   const loadProjectState = useCallback(async () => {
     if (!sessionId) return null
@@ -508,9 +569,16 @@ export const SessionChangesPanel = memo(function SessionChangesPanel({
               ref={changeMenuTriggerRef}
               type="button"
               onClick={() => setChangeMenuOpen(open => !open)}
+              onKeyDown={event => {
+                if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+                  event.preventDefault()
+                  setChangeMenuOpen(true)
+                }
+              }}
               aria-label={`${t('sessionChanges.mode')}: ${activeChangeModeMeta.label}`}
               aria-haspopup="menu"
               aria-expanded={changeMenuOpen}
+              aria-controls={changeMenuOpen ? changeMenuId : undefined}
               title={activeChangeModeMeta.label}
               className={`
                 flex items-center rounded p-1 transition-colors
@@ -530,7 +598,14 @@ export const SessionChangesPanel = memo(function SessionChangesPanel({
               constrainToRef={containerRef}
               className="!rounded-lg !p-1"
             >
-              <div ref={changeMenuRef} role="menu" aria-label={t('sessionChanges.mode')} className="space-y-px">
+              <div
+                id={changeMenuId}
+                ref={changeMenuRef}
+                role="menu"
+                aria-label={t('sessionChanges.mode')}
+                onKeyDown={handleChangeMenuKeyDown}
+                className="space-y-px"
+              >
                 {changeOptions.map(mode => {
                   const meta = changeModeMeta[mode]
                   const isSelected = mode === changeMode
@@ -538,13 +613,21 @@ export const SessionChangesPanel = memo(function SessionChangesPanel({
                   return (
                     <button
                       key={mode}
+                      ref={node => {
+                        changeMenuOptionRefs.current[mode] = node
+                        if (node && changeMenuOpen && isSelected) {
+                          node.focus()
+                        }
+                      }}
                       type="button"
                       role="menuitemradio"
                       aria-checked={isSelected}
+                      tabIndex={isSelected ? 0 : -1}
                       title={meta.description}
                       onClick={() => {
                         setChangeMode(mode)
                         setChangeMenuOpen(false)
+                        changeMenuTriggerRef.current?.focus()
                       }}
                       className={`
                         group flex w-full items-center rounded-md px-2.5 py-1.5 text-left text-[length:var(--fs-sm)] transition-colors
@@ -565,7 +648,9 @@ export const SessionChangesPanel = memo(function SessionChangesPanel({
             {/* List Mode Toggle */}
             <div className="flex shrink-0 items-center bg-bg-200/50 rounded overflow-hidden border border-border-200/50">
               <button
+                type="button"
                 onClick={() => setListMode('flat')}
+                aria-pressed={listMode === 'flat'}
                 className={`px-2 py-0.5 text-[length:var(--fs-xxs)] transition-colors ${
                   listMode === 'flat' ? 'bg-bg-000 text-text-100 shadow-sm' : 'text-text-400 hover:text-text-200'
                 }`}
@@ -574,7 +659,9 @@ export const SessionChangesPanel = memo(function SessionChangesPanel({
                 {t('sessionChanges.list')}
               </button>
               <button
+                type="button"
                 onClick={() => setListMode('tree')}
+                aria-pressed={listMode === 'tree'}
                 className={`px-2 py-0.5 text-[length:var(--fs-xxs)] transition-colors ${
                   listMode === 'tree' ? 'bg-bg-000 text-text-100 shadow-sm' : 'text-text-400 hover:text-text-200'
                 }`}
@@ -587,7 +674,9 @@ export const SessionChangesPanel = memo(function SessionChangesPanel({
             {/* View Mode Toggle */}
             <div className="flex shrink-0 items-center bg-bg-200/50 rounded overflow-hidden border border-border-200/50">
               <button
+                type="button"
                 onClick={() => setViewMode('unified')}
+                aria-pressed={viewMode === 'unified'}
                 className={`px-2 py-0.5 text-[length:var(--fs-xxs)] transition-colors ${
                   viewMode === 'unified' ? 'bg-bg-000 text-text-100 shadow-sm' : 'text-text-400 hover:text-text-200'
                 }`}
@@ -595,7 +684,9 @@ export const SessionChangesPanel = memo(function SessionChangesPanel({
                 {t('sessionChanges.unified')}
               </button>
               <button
+                type="button"
                 onClick={() => setViewMode('split')}
+                aria-pressed={viewMode === 'split'}
                 className={`px-2 py-0.5 text-[length:var(--fs-xxs)] transition-colors ${
                   viewMode === 'split' ? 'bg-bg-000 text-text-100 shadow-sm' : 'text-text-400 hover:text-text-200'
                 }`}
@@ -606,8 +697,10 @@ export const SessionChangesPanel = memo(function SessionChangesPanel({
 
             {/* Refresh */}
             <button
+              type="button"
               onClick={handleRefresh}
               disabled={loading}
+              aria-label={t('common:refresh')}
               className="p-1 text-text-400 hover:text-text-100 hover:bg-bg-200 rounded transition-colors disabled:opacity-50"
               title={t('common:refresh')}
             >

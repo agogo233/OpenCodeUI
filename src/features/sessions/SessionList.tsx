@@ -758,16 +758,20 @@ export function SessionListItem({
           }`}
         >
           <button
+            type="button"
             onClick={handleStartEdit}
-            className="p-1.5 rounded-md hover:bg-bg-300 active:bg-bg-300 text-text-400 hover:text-text-100 transition-colors focus:outline-none"
+            className="p-1.5 rounded-md hover:bg-bg-300 active:bg-bg-300 text-text-400 hover:text-text-100 transition-colors focus-visible:ring-1 focus-visible:ring-border-200 focus-visible:ring-inset"
             title={t('sessions.rename')}
+            aria-label={t('sessions.rename')}
           >
             <PencilIcon className="w-3.5 h-3.5" />
           </button>
           <button
+            type="button"
             onClick={handleDelete}
-            className="p-1.5 rounded-md hover:bg-danger-bg active:bg-danger-bg text-text-400 hover:text-danger-100 active:text-danger-100 transition-colors focus:outline-none"
+            className="p-1.5 rounded-md hover:bg-danger-bg active:bg-danger-bg text-text-400 hover:text-danger-100 active:text-danger-100 transition-colors focus-visible:ring-1 focus-visible:ring-danger-100/40 focus-visible:ring-inset"
             title={t('common:delete')}
+            aria-label={t('common:delete')}
           >
             <TrashIcon className="w-3.5 h-3.5" />
           </button>
