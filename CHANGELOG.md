@@ -1,5 +1,9 @@
 # Changelog
 
+## [v0.5.13] - 2026-04-27
+
+- fix: restore drag and drop in secondary desktop windows (36d489e)
+
 ## [v0.5.12] - 2026-04-27
 
 - fix: create the Android main window explicitly (1c20510)
