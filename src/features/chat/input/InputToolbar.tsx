@@ -110,7 +110,6 @@ export function InputToolbar({
   const variantTriggerRef = useRef<HTMLButtonElement>(null)
   const variantMenuRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const toolbarRef = useRef<HTMLDivElement>(null)
   const agentMenuFocusRef = useRef<'selected' | 'first' | 'last'>('selected')
   const variantMenuFocusRef = useRef<'selected' | 'first' | 'last'>('selected')
   const agentMenuId = 'input-toolbar-agent-menu'
@@ -127,11 +126,11 @@ export function InputToolbar({
     target?.focus()
   }, [])
 
-  const focusToolbarRelative = useCallback((trigger: HTMLButtonElement | null, direction: 1 | -1) => {
-    if (!trigger || !toolbarRef.current) return
+  const focusRelativeToTrigger = useCallback((trigger: HTMLButtonElement | null, direction: 1 | -1) => {
+    if (!trigger) return
 
     const focusables = Array.from(
-      toolbarRef.current.querySelectorAll<HTMLElement>(
+      document.body.querySelectorAll<HTMLElement>(
         'button:not([disabled]), [href], input:not([type="file"]):not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
       ),
     )
@@ -178,11 +177,11 @@ export function InputToolbar({
         event.preventDefault()
         onClose()
         window.setTimeout(() => {
-          focusToolbarRelative(trigger, event.shiftKey ? -1 : 1)
+          focusRelativeToTrigger(trigger, event.shiftKey ? -1 : 1)
         }, 0)
       }
     },
-    [focusToolbarRelative],
+    [focusRelativeToTrigger],
   )
 
   // 文件选择器（Tauri 原生 / 浏览器 fallback）
@@ -270,7 +269,7 @@ export function InputToolbar({
   const currentAgent = agents.find(a => a.name === selectedAgent)
 
   return (
-    <div ref={toolbarRef} className="flex items-center justify-between px-3 pb-3 relative">
+    <div className="flex items-center justify-between px-3 pb-3 relative">
       {/* Left side: Model (mobile) + Agent + Variant selectors */}
       <div className={`flex items-center min-w-0 ${isCompact ? 'gap-1' : 'gap-2'}`}>
         {/* Model Selector — 移动端显示在最左边 */}

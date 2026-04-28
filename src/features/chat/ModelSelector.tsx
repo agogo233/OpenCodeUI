@@ -401,6 +401,20 @@ export const ModelSelector = memo(
       return models.find(m => getModelKey(m) === selectedModelKey) ?? null
     }, [models, selectedModelKey])
 
+    const focusRelativeToTrigger = useCallback((direction: 1 | -1) => {
+      const trigger = triggerRef.current
+      if (!trigger) return
+
+      const focusables = Array.from(
+        document.body.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), [href], input:not([type="file"]):not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ),
+      )
+      const currentIndex = focusables.findIndex(item => item === trigger)
+      if (currentIndex === -1) return
+      focusables[currentIndex + direction]?.focus()
+    }, [])
+
     const displayName =
       trigger === 'header'
         ? selectedModel?.name || t('modelSelector.selectModel')
@@ -429,10 +443,12 @@ export const ModelSelector = memo(
       }, 300)
     }, [disabled, isLoading, selectedModelKey, flatList, itemIndices])
 
-    const closeMenu = useCallback(() => {
+    const closeMenu = useCallback((options?: { focusTrigger?: boolean }) => {
       setIsOpen(false)
       setSearchQuery('')
-      triggerRef.current?.focus()
+      if (options?.focusTrigger !== false) {
+        triggerRef.current?.focus()
+      }
     }, [])
 
     useImperativeHandle(ref, () => ({ openMenu }), [openMenu])
@@ -527,7 +543,7 @@ export const ModelSelector = memo(
           menuRef.current &&
           !menuRef.current.contains(target)
         ) {
-          closeMenu()
+          closeMenu({ focusTrigger: false })
         }
       }
       document.addEventListener('mousedown', handleClickOutside)
@@ -590,6 +606,12 @@ export const ModelSelector = memo(
           if (e.key === 'Escape') {
             e.preventDefault()
             closeMenu()
+          } else if (e.key === 'Tab') {
+            e.preventDefault()
+            closeMenu({ focusTrigger: false })
+            window.setTimeout(() => {
+              focusRelativeToTrigger(e.shiftKey ? -1 : 1)
+            }, 0)
           }
           return
         }
@@ -614,9 +636,16 @@ export const ModelSelector = memo(
             e.preventDefault()
             closeMenu()
             break
+          case 'Tab':
+            e.preventDefault()
+            closeMenu({ focusTrigger: false })
+            window.setTimeout(() => {
+              focusRelativeToTrigger(e.shiftKey ? -1 : 1)
+            }, 0)
+            break
         }
       },
-      [itemIndices, flatList, highlightedIndex, handleSelect, closeMenu, focusItemAtInteractiveIndex],
+      [itemIndices, flatList, highlightedIndex, handleSelect, closeMenu, focusItemAtInteractiveIndex, focusRelativeToTrigger],
     )
 
     const handleItemKeyDown = useCallback(
@@ -644,6 +673,13 @@ export const ModelSelector = memo(
             e.preventDefault()
             closeMenu()
             break
+          case 'Tab':
+            e.preventDefault()
+            closeMenu({ focusTrigger: false })
+            window.setTimeout(() => {
+              focusRelativeToTrigger(e.shiftKey ? -1 : 1)
+            }, 0)
+            break
           case 'Enter':
           case ' ':
             e.preventDefault()
@@ -651,7 +687,7 @@ export const ModelSelector = memo(
             break
         }
       },
-      [closeMenu, focusItemAtInteractiveIndex, handleSelect, itemIndices.length],
+      [closeMenu, focusItemAtInteractiveIndex, handleSelect, itemIndices.length, focusRelativeToTrigger],
     )
 
     const handlePinKeyDown = useCallback(
@@ -677,9 +713,16 @@ export const ModelSelector = memo(
             e.preventDefault()
             closeMenu()
             break
+          case 'Tab':
+            e.preventDefault()
+            closeMenu({ focusTrigger: false })
+            window.setTimeout(() => {
+              focusRelativeToTrigger(e.shiftKey ? -1 : 1)
+            }, 0)
+            break
         }
       },
-      [closeMenu, focusItemAtInteractiveIndex, itemIndices.length],
+      [closeMenu, focusItemAtInteractiveIndex, itemIndices.length, focusRelativeToTrigger],
     )
 
     // ---- Trigger button ----
