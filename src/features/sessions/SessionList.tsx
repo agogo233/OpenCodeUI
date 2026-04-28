@@ -528,6 +528,7 @@ export function SessionListItem({
     return (
       <div
         ref={itemRef}
+        onClick={!isEditMode ? handleClick : undefined}
         className={`group relative flex items-center gap-2 px-2 py-1.5 rounded-md cursor-default transition-colors duration-150 select-none ${
           isSelected && !isEditMode
             ? 'bg-bg-200/80 text-text-100'
@@ -606,7 +607,10 @@ export function SessionListItem({
             type="button"
             draggable={isDraggable}
             onDragStart={handleDragStart}
-            onClick={handleClick}
+            onClick={e => {
+              e.stopPropagation()
+              handleClick()
+            }}
             onTouchStart={handleTouchStart}
             onTouchMove={handleTouchMove}
             onTouchEnd={handleTouchEnd}
@@ -688,6 +692,7 @@ export function SessionListItem({
   return (
     <div
       ref={itemRef}
+      onClick={!isEditMode ? handleClick : undefined}
       className={`group relative flex items-start ${itemPaddingClass} rounded-lg cursor-default transition-all duration-200 border border-transparent select-none ${
         isSelected && !isEditMode ? 'bg-bg-000 shadow-sm ring-1 ring-border-200/50' : 'hover:bg-bg-200/50'
       } ${showActions && !isEditMode ? 'bg-bg-200/50' : ''}`}
@@ -769,7 +774,10 @@ export function SessionListItem({
           type="button"
           draggable={isDraggable}
           onDragStart={handleDragStart}
-          onClick={handleClick}
+          onClick={e => {
+            e.stopPropagation()
+            handleClick()
+          }}
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}

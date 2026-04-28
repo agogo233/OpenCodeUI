@@ -83,6 +83,7 @@ function ServerItem({
   return (
     <>
       <div
+        onClick={onSelect}
         className={`group flex items-center gap-3 p-2.5 rounded-lg border transition-colors
           ${
             isActive ? 'border-accent-main-100/40 bg-accent-main-100/5' : 'border-border-200/40 hover:border-border-300'
@@ -90,7 +91,10 @@ function ServerItem({
       >
         <button
           type="button"
-          onClick={onSelect}
+          onClick={e => {
+            e.stopPropagation()
+            onSelect()
+          }}
           aria-current={isActive ? 'true' : undefined}
           className="min-w-0 flex flex-1 items-center gap-3 bg-transparent border-none p-0 text-left"
         >

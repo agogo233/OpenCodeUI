@@ -88,4 +88,17 @@ describe('ModelsSettings', () => {
     expect(switches[1]).toHaveAttribute('aria-label', 'Model Visibility: GPT-4.1')
     expect(setVisibleMock).toHaveBeenCalledWith(MODELS[0], false)
   })
+
+  it('keeps the whole model row clickable outside the text button and switch', () => {
+    render(<ModelsSettings />)
+
+    const modelButton = screen.getByRole('button', { name: /GPT-4.1/i })
+    const modelRow = modelButton.parentElement
+
+    expect(modelRow).not.toBeNull()
+
+    fireEvent.click(modelRow!)
+
+    expect(setVisibleMock).toHaveBeenCalledWith(MODELS[0], false)
+  })
 })

@@ -46,7 +46,7 @@ const {
     initializePendingRequests: vi.fn(),
     setSessionMetaBulk: vi.fn(),
     setSessionMeta: vi.fn(),
-    getSessionMeta: vi.fn(() => ({ title: 'Child Session', directory: '/workspace' })),
+    getSessionMeta: vi.fn((sessionId?: string) => ({ title: sessionId || 'Child Session', directory: '/workspace' })),
     addPendingRequest: vi.fn(),
     resolvePendingRequest: vi.fn(),
     updateStatus: vi.fn(),
@@ -202,6 +202,104 @@ describe('useGlobalEvents', () => {
 
     expect(activeSessionStoreMock.initialize).toHaveBeenCalledTimes(1)
     expect(activeSessionStoreMock.initialize).not.toHaveBeenCalledWith({ 'old-session': { type: 'idle' } })
+  })
+
+  it('replays pending requests that arrive while initialization is in flight', async () => {
+    let callbacks: Parameters<typeof subscribeToEventsMock>[0] | undefined
+    const statusDeferred = createDeferred<Record<string, { type: string }>>()
+
+    subscribeToEventsMock.mockImplementation(cb => {
+      callbacks = cb
+      return vi.fn()
+    })
+    getSessionStatusMock.mockImplementation(() => statusDeferred.promise)
+    getPendingPermissionsMock.mockResolvedValue([])
+    getPendingQuestionsMock.mockResolvedValue([])
+
+    renderHook(() => useGlobalEvents(['/workspace']))
+
+    await waitFor(() => expect(getSessionStatusMock).toHaveBeenCalledWith('/workspace'))
+    await waitFor(() => expect(callbacks).toBeDefined())
+
+    callbacks!.onPermissionAsked?.({
+      id: 'perm-1',
+      sessionID: 'child-session',
+      permission: 'edit',
+      patterns: ['src/app.tsx'],
+    } as never)
+
+    statusDeferred.resolve({})
+
+    await waitFor(() => expect(activeSessionStoreMock.initializePendingRequests).toHaveBeenCalled())
+
+    expect(activeSessionStoreMock.addPendingRequest).toHaveBeenNthCalledWith(
+      1,
+      'perm-1',
+      'child-session',
+      'permission',
+      'edit: src/app.tsx',
+    )
+    expect(activeSessionStoreMock.addPendingRequest).toHaveBeenNthCalledWith(
+      2,
+      'perm-1',
+      'child-session',
+      'permission',
+      'edit: src/app.tsx',
+    )
+  })
+
+  it('keeps replaying pending requests across overlapping initialization fetches', async () => {
+    let callbacks: Parameters<typeof subscribeToEventsMock>[0] | undefined
+    const statusDeferreds = new Map<string, ReturnType<typeof createDeferred<Record<string, { type: string }>>>>()
+
+    subscribeToEventsMock.mockImplementation(cb => {
+      callbacks = cb
+      return vi.fn()
+    })
+    activeSessionStoreMock.getSessionMeta.mockImplementation((sessionId?: string) => {
+      if (sessionId === 'child-session') return { title: 'Child Session', directory: '/one' }
+      if (sessionId === 'question-session') return { title: 'Question Session', directory: '/two' }
+      return { title: 'Session', directory: '/workspace' }
+    })
+    getSessionStatusMock.mockImplementation(directory => {
+      const key = directory || 'root'
+      const deferred = createDeferred<Record<string, { type: string }>>()
+      statusDeferreds.set(key, deferred)
+      return deferred.promise
+    })
+    getPendingPermissionsMock.mockResolvedValue([])
+    getPendingQuestionsMock.mockResolvedValue([])
+
+    const { rerender } = renderHook(({ directories }) => useGlobalEvents(directories), {
+      initialProps: { directories: ['/one'] as string[] | undefined },
+    })
+
+    await waitFor(() => expect(getSessionStatusMock).toHaveBeenCalledWith('/one'))
+    await waitFor(() => expect(callbacks).toBeDefined())
+
+    callbacks!.onPermissionAsked?.({
+      id: 'perm-1',
+      sessionID: 'child-session',
+      permission: 'edit',
+      patterns: ['src/app.tsx'],
+    } as never)
+
+    rerender({ directories: ['/two'] })
+
+    await waitFor(() => expect(getSessionStatusMock).toHaveBeenCalledWith('/two'))
+
+    callbacks!.onQuestionAsked?.({
+      id: 'question-1',
+      sessionID: 'question-session',
+      questions: [{ header: 'Need input' }],
+    } as never)
+
+    statusDeferreds.get('/two')?.resolve({})
+
+    await waitFor(() => expect(activeSessionStoreMock.initializePendingRequests).toHaveBeenCalledTimes(1))
+
+    expect(activeSessionStoreMock.addPendingRequest.mock.calls.filter(call => call[0] === 'perm-1')).toHaveLength(1)
+    expect(activeSessionStoreMock.addPendingRequest.mock.calls.filter(call => call[0] === 'question-1')).toHaveLength(2)
   })
 
   it('does not play current-session sound for child session events when parent session is focused', async () => {

@@ -121,11 +121,19 @@ export function ModelsSettings() {
                       const context = formatContext(model.contextLimit)
 
                       return (
-                        <div key={key} className="w-full flex items-center justify-between gap-4 px-4 py-3 hover:bg-bg-100/35 transition-colors">
+                        <div
+                          key={key}
+                          onClick={() => {
+                            if (enabled && visibleCount <= 1) return
+                            modelVisibilityStore.setVisible(model, !enabled)
+                          }}
+                          className="w-full flex items-center justify-between gap-4 px-4 py-3 hover:bg-bg-100/35 transition-colors"
+                        >
                           <button
                             type="button"
                             aria-pressed={enabled}
-                            onClick={() => {
+                            onClick={e => {
+                              e.stopPropagation()
                               if (enabled && visibleCount <= 1) return
                               modelVisibilityStore.setVisible(model, !enabled)
                             }}
