@@ -203,6 +203,16 @@ export function SettingsDialog({ isOpen, onClose, initialTab = 'servers' }: Sett
     return () => cancelAnimationFrame(frameId)
   }, [tab, visibleTabs])
 
+  useEffect(() => {
+    if (!isOpen) return
+
+    const frameId = requestAnimationFrame(() => {
+      document.getElementById(`settings-tab-${tab}`)?.focus()
+    })
+
+    return () => cancelAnimationFrame(frameId)
+  }, [isOpen, tab])
+
   // 切换 tab 时重置滚动位置
   const switchTab = useCallback((nextTab: SettingsTab) => {
     setTab(nextTab)
@@ -213,19 +223,23 @@ export function SettingsDialog({ isOpen, onClose, initialTab = 'servers' }: Sett
 
   const handleTabKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
-      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
         e.preventDefault()
-        const dir = e.key === 'ArrowDown' ? 1 : -1
+        const dir = e.key === 'ArrowDown' || e.key === 'ArrowRight' ? 1 : -1
         const ids = visibleTabs.map(t => t.id)
         if (ids.length === 0) return
         const next = (ids.indexOf(tab) + dir + ids.length) % ids.length
         switchTab(ids[next])
+        requestAnimationFrame(() => {
+          document.getElementById(`settings-tab-${ids[next]}`)?.focus()
+        })
       }
     },
     [tab, visibleTabs, switchTab],
   )
 
   const activeTabMeta = visibleTabs.find(vt => vt.id === tab) || visibleTabs[0]
+  const activePanelId = `settings-panel-${tab}`
 
   // 移动端：全屏体验，顶部 sticky tab
   if (isMobile) {
@@ -246,7 +260,9 @@ export function SettingsDialog({ isOpen, onClose, initialTab = 'servers' }: Sett
             <div className="flex items-center justify-between px-4 pt-3 pb-2">
               <div className="text-[length:var(--fs-heading-3)] font-semibold text-text-100">{t('title')}</div>
               <button
+                type="button"
                 onClick={onClose}
+                aria-label={t('closeSettings')}
                 className="p-2 -mr-1 text-text-400 hover:text-text-200 active:bg-bg-100 rounded-lg transition-colors"
               >
                 <CloseIcon size={18} />
@@ -255,10 +271,21 @@ export function SettingsDialog({ isOpen, onClose, initialTab = 'servers' }: Sett
 
             {/* Tab Bar - horizontal scroll with padding for visual safety */}
             <div className="relative">
-              <div className="flex items-center gap-1.5 px-4 pb-3 overflow-x-auto scrollbar-none">
+              <div
+                role="tablist"
+                aria-label={t('title')}
+                onKeyDown={handleTabKeyDown}
+                className="flex items-center gap-1.5 px-4 pb-3 overflow-x-auto scrollbar-none"
+              >
                 {visibleTabs.map(vt => (
                   <button
                     key={vt.id}
+                    id={`settings-tab-${vt.id}`}
+                    type="button"
+                    role="tab"
+                    aria-selected={vt.id === tab}
+                    aria-controls={`settings-panel-${vt.id}`}
+                    tabIndex={vt.id === tab ? 0 : -1}
                     onClick={() => switchTab(vt.id)}
                     className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[length:var(--fs-md)] font-medium transition-colors whitespace-nowrap shrink-0 border
                       ${
@@ -277,7 +304,13 @@ export function SettingsDialog({ isOpen, onClose, initialTab = 'servers' }: Sett
           </div>
 
           {/* Content - single scroll container */}
-          <div ref={scrollRef} className="flex-1 min-h-0 py-4 px-4 overflow-y-auto custom-scrollbar overscroll-contain">
+          <div
+            id={activePanelId}
+            role="tabpanel"
+            aria-labelledby={`settings-tab-${tab}`}
+            ref={scrollRef}
+            className="flex-1 min-h-0 py-4 px-4 overflow-y-auto custom-scrollbar overscroll-contain"
+          >
             <TabContent tab={tab} />
           </div>
         </div>
@@ -299,6 +332,9 @@ export function SettingsDialog({ isOpen, onClose, initialTab = 'servers' }: Sett
       <div className="flex h-[min(90vh,820px)]">
         {/* Left Nav - 窄屏时收缩 */}
         <nav
+          role="tablist"
+          aria-orientation="vertical"
+          aria-label={t('title')}
           className="w-[200px] xl:w-[236px] shrink-0 border-r border-border-100/60 py-4 px-2 xl:px-2.5 flex flex-col overflow-y-auto scrollbar-none"
           onKeyDown={handleTabKeyDown}
         >
@@ -318,6 +354,11 @@ export function SettingsDialog({ isOpen, onClose, initialTab = 'servers' }: Sett
                   {group.tabs.map(vt => (
                     <button
                       key={vt.id}
+                      id={`settings-tab-${vt.id}`}
+                      type="button"
+                      role="tab"
+                      aria-selected={vt.id === tab}
+                      aria-controls={`settings-panel-${vt.id}`}
                       onClick={() => switchTab(vt.id)}
                       tabIndex={vt.id === tab ? 0 : -1}
                       className={`w-full flex items-center gap-2.5 px-2.5 xl:px-3 py-2 xl:py-2.5 rounded-lg text-[length:var(--fs-md)] font-medium transition-colors
@@ -361,7 +402,13 @@ export function SettingsDialog({ isOpen, onClose, initialTab = 'servers' }: Sett
           </div>
 
           {/* Scroll area - single scroll container for all tab content */}
-          <div ref={scrollRef} className="flex-1 min-h-0 py-5 px-5 xl:px-6 overflow-y-auto custom-scrollbar">
+          <div
+            id={activePanelId}
+            role="tabpanel"
+            aria-labelledby={`settings-tab-${tab}`}
+            ref={scrollRef}
+            className="flex-1 min-h-0 py-5 px-5 xl:px-6 overflow-y-auto custom-scrollbar"
+          >
             <TabContent tab={tab} />
           </div>
         </div>

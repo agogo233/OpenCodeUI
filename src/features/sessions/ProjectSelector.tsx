@@ -217,10 +217,13 @@ function ProjectItem({ project, displayName, path, onSelect, onRemove }: Project
   const isGlobal = project.id === 'global'
 
   return (
-    <div className="group w-full flex items-center gap-2.5 px-2 py-2 rounded-lg hover:bg-bg-100 transition-colors">
+    <div className="group w-full flex items-center gap-2.5 px-2 py-2 rounded-lg hover:bg-bg-100 transition-colors" onClick={onSelect}>
       <button
         type="button"
-        onClick={onSelect}
+        onClick={e => {
+          e.stopPropagation()
+          onSelect()
+        }}
         className="min-w-0 flex flex-1 items-center gap-2.5 text-left bg-transparent border-none p-0"
         title={path}
       >
@@ -242,7 +245,10 @@ function ProjectItem({ project, displayName, path, onSelect, onRemove }: Project
       {onRemove && (
         <button
           type="button"
-          onClick={onRemove}
+          onClick={e => {
+            e.stopPropagation()
+            onRemove()
+          }}
           aria-label={t('common:remove')}
           className="p-1 rounded text-text-400 hover:text-danger-100 hover:bg-danger-100/10 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100 md:focus-visible:opacity-100 transition-colors"
           title={t('common:remove')}

@@ -54,6 +54,7 @@ export function useDynamicVirtualScroll({
   )
   const pendingMeasureRef = useRef(false)
   const pendingHeightsRef = useRef<Float32Array<ArrayBufferLike> | null>(null)
+  const measureFrameRef = useRef<number | null>(null)
 
   const resolvedHeights = useMemo(() => {
     const next = new Float32Array(lineCount).fill(estimateLineHeight)
@@ -127,6 +128,14 @@ export function useDynamicVirtualScroll({
     return () => ro.disconnect()
   }, [estimateLineHeight, lineCount])
 
+  useEffect(() => {
+    return () => {
+      if (measureFrameRef.current !== null) {
+        cancelAnimationFrame(measureFrameRef.current)
+      }
+    }
+  }, [])
+
   const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
     setScrollTop(e.currentTarget.scrollTop)
   }, [])
@@ -145,7 +154,8 @@ export function useDynamicVirtualScroll({
       pendingHeightsRef.current = nextHeights
       if (!pendingMeasureRef.current) {
         pendingMeasureRef.current = true
-        requestAnimationFrame(() => {
+        measureFrameRef.current = requestAnimationFrame(() => {
+          measureFrameRef.current = null
           pendingMeasureRef.current = false
           const bufferedHeights = pendingHeightsRef.current
           pendingHeightsRef.current = null

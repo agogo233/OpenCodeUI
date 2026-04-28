@@ -41,4 +41,30 @@ describe('ProjectSelector', () => {
 
     expect(onRemoveProject).toHaveBeenCalledWith('project-1')
   })
+
+  it('keeps the full project row clickable outside the inner text button', () => {
+    const onSelectProject = vi.fn()
+
+    render(
+      <ProjectSelector
+        currentProject={GLOBAL_PROJECT}
+        projects={[GLOBAL_PROJECT, APP_PROJECT]}
+        isLoading={false}
+        onSelectProject={onSelectProject}
+        onAddProject={vi.fn()}
+        onRemoveProject={vi.fn()}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /Global/i }))
+
+    const projectButton = screen.getByRole('button', { name: /App/i })
+    const projectRow = projectButton.parentElement
+
+    expect(projectRow).not.toBeNull()
+
+    fireEvent.click(projectRow!)
+
+    expect(onSelectProject).toHaveBeenCalledWith('project-1')
+  })
 })

@@ -919,13 +919,17 @@ export function SidePanel({
                 return (
                   <div
                     key={project.id}
+                    onClick={() => handleSelectProject(project.id)}
                     className={`group w-full flex items-center gap-2 px-2 py-1.5 transition-colors ${
                       isActive ? 'bg-bg-200/60 text-text-100' : 'text-text-300 hover:text-text-100 hover:bg-bg-200/50'
                     }`}
                   >
                     <button
                       type="button"
-                      onClick={() => handleSelectProject(project.id)}
+                      onClick={e => {
+                        e.stopPropagation()
+                        handleSelectProject(project.id)
+                      }}
                       aria-current={isActive ? 'true' : undefined}
                       className="min-w-0 flex flex-1 items-center gap-2 text-left bg-transparent border-none p-0"
                       title={project.worktree}
@@ -955,7 +959,8 @@ export function SidePanel({
                     {!isGlobal && (
                       <button
                         type="button"
-                        onClick={() => {
+                        onClick={e => {
+                          e.stopPropagation()
                           setProjectDeleteConfirm({ isOpen: true, projectId: project.id })
                         }}
                         aria-label={t('sidebar.removeProject')}

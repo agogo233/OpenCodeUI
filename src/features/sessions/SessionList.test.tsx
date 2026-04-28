@@ -65,4 +65,28 @@ describe('SessionListItem', () => {
     expect(onSelect).toHaveBeenCalledTimes(1)
     expect(markSessionNotificationsReadMock).toHaveBeenCalledWith('session-1', 'completed')
   })
+
+  it('keeps the full session row clickable outside the inner content button', () => {
+    const onSelect = vi.fn()
+
+    render(
+      <SessionListItem
+        session={session}
+        isSelected={false}
+        onSelect={onSelect}
+        onDelete={vi.fn()}
+        onRename={vi.fn()}
+        preferTouchUi={false}
+      />,
+    )
+
+    const sessionButton = screen.getByRole('button', { name: /Session One/i })
+    const sessionRow = sessionButton.parentElement
+
+    expect(sessionRow).not.toBeNull()
+
+    fireEvent.click(sessionRow!)
+
+    expect(onSelect).toHaveBeenCalledTimes(1)
+  })
 })

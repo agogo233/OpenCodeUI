@@ -261,7 +261,7 @@ const ModelListPanel = memo(function ModelListPanel({
                     onTouchEnd={onTouchEnd}
                     onTouchMove={onTouchEnd}
                     title={`${model.name} · ${model.providerName}${model.contextLimit ? ` · ${formatContext(model.contextLimit)}` : ''}`}
-                    className="flex min-w-0 flex-1 items-center justify-between gap-2 bg-transparent border-none p-0 text-left outline-none focus-visible:outline-none"
+                    className="flex min-w-0 flex-1 items-center justify-between gap-2 rounded-md bg-transparent border-none p-0 text-left outline-none focus-visible:outline-none"
                   >
                     {/* Left: name + capability icons */}
                     <div className="flex items-center gap-2 min-w-0 flex-1 overflow-hidden">
@@ -304,7 +304,7 @@ const ModelListPanel = memo(function ModelListPanel({
                         if (interactiveIndex !== -1) handlePinKeyDown(e, interactiveIndex)
                       }}
                       aria-label={`${pinned ? unpinLabel : pinLabel}: ${model.name}`}
-                      className={`w-5 flex items-center justify-center flex-shrink-0 p-0.5 rounded outline-none transition-all duration-150 focus-visible:outline-none ${
+                      className={`w-5 flex items-center justify-center flex-shrink-0 p-0.5 rounded outline-none transition-all duration-150 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-border-200 ${
                         pinned
                           ? 'text-accent-main-100 opacity-80 hover:opacity-100'
                           : 'text-text-500 opacity-0 group-hover:opacity-40 group-focus-within:opacity-40 hover:!opacity-100 focus-visible:!opacity-100'
@@ -438,10 +438,12 @@ export const ModelSelector = memo(
 
     // ---- Open / Close ----
 
-    const openMenu = useCallback((focusTarget: 'search' | 'list' = 'search') => {
+    const openMenu = useCallback((focusTarget: 'search' | 'list' = 'search', preferredIndex?: number) => {
       if (disabled || isLoading) return
       let targetIndex = 0
-      if (selectedModelKey) {
+      if (typeof preferredIndex === 'number') {
+        targetIndex = Math.max(0, Math.min(preferredIndex, itemIndices.length - 1))
+      } else if (selectedModelKey) {
         const index = flatList.findIndex(item => item.type === 'item' && getModelKey(item.data) === selectedModelKey)
         if (index !== -1) {
           const interactiveIndex = itemIndices.indexOf(index)
@@ -467,6 +469,13 @@ export const ModelSelector = memo(
       }
     }, [])
 
+    const focusToolbarInput = useCallback(() => {
+      if (trigger !== 'toolbar') return
+      const container = constrainToRef?.current
+      const input = container?.querySelector<HTMLElement>('textarea, input:not([type="file"]):not([disabled]), [contenteditable="true"]')
+      input?.focus()
+    }, [constrainToRef, trigger])
+
     useImperativeHandle(ref, () => ({ openMenu }), [openMenu])
 
     // ---- Select / Pin ----
@@ -476,10 +485,15 @@ export const ModelSelector = memo(
         const key = getModelKey(model)
         recordModelUsage(model)
         onSelect(key, model)
-        closeMenu()
+        closeMenu({ focusTrigger: trigger !== 'toolbar' })
+        if (trigger === 'toolbar') {
+          window.setTimeout(() => {
+            focusToolbarInput()
+          }, 0)
+        }
         setRefreshTrigger(c => c + 1)
       },
-      [onSelect, closeMenu],
+      [onSelect, closeMenu, focusToolbarInput, trigger],
     )
 
     const handleTogglePin = useCallback((e: React.MouseEvent, model: ModelInfo) => {
@@ -533,6 +547,12 @@ export const ModelSelector = memo(
       },
       [itemIndices, idPrefix],
     )
+
+    const focusPinButtonForModel = useCallback((modelKey: string, interactiveIndex: number) => {
+      setHighlightedIndex(interactiveIndex)
+      const selector = `button[data-focus-target="pin"][data-model-key="${modelKey}"]`
+      document.querySelector<HTMLElement>(selector)?.focus()
+    }, [])
 
     // ---- Side effects ----
 
@@ -690,6 +710,10 @@ export const ModelSelector = memo(
             break
           case 'Tab':
             e.preventDefault()
+            if (!preferTouchUi && !e.shiftKey) {
+              focusPinButtonForModel(getModelKey(model), interactiveIndex)
+              break
+            }
             closeMenu({ focusTrigger: false })
             window.setTimeout(() => {
               focusRelativeToTrigger(e.shiftKey ? -1 : 1)
@@ -702,7 +726,15 @@ export const ModelSelector = memo(
             break
         }
       },
-      [closeMenu, focusItemAtInteractiveIndex, handleSelect, itemIndices.length, focusRelativeToTrigger],
+      [
+        closeMenu,
+        focusItemAtInteractiveIndex,
+        focusPinButtonForModel,
+        handleSelect,
+        itemIndices.length,
+        focusRelativeToTrigger,
+        preferTouchUi,
+      ],
     )
 
     const handlePinKeyDown = useCallback(
@@ -730,6 +762,10 @@ export const ModelSelector = memo(
             break
           case 'Tab':
             e.preventDefault()
+            if (e.shiftKey) {
+              focusItemAtInteractiveIndex(interactiveIndex)
+              break
+            }
             closeMenu({ focusTrigger: false })
             window.setTimeout(() => {
               focusRelativeToTrigger(e.shiftKey ? -1 : 1)
@@ -748,9 +784,12 @@ export const ModelSelector = memo(
           ref={triggerRef}
           onClick={() => (isOpen ? closeMenu() : openMenu())}
           onKeyDown={e => {
-            if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+            if (e.key === 'ArrowDown') {
               e.preventDefault()
               openMenu('list')
+            } else if (e.key === 'ArrowUp') {
+              e.preventDefault()
+              openMenu('list', itemIndices.length - 1)
             }
           }}
           disabled={disabled || isLoading}
@@ -768,9 +807,12 @@ export const ModelSelector = memo(
           ref={triggerRef}
           onClick={() => (isOpen ? closeMenu() : openMenu())}
           onKeyDown={e => {
-            if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+            if (e.key === 'ArrowDown') {
               e.preventDefault()
               openMenu('list')
+            } else if (e.key === 'ArrowUp') {
+              e.preventDefault()
+              openMenu('list', itemIndices.length - 1)
             }
           }}
           disabled={disabled || isLoading}
