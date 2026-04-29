@@ -1,5 +1,16 @@
 # Changelog
 
+## [v0.5.19] - 2026-04-29
+
+- fix: tighten sidebar search spacing (8b76cb2)
+- fix: align desktop titlebar and dialog layout (f5800ba)
+- fix: align dialog overlay styling (fe3a3cf)
+- fix: unify right panel tab styling (ca6d697)
+- fix: align command palette styling (dc67f38)
+- fix: polish sidebar popover styling (da633ea)
+- fix: preserve route session during refresh (9d3f0a0)
+- fix: prevent terminal reconnect loops on global switch (5d0aca2)
+
 ## [v0.5.18] - 2026-04-29
 
 - fix: tighten pane focus and interaction regressions (c800e44)
