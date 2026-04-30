@@ -48,12 +48,14 @@ export function useModelSelection({ models, sessionId = null }: UseModelSelectio
 
   const persistedModel = selectedModelKey ? findModelByKey(models, selectedModelKey) : undefined
   const currentModel = useMemo(() => persistedModel ?? models[0], [models, persistedModel])
-  const resolvedModelKey = currentModel ? getModelKey(currentModel) : null
+  // resolvedModelKey: 优先用用户选择的 key，否则回退到当前模型（保证总有有效值）
+  const resolvedModelKey = selectedModelKey || (currentModel ? getModelKey(currentModel) : null)
+  // 计算 variant 偏好：如果模型存在且是用户选择的，用当前 variant；否则从存储读取
   const resolvedSelectedVariant = useMemo(() => {
-    if (!resolvedModelKey) return undefined
-    if (persistedModel && selectedModelKey === resolvedModelKey) return selectedVariant
-    return getModelVariantPref(resolvedModelKey)
-  }, [resolvedModelKey, persistedModel, selectedModelKey, selectedVariant])
+    if (!selectedModelKey) return undefined
+    if (persistedModel) return selectedVariant
+    return getModelVariantPref(selectedModelKey)
+  }, [selectedModelKey, persistedModel, selectedVariant])
 
   useEffect(() => {
     if (!sessionId) {
@@ -81,23 +83,23 @@ export function useModelSelection({ models, sessionId = null }: UseModelSelectio
   }, [models, sessionId])
 
   useEffect(() => {
-    if (resolvedModelKey) {
-      serverStorage.set(STORAGE_KEY_SELECTED_MODEL, resolvedModelKey)
+    if (selectedModelKey) {
+      serverStorage.set(STORAGE_KEY_SELECTED_MODEL, selectedModelKey)
       if (sessionId) {
-        saveSessionModelSelection(sessionId, resolvedModelKey, resolvedSelectedVariant)
+        saveSessionModelSelection(sessionId, selectedModelKey, resolvedSelectedVariant)
       }
       return
     }
 
     serverStorage.remove(STORAGE_KEY_SELECTED_MODEL)
-  }, [resolvedModelKey, resolvedSelectedVariant, sessionId])
+  }, [selectedModelKey, resolvedSelectedVariant, sessionId])
 
   // 切换模型
   const handleModelChange = useCallback(
     (modelKey: string, _model: ModelInfo) => {
       // 先保存当前模型的 variant 偏好
-      if (resolvedModelKey && resolvedSelectedVariant) {
-        saveModelVariantPref(resolvedModelKey, resolvedSelectedVariant)
+      if (selectedModelKey && resolvedSelectedVariant) {
+        saveModelVariantPref(selectedModelKey, resolvedSelectedVariant)
       }
 
       // 切换模型
@@ -106,18 +108,18 @@ export function useModelSelection({ models, sessionId = null }: UseModelSelectio
         selectedVariant: getModelVariantPref(modelKey),
       })
     },
-    [resolvedModelKey, resolvedSelectedVariant],
+    [selectedModelKey, resolvedSelectedVariant],
   )
 
   // Variant 变化时保存偏好
   const handleVariantChange = useCallback(
     (variant: string | undefined) => {
       setSelection(prev => ({ ...prev, selectedVariant: variant }))
-      if (resolvedModelKey) {
-        saveModelVariantPref(resolvedModelKey, variant)
+      if (selectedModelKey) {
+        saveModelVariantPref(selectedModelKey, variant)
       }
     },
-    [resolvedModelKey],
+    [selectedModelKey],
   )
 
   // 从消息中恢复模型选择（仅更新内存状态，不写 storage）
