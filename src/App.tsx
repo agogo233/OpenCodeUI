@@ -1,5 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { invoke } from '@tauri-apps/api/core'
 import { Sidebar } from './features/chat'
 import { ChatPane } from './features/chat/ChatPane'
 import { SplitContainer } from './features/chat/SplitContainer'
@@ -34,6 +35,7 @@ import { initNotificationSound } from './utils/notificationSoundBridge'
 import { createPtySession } from './api/pty'
 import type { TerminalTab } from './store/layoutStore'
 import type { SettingsTab } from './features/settings/SettingsDialog'
+import { isTauri, isTauriMobile } from './utils/tauri'
 
 const SettingsDialog = lazy(() =>
   import('./features/settings/SettingsDialog').then(module => ({ default: module.SettingsDialog })),
@@ -67,6 +69,7 @@ function App() {
   const focusedController = usePaneController(paneLayout.focusedPaneId)
   const paneControllers = usePaneControllers()
   const syncingFromRouteRef = useRef(false)
+  const lastRouteSessionIdRef = useRef<string | null | undefined>(undefined)
   // 当 currentDirectory 为 undefined 时表示全局模式，
   // 不应 fallback 到 session 自身的 directory，否则 replaceSession 会把 dir 参数写回 URL
   const focusedRouteDirectory =
@@ -79,6 +82,14 @@ function App() {
   useEffect(() => {
     const cleanup = initNotificationSound()
     return cleanup
+  }, [])
+
+  useEffect(() => {
+    if (!isTauri() || isTauriMobile()) return
+
+    void invoke('desktop_window_ready').catch(() => {
+      // best effort only
+    })
   }, [])
 
   useEffect(() => {
@@ -107,7 +118,9 @@ function App() {
 
   // URL -> focused pane session
   useEffect(() => {
-    if (paneLayout.focusedSessionId === routeSessionId) return
+    if (lastRouteSessionIdRef.current === routeSessionId) return
+    lastRouteSessionIdRef.current = routeSessionId
+    if (paneLayoutStore.getFocusedSessionId() === routeSessionId) return
     syncingFromRouteRef.current = true
     paneLayoutStore.setFocusedSession(routeSessionId)
   }, [routeSessionId])
@@ -118,6 +131,7 @@ function App() {
       syncingFromRouteRef.current = false
       return
     }
+    if (paneLayoutStore.getFocusedSessionId() !== paneLayout.focusedSessionId) return
     if (paneLayout.focusedSessionId === routeSessionId && isSameDirectory(routeDirectory, focusedRouteDirectory)) return
     replaceSession(paneLayout.focusedSessionId, focusedRouteDirectory)
   }, [
@@ -226,6 +240,18 @@ function App() {
   const [projectDialogOpen, setProjectDialogOpen] = useState(false)
   const openProject = useCallback(() => setProjectDialogOpen(true), [])
   const closeProjectDialog = useCallback(() => setProjectDialogOpen(false), [])
+
+  // 桌面标题栏通过 CustomEvent 触发打开项目/设置
+  useEffect(() => {
+    const onOpenProject = () => openProject()
+    const onOpenSettings = () => openSettings()
+    window.addEventListener('titlebar:open-project', onOpenProject)
+    window.addEventListener('titlebar:open-settings', onOpenSettings)
+    return () => {
+      window.removeEventListener('titlebar:open-project', onOpenProject)
+      window.removeEventListener('titlebar:open-settings', onOpenSettings)
+    }
+  }, [openProject, openSettings])
 
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false)
 
