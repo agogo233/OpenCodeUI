@@ -30,6 +30,7 @@ import { RetryStatusInline, type RetryStatusInlineData } from './RetryStatusInli
 import { buildVisibleMessageEntries, getVisibleMessageForkTargetId } from './chatAreaVisibility'
 import { AT_BOTTOM_THRESHOLD_PX } from '../../constants'
 import { useChatViewport } from './chatViewport'
+import { usePanelResizeStatus } from '../../hooks/usePanelResizeStatus'
 
 const MESSAGE_RENDER_ROOT_MARGIN = '150% 0px'
 const STICKY_RENDER_MESSAGE_COUNT = 8
@@ -143,6 +144,7 @@ export const ChatArea = memo(
 
       const { isWideMode } = useTheme()
       const { presentation } = useChatViewport()
+      const isPanelResizing = usePanelResizeStatus()
       const atBottomThreshold = presentation.isCompact ? 150 : AT_BOTTOM_THRESHOLD_PX
       const messagePaddingClass = presentation.isCompact ? 'px-3' : 'px-5'
 
@@ -387,6 +389,7 @@ export const ChatArea = memo(
                       key={msg.info.id}
                       messageId={msg.info.id}
                       scrollRoot={scrollRoot}
+                      resizeUnmountActive={isPanelResizing}
                       registerMessage={registerMessage}
                       forceRender={msg.isStreaming || stickyRenderIds.has(msg.info.id)}
                     >
@@ -409,6 +412,7 @@ export const ChatArea = memo(
         },
         [
           scrollRoot,
+          isPanelResizing,
           stickyRenderIds,
           registerMessage,
           onUndo,
@@ -500,6 +504,7 @@ export const ChatArea = memo(
 interface ViewportMessageItemProps {
   messageId: string
   scrollRoot: HTMLDivElement | null
+  resizeUnmountActive?: boolean
   forceRender?: boolean
   registerMessage?: (id: string, element: HTMLElement | null) => void
   children: ReactNode
@@ -508,6 +513,7 @@ interface ViewportMessageItemProps {
 const ViewportMessageItem = memo(function ViewportMessageItem({
   messageId,
   scrollRoot,
+  resizeUnmountActive = false,
   forceRender = false,
   registerMessage,
   children,
@@ -527,7 +533,7 @@ const ViewportMessageItem = memo(function ViewportMessageItem({
 
   useEffect(() => {
     const wrapper = wrapperRef.current
-    if (!wrapper || !scrollRoot) return
+    if (!wrapper || !scrollRoot || !resizeUnmountActive) return
 
     const observer = new IntersectionObserver(
       ([entry]) => {
@@ -541,9 +547,9 @@ const ViewportMessageItem = memo(function ViewportMessageItem({
 
     observer.observe(wrapper)
     return () => observer.disconnect()
-  }, [scrollRoot])
+  }, [scrollRoot, resizeUnmountActive])
 
-  const shouldRender = forceRender || measuredHeight === null || isNearViewport
+  const shouldRender = !resizeUnmountActive || forceRender || measuredHeight === null || isNearViewport
 
   useEffect(() => {
     const content = contentRef.current
