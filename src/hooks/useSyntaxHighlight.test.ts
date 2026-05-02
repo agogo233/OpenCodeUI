@@ -7,9 +7,8 @@ describe('getShikiTheme', () => {
     expect(getShikiTheme(false).theme).toBe('github-light-default')
   })
 
-  it('keeps theme revision in cache keys', () => {
-    expect(getShikiTheme(true, 'preset-a').key).toBe('github-dark-default:preset-a')
-    expect(getShikiTheme(false, 'preset-a').key).toBe('github-light-default:preset-a')
-    expect(getShikiTheme(true, 'preset-b').key).toBe('github-dark-default:preset-b')
+  it('uses stable cache keys that only depend on syntax theme', () => {
+    expect(getShikiTheme(true).key).toBe('github-dark-default')
+    expect(getShikiTheme(false).key).toBe('github-light-default')
   })
 })
