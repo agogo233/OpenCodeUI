@@ -237,6 +237,8 @@ function codePreviewTheme(lineHeight: number): Extension {
       right: '0.75rem',
       display: 'flex',
       alignItems: 'center',
+      justifyContent: 'flex-end',
+      flexWrap: 'wrap',
       gap: '0.2rem',
       width: 'max-content',
       maxWidth: 'calc(100% - 1.5rem)',
@@ -256,6 +258,7 @@ function codePreviewTheme(lineHeight: number): Extension {
       minWidth: '10rem',
       width: 'clamp(10rem, 28vw, 16rem)',
       maxWidth: '100%',
+      flex: '1 1 10rem',
     },
     '.cm-code-search-input': {
       width: '100%',
@@ -264,9 +267,41 @@ function codePreviewTheme(lineHeight: number): Extension {
       border: '1px solid transparent',
       backgroundColor: 'hsl(var(--bg-300) / 0.48)',
       color: 'hsl(var(--text-100))',
-      padding: '0 0.5rem',
+      padding: '0 1.85rem 0 0.5rem',
       outline: 'none',
       font: 'inherit',
+    },
+    '.cm-code-search-input::-webkit-search-cancel-button': {
+      WebkitAppearance: 'none',
+      appearance: 'none',
+    },
+    '.cm-code-search-clear': {
+      position: 'absolute',
+      top: '50%',
+      right: '0.28rem',
+      transform: 'translateY(-50%)',
+      display: 'inline-flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      width: '1.35rem',
+      height: '1.35rem',
+      border: '0',
+      borderRadius: '0.35rem',
+      backgroundColor: 'transparent',
+      color: 'hsl(var(--text-400))',
+      font: 'inherit',
+      cursor: 'pointer',
+      opacity: '0',
+      pointerEvents: 'none',
+      transition: 'opacity 120ms ease, background-color 120ms ease, color 120ms ease',
+    },
+    '.cm-code-search-inputWrap[data-has-value="true"] .cm-code-search-clear': {
+      opacity: '1',
+      pointerEvents: 'auto',
+    },
+    '.cm-code-search-clear:hover': {
+      backgroundColor: 'hsl(var(--bg-300) / 0.55)',
+      color: 'hsl(var(--text-100))',
     },
     '.cm-code-search-input:focus': {
       borderColor: 'hsl(var(--accent-main-100) / 0.5)',
@@ -330,12 +365,12 @@ function codePreviewTheme(lineHeight: number): Extension {
       '.cm-code-search': {
         top: '0.45rem',
         right: '0.45rem',
-        flexWrap: 'wrap',
         justifyContent: 'flex-end',
         maxWidth: 'calc(100% - 0.9rem)',
       },
       '.cm-code-search-inputWrap': {
-        width: 'calc(100vw - 2.1rem)',
+        width: '100%',
+        flexBasis: '100%',
         maxWidth: 'none',
       },
     },
@@ -359,12 +394,19 @@ function createCodePreviewSearchPanel(view: EditorView): Panel {
 
   const input = document.createElement('input')
   input.className = 'cm-code-search-input'
-  input.type = 'search'
+  input.type = 'text'
   input.placeholder = 'Find'
   input.setAttribute('main-field', 'true')
   input.setAttribute('aria-label', 'Find in code')
   input.spellcheck = false
-  inputWrap.append(input)
+
+  const clearButton = createSearchButton('×', 'Clear search', () => {
+    input.value = ''
+    applyQuery()
+    input.focus()
+  })
+  clearButton.className = 'cm-code-search-clear'
+  inputWrap.append(input, clearButton)
 
   const nav = document.createElement('div')
   nav.className = 'cm-code-search-nav'
@@ -399,6 +441,7 @@ function createCodePreviewSearchPanel(view: EditorView): Panel {
   const syncFromState = () => {
     const query = getSearchQuery(view.state)
     if (document.activeElement !== input) input.value = query.search
+    inputWrap.dataset.hasValue = input.value ? 'true' : 'false'
     caseSensitive.setPressed(query.caseSensitive)
     regexp.setPressed(query.regexp)
     wholeWord.setPressed(query.wholeWord)
@@ -407,6 +450,7 @@ function createCodePreviewSearchPanel(view: EditorView): Panel {
 
   const applyQuery = () => {
     const current = getSearchQuery(view.state)
+    inputWrap.dataset.hasValue = input.value ? 'true' : 'false'
     view.dispatch({
       effects: setSearchQuery.of(
         new SearchQuery({

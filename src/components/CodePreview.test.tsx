@@ -49,6 +49,7 @@ describe('CodePreview', () => {
     expect(screen.getByRole('button', { name: 'Match case' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Use regular expression' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Match whole word' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Clear search' })).toBeInTheDocument()
     expect(screen.getByText('No results')).toBeInTheDocument()
   })
 })
