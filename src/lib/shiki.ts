@@ -10,6 +10,24 @@ import { createOnigurumaEngine } from 'shiki/engine/oniguruma'
 import { bundledLanguagesBase, bundledLanguagesAlias } from 'shiki/langs'
 import type { BundledTheme } from 'shiki/themes'
 
+export interface CustomShikiTheme {
+  name: string
+  type: 'light' | 'dark'
+  colors?: Record<string, string>
+  tokenColors?: Array<{
+    scope?: string | string[]
+    settings?: {
+      foreground?: string
+      fontStyle?: string
+      fontWeight?: string
+      textDecoration?: string
+    }
+  }>
+}
+
+export type ShikiThemeInput = BundledTheme | CustomShikiTheme
+type ShikiThemeRuntimeInput = Parameters<HighlighterCore['codeToTokens']>[1] extends { theme: infer T } ? T : never
+
 // ── singleton ──────────────────────────────────────────────
 
 let highlighter: HighlighterCore | null = null
@@ -33,6 +51,165 @@ export function getHighlighter(): Promise<HighlighterCore> {
   })
 
   return initPromise
+}
+
+function computedColorToHex(cssColor: string): string | null {
+  try {
+    const ctx = document.createElement('canvas').getContext('2d')
+    if (!ctx) return null
+    ctx.fillStyle = cssColor
+    const normalized = ctx.fillStyle
+    if (normalized.startsWith('#')) return normalized
+
+    const match = normalized.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/)
+    if (!match) return null
+
+    const r = parseInt(match[1], 10)
+    const g = parseInt(match[2], 10)
+    const b = parseInt(match[3], 10)
+    return `#${((1 << 24) | (r << 16) | (g << 8) | b).toString(16).slice(1)}`
+  } catch {
+    return null
+  }
+}
+
+function cssVarToHex(name: string, fallback: string): string {
+  if (typeof window === 'undefined') return fallback
+  const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim()
+  if (!value) return fallback
+  return computedColorToHex(`hsl(${value})`) || fallback
+}
+
+export function createAdaptiveShikiTheme(isDark: boolean): CustomShikiTheme {
+  const syntax = {
+    comment: cssVarToHex('--text-400', isDark ? '#808080' : '#8a8a8a'),
+    regexp: cssVarToHex('--text-200', isDark ? '#d4d4d4' : '#3a3a3a'),
+    string: isDark ? '#00ceb9' : '#006656',
+    keyword: cssVarToHex('--accent-secondary-100', isDark ? '#9d7cd8' : '#6f42c1'),
+    primitive: isDark ? '#ffba92' : '#fb4804',
+    operator: cssVarToHex('--text-400', isDark ? '#9a9a9a' : '#525252'),
+    variable: cssVarToHex('--text-100', isDark ? '#eeeeee' : '#1a1a1a'),
+    property: isDark ? '#ff9ae2' : '#ed6dc8',
+    type: isDark ? '#ecf58c' : '#596600',
+    constant: isDark ? '#93e9f6' : '#007b80',
+    punctuation: cssVarToHex('--text-300', isDark ? '#b8b8b8' : '#555555'),
+    object: cssVarToHex('--text-100', isDark ? '#eeeeee' : '#1a1a1a'),
+    info: isDark ? '#93e9f6' : '#0092a8',
+    success: cssVarToHex('--success-100', isDark ? '#7fd88f' : '#3d9a57'),
+    warning: cssVarToHex('--warning-100', isDark ? '#e5c07b' : '#b0851f'),
+    critical: cssVarToHex('--danger-100', isDark ? '#e06c75' : '#d1383d'),
+  }
+
+  return {
+    name: isDark ? 'OpenCodeUI Dark' : 'OpenCodeUI Light',
+    type: isDark ? 'dark' : 'light',
+    colors: {
+      'editor.background': cssVarToHex('--bg-100', isDark ? '#24292e' : '#ffffff'),
+      'editor.foreground': syntax.variable,
+    },
+    tokenColors: [
+      {
+        scope: ['comment', 'punctuation.definition.comment'],
+        settings: { foreground: syntax.comment, fontStyle: 'italic' },
+      },
+      {
+        scope: ['string.regexp', 'constant.character.escape', 'constant.other.character-class.regexp'],
+        settings: { foreground: syntax.regexp },
+      },
+      {
+        scope: ['string', 'string.quoted', 'string.template', 'markup.inline.raw', 'markup.inserted'],
+        settings: { foreground: syntax.string },
+      },
+      {
+        scope: ['keyword', 'storage', 'storage.modifier', 'keyword.operator.word'],
+        settings: { foreground: syntax.keyword },
+      },
+      {
+        scope: ['constant.numeric', 'constant.language.boolean', 'constant.language.null', 'constant.language.undefined'],
+        settings: { foreground: syntax.primitive },
+      },
+      {
+        scope: [
+          'keyword.operator',
+          'keyword.operator.assignment',
+          'keyword.operator.logical',
+          'keyword.operator.expression',
+          'punctuation.accessor',
+          'punctuation.separator.key-value',
+          'punctuation.separator.dictionary.key-value',
+        ],
+        settings: { foreground: syntax.operator },
+      },
+      {
+        scope: ['support.type.property-name.json', 'meta.object-literal.key', 'variable.other.property', 'variable.object.property'],
+        settings: { foreground: syntax.property },
+      },
+      {
+        scope: [
+          'punctuation.support.type.property-name.begin.json',
+          'punctuation.support.type.property-name.end.json',
+          'punctuation.support.type.property-name.json',
+        ],
+        settings: { foreground: syntax.property },
+      },
+      {
+        scope: ['entity.other.attribute-name', 'entity.other.attribute-name.html', 'entity.other.attribute-name.jsx'],
+        settings: { foreground: syntax.property },
+      },
+      {
+        scope: ['entity.name.function', 'support.function', 'support.function.builtin', 'variable.function', 'meta.function-call'],
+        settings: { foreground: syntax.info },
+      },
+      {
+        scope: ['entity.name.type', 'entity.name.class', 'support.type', 'storage.type', 'support.class'],
+        settings: { foreground: syntax.type },
+      },
+      {
+        scope: ['constant', 'constant.language', 'support.constant', 'variable.other.constant'],
+        settings: { foreground: syntax.constant },
+      },
+      {
+        scope: ['entity.name.tag', 'entity.name.tag.tsx', 'entity.name.tag.jsx', 'support.class.component'],
+        settings: { foreground: syntax.info },
+      },
+      {
+        scope: ['variable', 'variable.other.readwrite', 'entity.name.object', 'support.variable'],
+        settings: { foreground: syntax.variable },
+      },
+      {
+        scope: ['punctuation', 'meta.brace', 'meta.delimiter'],
+        settings: { foreground: syntax.punctuation },
+      },
+      {
+        scope: ['markup.heading', 'entity.name.section'],
+        settings: { foreground: syntax.keyword, fontWeight: '600' },
+      },
+      {
+        scope: ['markup.link', 'string.other.link'],
+        settings: { foreground: syntax.info, textDecoration: 'underline' },
+      },
+      {
+        scope: ['markup.bold'],
+        settings: { foreground: syntax.warning, fontWeight: '600' },
+      },
+      {
+        scope: ['markup.italic'],
+        settings: { foreground: syntax.warning, fontStyle: 'italic' },
+      },
+      {
+        scope: ['markup.deleted'],
+        settings: { foreground: syntax.critical },
+      },
+      {
+        scope: ['markup.changed'],
+        settings: { foreground: syntax.warning },
+      },
+      {
+        scope: ['markup.inserted'],
+        settings: { foreground: syntax.success },
+      },
+    ],
+  }
 }
 
 // ── language loading ───────────────────────────────────────
@@ -84,7 +261,7 @@ export async function ensureLang(lang: string): Promise<boolean> {
 
 // ── 高亮 API（对外封装）────────────────────────────────────
 
-export async function codeToHtml(code: string, opts: { lang: string; theme: BundledTheme }): Promise<string> {
+export async function codeToHtml(code: string, opts: { lang: string; theme: ShikiThemeInput }): Promise<string> {
   const h = await getHighlighter()
   await ensureLang(opts.lang)
 
@@ -92,17 +269,17 @@ export async function codeToHtml(code: string, opts: { lang: string; theme: Bund
   const loaded = h.getLoadedLanguages()
   const safeLang = loaded.includes(opts.lang) ? opts.lang : 'text'
 
-  return h.codeToHtml(code, { lang: safeLang, theme: opts.theme })
+  return h.codeToHtml(code, { lang: safeLang, theme: opts.theme as unknown as ShikiThemeRuntimeInput })
 }
 
-export async function codeToTokens(code: string, opts: { lang: string; theme: BundledTheme }) {
+export async function codeToTokens(code: string, opts: { lang: string; theme: ShikiThemeInput }) {
   const h = await getHighlighter()
   await ensureLang(opts.lang)
 
   const loaded = h.getLoadedLanguages()
   const safeLang = loaded.includes(opts.lang) ? opts.lang : 'text'
 
-  return h.codeToTokens(code, { lang: safeLang, theme: opts.theme })
+  return h.codeToTokens(code, { lang: safeLang, theme: opts.theme as unknown as ShikiThemeRuntimeInput })
 }
 
 // ── 语言支持检测（纯元数据，不拉 grammar）──────────────────
