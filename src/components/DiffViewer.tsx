@@ -209,7 +209,64 @@ function getChangeBarProps(type: LineType): { className: string; style?: React.C
   }
 }
 
-/** 折叠占位条 — "N lines unchanged"，点击可展开 */
+/** Pierre-like 折叠按钮，放在 gutter 区域 */
+function CollapsedExpandButton({
+  onExpand,
+  height = 24,
+}: {
+  onExpand?: () => void
+  height?: number
+}) {
+  return (
+    <button
+      type="button"
+      className="flex w-full items-center justify-center border-0 border-r-2 border-bg-100 bg-bg-200/90 p-0 text-text-500 hover:text-text-100 cursor-pointer select-none"
+      style={{ height, borderTopLeftRadius: 6, borderBottomLeftRadius: 6 }}
+      title="Expand hidden lines"
+      onClick={onExpand}
+    >
+      ↕
+    </button>
+  )
+}
+
+/** 折叠文案区，放在 content 区域 */
+function CollapsedLabel({
+  count,
+  t,
+  onExpand,
+  height = 24,
+}: {
+  count: number
+  t: (key: string, opts?: Record<string, unknown>) => string
+  onExpand?: () => void
+  height?: number
+}) {
+  return (
+    <button
+      type="button"
+      className="box-border flex w-full items-center justify-start overflow-hidden border-0 bg-bg-200/90 px-[1ch] text-[length:var(--fs-code)] text-text-400 select-none cursor-pointer hover:underline"
+      style={{ height }}
+      onClick={onExpand}
+    >
+      <span className="block min-w-0 overflow-hidden text-ellipsis whitespace-nowrap font-mono">
+        {t('diffViewer.linesUnchanged', { count })}
+      </span>
+    </button>
+  )
+}
+
+/** 右侧/续接区域，只显示同一条 separator 的延伸背景 */
+function CollapsedContinuation({ height = 24 }: { height?: number }) {
+  return (
+    <div
+      className="box-border bg-bg-200/90"
+      style={{ height }}
+    />
+  )
+}
+
+/** Wrapped 模式直接横跨整行 */
 function CollapsedBar({
   count,
   t,
@@ -222,14 +279,11 @@ function CollapsedBar({
   height?: number
 }) {
   return (
-    <div
-      className="box-border flex items-center justify-center text-[length:var(--fs-code)] text-text-500 select-none bg-bg-200/40 border-y border-border-100/30 cursor-pointer hover:bg-bg-200/60 transition-colors"
-      style={{ height }}
-      onClick={onExpand}
-    >
-      <span className="px-3 py-0.5 rounded bg-bg-300/50 text-text-400 font-mono">
-        {t('diffViewer.linesUnchanged', { count })}
-      </span>
+    <div className="box-border flex items-center border-y border-border-100/30 bg-bg-100" style={{ height }}>
+      <div className="w-[34px] shrink-0 pl-1">
+        <CollapsedExpandButton height={height} onExpand={onExpand} />
+      </div>
+      <CollapsedLabel count={count} t={t} onExpand={onExpand} height={height} />
     </div>
   )
 }
@@ -667,30 +721,35 @@ const SplitDiffView = memo(function SplitDiffView({
     const item = displayLines[i]
 
     if (isCollapsed(item)) {
-      const barNode = (
-        <CollapsedBar key={i} count={item.count} t={t} onExpand={() => handleExpand(item.id)} height={lineHeight} />
-      )
       leftGutterRows.push(
         <div
           key={i}
-          className="box-border bg-bg-200/40 border-y border-border-100/30"
+          className="box-border border-y border-border-100/30 bg-bg-100 pl-1"
           style={{ height: lineHeight }}
-        />,
+        >
+          <CollapsedExpandButton height={lineHeight} onExpand={() => handleExpand(item.id)} />
+        </div>,
       )
-      leftContentRows.push(barNode)
+      leftContentRows.push(
+        <div key={i} className="box-border border-y border-border-100/30 bg-bg-200/90" style={{ height: lineHeight }}>
+          <CollapsedLabel count={item.count} t={t} onExpand={() => handleExpand(item.id)} height={lineHeight} />
+        </div>,
+      )
       rightGutterRows.push(
         <div
           key={i}
-          className="box-border bg-bg-200/40 border-y border-border-100/30"
+          className="box-border border-y border-border-100/30 bg-bg-200/90"
           style={{ height: lineHeight }}
         />,
       )
       rightContentRows.push(
         <div
           key={i}
-          className="box-border bg-bg-200/40 border-y border-border-100/30"
+          className="box-border border-y border-border-100/30 bg-bg-200/90"
           style={{ height: lineHeight }}
-        />,
+        >
+          <CollapsedContinuation height={lineHeight} />
+        </div>,
       )
       continue
     }
@@ -1008,12 +1067,16 @@ const UnifiedDiffView = memo(function UnifiedDiffView({
       gutterRows.push(
         <div
           key={i}
-          className="box-border bg-bg-200/40 border-y border-border-100/30"
+          className="box-border border-y border-border-100/30 bg-bg-100 pl-1"
           style={{ height: lineHeight }}
-        />,
+        >
+          <CollapsedExpandButton height={lineHeight} onExpand={() => handleExpand(item.id)} />
+        </div>,
       )
       contentRows.push(
-        <CollapsedBar key={i} count={item.count} t={t} onExpand={() => handleExpand(item.id)} height={lineHeight} />,
+        <div key={i} className="box-border border-y border-border-100/30 bg-bg-200/90" style={{ height: lineHeight }}>
+          <CollapsedLabel count={item.count} t={t} onExpand={() => handleExpand(item.id)} height={lineHeight} />
+        </div>,
       )
       continue
     }
