@@ -249,6 +249,26 @@ function getGutterBgClass(type: LineType): string {
   }
 }
 
+function getLineNumberColumnWidth(maxLineNo: number): number {
+  const digits = String(Math.max(1, maxLineNo)).length
+  return Math.max(32, digits * 8 + 16)
+}
+
+function getLineCount(text: string): number {
+  return text === '' ? 1 : text.split('\n').length
+}
+
+function LineNumberCell({ lineNo, width }: { lineNo?: number; width: number }) {
+  return (
+    <div
+      className="shrink-0 px-1 text-right text-text-500 text-[length:var(--fs-code)] leading-[var(--fs-code-line-height)] select-none opacity-60"
+      style={{ width }}
+    >
+      {lineNo}
+    </div>
+  )
+}
+
 /** Change bar 样式 — 行号左侧的 3px 竖条，add 实心 / delete 虚线 */
 function getChangeBarProps(type: LineType): { className: string; style?: React.CSSProperties } {
   switch (type) {
@@ -512,7 +532,8 @@ const WrappedSplitDiffView = memo(function WrappedSplitDiffView({
   }
 
   const useChangeBars = diffStyle === 'changeBars'
-  const gutterWidth = useChangeBars ? 35 : 52
+  const lineNumberWidth = getLineNumberColumnWidth(Math.max(getLineCount(before), getLineCount(after)))
+  const gutterWidth = useChangeBars ? lineNumberWidth + 3 : lineNumberWidth + 20
 
   const visibleRows: React.ReactNode[] = []
   for (let i = startIndex; i < endIndex; i++) {
@@ -545,15 +566,11 @@ const WrappedSplitDiffView = memo(function WrappedSplitDiffView({
             {useChangeBars ? (
               <div className="flex items-stretch h-full">
                 <div {...getChangeBarProps(pair.left.type)} />
-                <div className="w-8 shrink-0 px-1 text-right text-text-500 text-[length:var(--fs-code)] leading-[var(--fs-code-line-height)] select-none opacity-60">
-                  {pair.left.lineNo}
-                </div>
+                <LineNumberCell lineNo={pair.left.lineNo} width={lineNumberWidth} />
               </div>
             ) : (
               <div className="flex h-full">
-                <div className="w-8 shrink-0 px-1 text-right text-text-500 text-[length:var(--fs-code)] leading-[var(--fs-code-line-height)] select-none opacity-60">
-                  {pair.left.lineNo}
-                </div>
+                <LineNumberCell lineNo={pair.left.lineNo} width={lineNumberWidth} />
                 <div className="w-5 shrink-0 text-center text-[length:var(--fs-code)] leading-[var(--fs-code-line-height)] select-none">
                   {pair.left.type === 'delete' && <span className="text-danger-100">−</span>}
                 </div>
@@ -575,15 +592,11 @@ const WrappedSplitDiffView = memo(function WrappedSplitDiffView({
             {useChangeBars ? (
               <div className="flex items-stretch h-full">
                 <div {...getChangeBarProps(pair.right.type)} />
-                <div className="w-8 shrink-0 px-1 text-right text-text-500 text-[length:var(--fs-code)] leading-[var(--fs-code-line-height)] select-none opacity-60">
-                  {pair.right.lineNo}
-                </div>
+                <LineNumberCell lineNo={pair.right.lineNo} width={lineNumberWidth} />
               </div>
             ) : (
               <div className="flex h-full">
-                <div className="w-8 shrink-0 px-1 text-right text-text-500 text-[length:var(--fs-code)] leading-[var(--fs-code-line-height)] select-none opacity-60">
-                  {pair.right.lineNo}
-                </div>
+                <LineNumberCell lineNo={pair.right.lineNo} width={lineNumberWidth} />
                 <div className="w-5 shrink-0 text-center text-[length:var(--fs-code)] leading-[var(--fs-code-line-height)] select-none">
                   {pair.right.type === 'add' && <span className="text-success-100">+</span>}
                 </div>
@@ -804,8 +817,8 @@ const SplitDiffView = memo(function SplitDiffView({
 
   // 渲染可见行 — 分别生成 gutter 和 content
   const useChangeBars = diffStyle === 'changeBars'
-  // markers: 行号(32) + 符号(20) = 52px;  changeBars: bar(3) + 行号(32) = 35px
-  const gutterWidth = useChangeBars ? 35 : 52
+  const lineNumberWidth = getLineNumberColumnWidth(Math.max(getLineCount(before), getLineCount(after)))
+  const gutterWidth = useChangeBars ? lineNumberWidth + 3 : lineNumberWidth + 20
 
   const leftGutterRows: React.ReactNode[] = []
   const leftContentRows: React.ReactNode[] = []
@@ -870,15 +883,11 @@ const SplitDiffView = memo(function SplitDiffView({
           style={{ height: lineHeight }}
         >
           <div {...getChangeBarProps(pair.left.type)} />
-          <div className="w-8 shrink-0 px-1 text-right text-text-500 text-[length:var(--fs-code)] leading-[var(--fs-code-line-height)] select-none opacity-60">
-            {pair.left.lineNo}
-          </div>
+          <LineNumberCell lineNo={pair.left.lineNo} width={lineNumberWidth} />
         </div>
       ) : (
         <div key={i} className={`flex ${getGutterBgClass(pair.left.type)}`} style={{ height: lineHeight }}>
-          <div className="w-8 shrink-0 px-1 text-right text-text-500 text-[length:var(--fs-code)] leading-[var(--fs-code-line-height)] select-none opacity-60">
-            {pair.left.lineNo}
-          </div>
+          <LineNumberCell lineNo={pair.left.lineNo} width={lineNumberWidth} />
           <div className="w-5 shrink-0 text-center text-[length:var(--fs-code)] leading-[var(--fs-code-line-height)] select-none">
             {pair.left.type === 'delete' && <span className="text-danger-100">−</span>}
           </div>
@@ -906,15 +915,11 @@ const SplitDiffView = memo(function SplitDiffView({
           style={{ height: lineHeight }}
         >
           <div {...getChangeBarProps(pair.right.type)} />
-          <div className="w-8 shrink-0 px-1 text-right text-text-500 text-[length:var(--fs-code)] leading-[var(--fs-code-line-height)] select-none opacity-60">
-            {pair.right.lineNo}
-          </div>
+          <LineNumberCell lineNo={pair.right.lineNo} width={lineNumberWidth} />
         </div>
       ) : (
         <div key={i} className={`flex ${getGutterBgClass(pair.right.type)}`} style={{ height: lineHeight }}>
-          <div className="w-8 shrink-0 px-1 text-right text-text-500 text-[length:var(--fs-code)] leading-[var(--fs-code-line-height)] select-none opacity-60">
-            {pair.right.lineNo}
-          </div>
+          <LineNumberCell lineNo={pair.right.lineNo} width={lineNumberWidth} />
           <div className="w-5 shrink-0 text-center text-[length:var(--fs-code)] leading-[var(--fs-code-line-height)] select-none">
             {pair.right.type === 'add' && <span className="text-success-100">+</span>}
           </div>
@@ -1153,10 +1158,9 @@ const UnifiedDiffView = memo(function UnifiedDiffView({
     )
   }
 
-  // markers: oldLineNo(32) + newLineNo(32) + 符号(20) = 84px
-  // changeBars: bar(3) + oldLineNo(32) + newLineNo(32) = 67px
   const useChangeBars = diffStyle === 'changeBars'
-  const GUTTER_WIDTH = useChangeBars ? 67 : 84
+  const lineNumberWidth = getLineNumberColumnWidth(Math.max(getLineCount(before), getLineCount(after)))
+  const GUTTER_WIDTH = useChangeBars ? lineNumberWidth * 2 + 3 : lineNumberWidth * 2 + 20
 
   const gutterRows: React.ReactNode[] = []
   const contentRows: React.ReactNode[] = []
@@ -1204,21 +1208,13 @@ const UnifiedDiffView = memo(function UnifiedDiffView({
       useChangeBars ? (
         <div key={i} className={`flex items-stretch ${getGutterBgClass(line.type)}`} style={{ height: lineHeight }}>
           <div {...getChangeBarProps(line.type)} />
-          <div className="w-8 shrink-0 px-1 text-right text-text-500 text-[length:var(--fs-code)] leading-[var(--fs-code-line-height)] select-none opacity-60">
-            {line.oldLineNo}
-          </div>
-          <div className="w-8 shrink-0 px-1 text-right text-text-500 text-[length:var(--fs-code)] leading-[var(--fs-code-line-height)] select-none opacity-60">
-            {line.newLineNo}
-          </div>
+          <LineNumberCell lineNo={line.oldLineNo} width={lineNumberWidth} />
+          <LineNumberCell lineNo={line.newLineNo} width={lineNumberWidth} />
         </div>
       ) : (
         <div key={i} className={`flex ${getGutterBgClass(line.type)}`} style={{ height: lineHeight }}>
-          <div className="w-8 shrink-0 px-1 text-right text-text-500 text-[length:var(--fs-code)] leading-[var(--fs-code-line-height)] select-none opacity-60">
-            {line.oldLineNo}
-          </div>
-          <div className="w-8 shrink-0 px-1 text-right text-text-500 text-[length:var(--fs-code)] leading-[var(--fs-code-line-height)] select-none opacity-60">
-            {line.newLineNo}
-          </div>
+          <LineNumberCell lineNo={line.oldLineNo} width={lineNumberWidth} />
+          <LineNumberCell lineNo={line.newLineNo} width={lineNumberWidth} />
           <div className="w-5 shrink-0 text-center text-[length:var(--fs-code)] leading-[var(--fs-code-line-height)] select-none">
             {line.type === 'add' && <span className="text-success-100">+</span>}
             {line.type === 'delete' && <span className="text-danger-100">−</span>}
@@ -1328,7 +1324,8 @@ const WrappedUnifiedDiffView = memo(function WrappedUnifiedDiffView({
   }
 
   const useChangeBars = diffStyle === 'changeBars'
-  const gutterWidth = useChangeBars ? 67 : 84
+  const lineNumberWidth = getLineNumberColumnWidth(Math.max(getLineCount(before), getLineCount(after)))
+  const gutterWidth = useChangeBars ? lineNumberWidth * 2 + 3 : lineNumberWidth * 2 + 20
 
   const visibleRows: React.ReactNode[] = []
   for (let i = startIndex; i < endIndex; i++) {
@@ -1365,25 +1362,17 @@ const WrappedUnifiedDiffView = memo(function WrappedUnifiedDiffView({
     visibleRows.push(
       <div key={i} ref={el => measureRef(i, el)} className={`flex items-stretch ${getLineBgClass(line.type)}`}>
         <div className="shrink-0" style={{ width: gutterWidth }}>
-          {useChangeBars ? (
-            <div className="flex items-stretch h-full">
-              <div {...getChangeBarProps(line.type)} />
-              <div className="w-8 shrink-0 px-1 text-right text-text-500 text-[length:var(--fs-code)] leading-[var(--fs-code-line-height)] select-none opacity-60">
-                {line.oldLineNo}
+            {useChangeBars ? (
+              <div className="flex items-stretch h-full">
+                <div {...getChangeBarProps(line.type)} />
+                <LineNumberCell lineNo={line.oldLineNo} width={lineNumberWidth} />
+                <LineNumberCell lineNo={line.newLineNo} width={lineNumberWidth} />
               </div>
-              <div className="w-8 shrink-0 px-1 text-right text-text-500 text-[length:var(--fs-code)] leading-[var(--fs-code-line-height)] select-none opacity-60">
-                {line.newLineNo}
-              </div>
-            </div>
-          ) : (
-            <div className="flex h-full">
-              <div className="w-8 shrink-0 px-1 text-right text-text-500 text-[length:var(--fs-code)] leading-[var(--fs-code-line-height)] select-none opacity-60">
-                {line.oldLineNo}
-              </div>
-              <div className="w-8 shrink-0 px-1 text-right text-text-500 text-[length:var(--fs-code)] leading-[var(--fs-code-line-height)] select-none opacity-60">
-                {line.newLineNo}
-              </div>
-              <div className="w-5 shrink-0 text-center text-[length:var(--fs-code)] leading-[var(--fs-code-line-height)] select-none">
+            ) : (
+              <div className="flex h-full">
+                <LineNumberCell lineNo={line.oldLineNo} width={lineNumberWidth} />
+                <LineNumberCell lineNo={line.newLineNo} width={lineNumberWidth} />
+                <div className="w-5 shrink-0 text-center text-[length:var(--fs-code)] leading-[var(--fs-code-line-height)] select-none">
                 {line.type === 'add' && <span className="text-success-100">+</span>}
                 {line.type === 'delete' && <span className="text-danger-100">−</span>}
               </div>
