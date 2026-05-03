@@ -274,6 +274,10 @@ function LineNumberCell({ lineNo, width }: { lineNo?: number; width: number }) {
   )
 }
 
+function EmptyContentBuffer({ height }: { height: number }) {
+  return <div className="diff-empty-content-buffer min-w-full" style={{ height }} />
+}
+
 /** Change bar 样式 — 行号左侧的 3px 竖条，add 实心 / delete 虚线 */
 function getChangeBarProps(type: LineType): { className: string; style?: React.CSSProperties } {
   switch (type) {
@@ -916,10 +920,10 @@ const SplitDiffView = memo(function SplitDiffView({
     leftContentRows.push(
       <div
         key={i}
-        className={`pr-2 leading-[var(--fs-code-line-height)] text-[length:var(--fs-code)] whitespace-pre ${getContentBgClass(pair.left.type)}`}
+        className={`pr-2 leading-[var(--fs-code-line-height)] text-[length:var(--fs-code)] whitespace-pre ${pair.left.type === 'empty' ? '' : getContentBgClass(pair.left.type)}`}
         style={{ height: lineHeight }}
       >
-        {pair.left.type !== 'empty' && <LineContent line={pair.left} tokens={beforeTokens} />}
+        {pair.left.type === 'empty' ? <EmptyContentBuffer height={lineHeight} /> : <LineContent line={pair.left} tokens={beforeTokens} />}
       </div>,
     )
 
@@ -948,10 +952,10 @@ const SplitDiffView = memo(function SplitDiffView({
     rightContentRows.push(
       <div
         key={i}
-        className={`pr-2 leading-[var(--fs-code-line-height)] text-[length:var(--fs-code)] whitespace-pre ${getContentBgClass(pair.right.type)}`}
+        className={`pr-2 leading-[var(--fs-code-line-height)] text-[length:var(--fs-code)] whitespace-pre ${pair.right.type === 'empty' ? '' : getContentBgClass(pair.right.type)}`}
         style={{ height: lineHeight }}
       >
-        {pair.right.type !== 'empty' && <LineContent line={pair.right} tokens={afterTokens} />}
+        {pair.right.type === 'empty' ? <EmptyContentBuffer height={lineHeight} /> : <LineContent line={pair.right} tokens={afterTokens} />}
       </div>,
     )
   }
