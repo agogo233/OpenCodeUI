@@ -899,7 +899,7 @@ body {
 }
 
 .diff-empty-content-buffer {
-  background-color: hsl(var(--bg-100) / 0.3);
+  background-color: hsl(var(--bg-200) / 0.18);
   background-size: 8px 8px;
   background-position: 5px 0;
   background-origin: border-box;
@@ -907,8 +907,8 @@ body {
     -45deg,
     transparent,
     transparent calc(3px * 1.414),
-    hsl(var(--border-100) / 0.16) calc(3px * 1.414),
-    hsl(var(--border-100) / 0.16) calc(4px * 1.414)
+    hsl(var(--border-200) / 0.48) calc(3px * 1.414),
+    hsl(var(--border-200) / 0.48) calc(4px * 1.414)
   );
 }
 
