@@ -260,7 +260,19 @@ function getLineNumberColumnWidth(maxLineNo: number): number {
 }
 
 function getLineCount(text: string): number {
-  return text === '' ? 1 : text.split('\n').length
+  if (text === '') return 1
+  let count = 1
+  for (let i = 0; i < text.length; i++) {
+    if (text.charCodeAt(i) === 10) count++
+  }
+  return count
+}
+
+function useDiffLineNumberWidth(before: string, after: string): number {
+  return useMemo(
+    () => getLineNumberColumnWidth(Math.max(getLineCount(before), getLineCount(after))),
+    [before, after],
+  )
 }
 
 function LineNumberCell({ lineNo, width }: { lineNo?: number; width: number }) {
@@ -429,86 +441,6 @@ export const DiffViewer = memo(function DiffViewer({
   const { diffStyle, codeWordWrap, codeFontScale } = useSyncExternalStore(themeStore.subscribe, themeStore.getSnapshot)
   const resolvedWordWrap = wordWrap ?? codeWordWrap
   const lineHeight = codeLineHeight(codeFontScale)
-
-  // 纯增加或纯删除时，split 模式另一边是空的没意义，自动降级为 unified
-  const isAddOnly = !before.trim()
-  const isDeleteOnly = !after.trim()
-  const effectiveViewMode = isAddOnly || isDeleteOnly ? 'unified' : viewMode
-
-  if (effectiveViewMode === 'split') {
-    if (resolvedWordWrap) {
-      return (
-        <WrappedSplitDiffView
-          before={before}
-          after={after}
-          language={language}
-          isResizing={isResizing}
-          maxHeight={maxHeight}
-          diffStyle={diffStyle}
-          lineHeight={lineHeight}
-        />
-      )
-    }
-
-    return (
-      <SplitDiffView
-        before={before}
-        after={after}
-        language={language}
-        isResizing={isResizing}
-        maxHeight={maxHeight}
-        diffStyle={diffStyle}
-        lineHeight={lineHeight}
-      />
-    )
-  }
-
-  if (resolvedWordWrap) {
-    return (
-      <WrappedUnifiedDiffView
-        before={before}
-        after={after}
-        language={language}
-        isResizing={isResizing}
-        maxHeight={maxHeight}
-        diffStyle={diffStyle}
-        lineHeight={lineHeight}
-      />
-    )
-  }
-
-  return (
-    <UnifiedDiffView
-      before={before}
-      after={after}
-      language={language}
-      isResizing={isResizing}
-      maxHeight={maxHeight}
-      diffStyle={diffStyle}
-      lineHeight={lineHeight}
-    />
-  )
-})
-
-const WrappedSplitDiffView = memo(function WrappedSplitDiffView({
-  before,
-  after,
-  language,
-  isResizing,
-  maxHeight,
-  diffStyle,
-  lineHeight,
-}: {
-  before: string
-  after: string
-  language: string
-  isResizing: boolean
-  maxHeight?: number
-  diffStyle: DiffStyle
-  lineHeight: number
-}) {
-  const { t } = useTranslation(['components', 'common'])
-
   const shouldHighlight = !isResizing && language !== 'text'
   const { output: beforeTokens } = useSyntaxHighlight(before, {
     lang: language,
@@ -520,9 +452,95 @@ const WrappedSplitDiffView = memo(function WrappedSplitDiffView({
     mode: 'tokens',
     enabled: shouldHighlight,
   })
-
   const skipWordDiff = isResizing
   const pairedLines = useMemo(() => computePairedLines(before, after, skipWordDiff), [before, after, skipWordDiff])
+  const unifiedLines = useMemo(() => computeUnifiedLines(before, after), [before, after])
+  const lineNumberWidth = useDiffLineNumberWidth(before, after)
+
+  // 纯增加或纯删除时，split 模式另一边是空的没意义，自动降级为 unified
+  const isAddOnly = !before.trim()
+  const isDeleteOnly = !after.trim()
+  const effectiveViewMode = isAddOnly || isDeleteOnly ? 'unified' : viewMode
+
+  if (effectiveViewMode === 'split') {
+    if (resolvedWordWrap) {
+      return (
+        <WrappedSplitDiffView
+          beforeTokens={beforeTokens}
+          afterTokens={afterTokens}
+          pairedLines={pairedLines}
+          lineNumberWidth={lineNumberWidth}
+          isResizing={isResizing}
+          maxHeight={maxHeight}
+          diffStyle={diffStyle}
+          lineHeight={lineHeight}
+        />
+      )
+    }
+
+    return (
+      <SplitDiffView
+        beforeTokens={beforeTokens}
+        afterTokens={afterTokens}
+        pairedLines={pairedLines}
+        lineNumberWidth={lineNumberWidth}
+        isResizing={isResizing}
+        maxHeight={maxHeight}
+        diffStyle={diffStyle}
+        lineHeight={lineHeight}
+      />
+    )
+  }
+
+  if (resolvedWordWrap) {
+    return (
+      <WrappedUnifiedDiffView
+        beforeTokens={beforeTokens}
+        afterTokens={afterTokens}
+        lines={unifiedLines}
+        lineNumberWidth={lineNumberWidth}
+        isResizing={isResizing}
+        maxHeight={maxHeight}
+        diffStyle={diffStyle}
+        lineHeight={lineHeight}
+      />
+    )
+  }
+
+  return (
+    <UnifiedDiffView
+      beforeTokens={beforeTokens}
+      afterTokens={afterTokens}
+      lines={unifiedLines}
+      lineNumberWidth={lineNumberWidth}
+      isResizing={isResizing}
+      maxHeight={maxHeight}
+      diffStyle={diffStyle}
+      lineHeight={lineHeight}
+    />
+  )
+})
+
+const WrappedSplitDiffView = memo(function WrappedSplitDiffView({
+  beforeTokens,
+  afterTokens,
+  pairedLines,
+  lineNumberWidth,
+  isResizing,
+  maxHeight,
+  diffStyle,
+  lineHeight,
+}: {
+  beforeTokens: HighlightTokens | null
+  afterTokens: HighlightTokens | null
+  pairedLines: PairedLine[]
+  lineNumberWidth: number
+  isResizing: boolean
+  maxHeight?: number
+  diffStyle: DiffStyle
+  lineHeight: number
+}) {
+  const { t } = useTranslation(['components', 'common'])
   const [expandedRegions, setExpandedRegions] = useState<Map<number, ExpansionRegion>>(() => new Map())
   const displayLines = useMemo(() => collapseContextPaired(pairedLines, expandedRegions), [pairedLines, expandedRegions])
   const handleExpand = useCallback((id: number, direction: ExpandDirection) => {
@@ -541,7 +559,6 @@ const WrappedSplitDiffView = memo(function WrappedSplitDiffView({
   }
 
   const useChangeBars = diffStyle === 'changeBars'
-  const lineNumberWidth = getLineNumberColumnWidth(Math.max(getLineCount(before), getLineCount(after)))
   const gutterWidth = useChangeBars ? lineNumberWidth + 3 : lineNumberWidth + 20
 
   const visibleRows: React.ReactNode[] = []
@@ -657,17 +674,19 @@ const WrappedSplitDiffView = memo(function WrappedSplitDiffView({
 // ============================================
 
 const SplitDiffView = memo(function SplitDiffView({
-  before,
-  after,
-  language,
+  beforeTokens,
+  afterTokens,
+  pairedLines,
+  lineNumberWidth,
   isResizing,
   maxHeight,
   diffStyle,
   lineHeight,
 }: {
-  before: string
-  after: string
-  language: string
+  beforeTokens: HighlightTokens | null
+  afterTokens: HighlightTokens | null
+  pairedLines: PairedLine[]
+  lineNumberWidth: number
   isResizing: boolean
   maxHeight?: number
   diffStyle: DiffStyle
@@ -690,20 +709,6 @@ const SplitDiffView = memo(function SplitDiffView({
   const [leftClientWidth, setLeftClientWidth] = useState(0)
   const [rightClientWidth, setRightClientWidth] = useState(0)
 
-  const shouldHighlight = !isResizing && language !== 'text'
-  const { output: beforeTokens } = useSyntaxHighlight(before, {
-    lang: language,
-    mode: 'tokens',
-    enabled: shouldHighlight,
-  })
-  const { output: afterTokens } = useSyntaxHighlight(after, {
-    lang: language,
-    mode: 'tokens',
-    enabled: shouldHighlight,
-  })
-
-  const skipWordDiff = isResizing
-  const pairedLines = useMemo(() => computePairedLines(before, after, skipWordDiff), [before, after, skipWordDiff])
   const [expandedRegions, setExpandedRegions] = useState<Map<number, ExpansionRegion>>(() => new Map())
   const displayLines = useMemo(() => collapseContextPaired(pairedLines, expandedRegions), [pairedLines, expandedRegions])
   const handleExpand = useCallback((id: number, direction: ExpandDirection) => {
@@ -826,7 +831,6 @@ const SplitDiffView = memo(function SplitDiffView({
 
   // 渲染可见行 — 分别生成 gutter 和 content
   const useChangeBars = diffStyle === 'changeBars'
-  const lineNumberWidth = getLineNumberColumnWidth(Math.max(getLineCount(before), getLineCount(after)))
   const gutterWidth = useChangeBars ? lineNumberWidth + 3 : lineNumberWidth + 20
 
   const leftGutterRows: React.ReactNode[] = []
@@ -1051,17 +1055,19 @@ const SplitDiffView = memo(function SplitDiffView({
 // ============================================
 
 const UnifiedDiffView = memo(function UnifiedDiffView({
-  before,
-  after,
-  language,
+  beforeTokens,
+  afterTokens,
+  lines,
+  lineNumberWidth,
   isResizing,
   maxHeight,
   diffStyle,
   lineHeight,
 }: {
-  before: string
-  after: string
-  language: string
+  beforeTokens: HighlightTokens | null
+  afterTokens: HighlightTokens | null
+  lines: UnifiedLine[]
+  lineNumberWidth: number
   isResizing: boolean
   maxHeight?: number
   diffStyle: DiffStyle
@@ -1078,19 +1084,6 @@ const UnifiedDiffView = memo(function UnifiedDiffView({
   const [contentWidth, setContentWidth] = useState(0)
   const [contentClientWidth, setContentClientWidth] = useState(0)
 
-  const shouldHighlight = !isResizing && language !== 'text'
-  const { output: beforeTokens } = useSyntaxHighlight(before, {
-    lang: language,
-    mode: 'tokens',
-    enabled: shouldHighlight,
-  })
-  const { output: afterTokens } = useSyntaxHighlight(after, {
-    lang: language,
-    mode: 'tokens',
-    enabled: shouldHighlight,
-  })
-
-  const lines = useMemo(() => computeUnifiedLines(before, after), [before, after])
   const [expandedRegions, setExpandedRegions] = useState<Map<number, ExpansionRegion>>(() => new Map())
   const displayLines = useMemo(() => collapseContextUnified(lines, expandedRegions), [lines, expandedRegions])
   const handleExpand = useCallback((id: number, direction: ExpandDirection) => {
@@ -1180,7 +1173,6 @@ const UnifiedDiffView = memo(function UnifiedDiffView({
   }
 
   const useChangeBars = diffStyle === 'changeBars'
-  const lineNumberWidth = getLineNumberColumnWidth(Math.max(getLineCount(before), getLineCount(after)))
   const GUTTER_WIDTH = useChangeBars ? lineNumberWidth * 2 + 3 : lineNumberWidth * 2 + 20
 
   const gutterRows: React.ReactNode[] = []
@@ -1296,37 +1288,25 @@ const UnifiedDiffView = memo(function UnifiedDiffView({
 })
 
 const WrappedUnifiedDiffView = memo(function WrappedUnifiedDiffView({
-  before,
-  after,
-  language,
+  beforeTokens,
+  afterTokens,
+  lines,
+  lineNumberWidth,
   isResizing,
   maxHeight,
   diffStyle,
   lineHeight,
 }: {
-  before: string
-  after: string
-  language: string
+  beforeTokens: HighlightTokens | null
+  afterTokens: HighlightTokens | null
+  lines: UnifiedLine[]
+  lineNumberWidth: number
   isResizing: boolean
   maxHeight?: number
   diffStyle: DiffStyle
   lineHeight: number
 }) {
   const { t } = useTranslation(['components', 'common'])
-
-  const shouldHighlight = !isResizing && language !== 'text'
-  const { output: beforeTokens } = useSyntaxHighlight(before, {
-    lang: language,
-    mode: 'tokens',
-    enabled: shouldHighlight,
-  })
-  const { output: afterTokens } = useSyntaxHighlight(after, {
-    lang: language,
-    mode: 'tokens',
-    enabled: shouldHighlight,
-  })
-
-  const lines = useMemo(() => computeUnifiedLines(before, after), [before, after])
   const [expandedRegions, setExpandedRegions] = useState<Map<number, ExpansionRegion>>(() => new Map())
   const displayLines = useMemo(() => collapseContextUnified(lines, expandedRegions), [lines, expandedRegions])
   const handleExpand = useCallback((id: number, direction: ExpandDirection) => {
@@ -1345,7 +1325,6 @@ const WrappedUnifiedDiffView = memo(function WrappedUnifiedDiffView({
   }
 
   const useChangeBars = diffStyle === 'changeBars'
-  const lineNumberWidth = getLineNumberColumnWidth(Math.max(getLineCount(before), getLineCount(after)))
   const gutterWidth = useChangeBars ? lineNumberWidth * 2 + 3 : lineNumberWidth * 2 + 20
 
   const visibleRows: React.ReactNode[] = []
