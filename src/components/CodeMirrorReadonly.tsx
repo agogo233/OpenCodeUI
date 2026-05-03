@@ -4,6 +4,7 @@ import { openSearchPanel } from '@codemirror/search'
 import { EditorView } from '@codemirror/view'
 import type { HighlightTokens } from '../hooks/useSyntaxHighlight'
 import { createReadonlyCodeMirrorExtensions, dispatchShikiTokens } from './codeMirrorReadonlyExtensions'
+import { getLineCount, getLineNumberColumnWidth } from '../utils/lineNumberUtils'
 
 interface CodeMirrorReadonlyProps {
   code: string
@@ -33,10 +34,11 @@ export function CodeMirrorReadonly({
   const hostRef = useRef<HTMLDivElement>(null)
   const viewRef = useRef<EditorView | null>(null)
   const constrainedHeight = maxHeight !== undefined
+  const lineNumberWidth = useMemo(() => getLineNumberColumnWidth(getLineCount(code)), [code])
 
   const extensions = useMemo(
-    () => createReadonlyCodeMirrorExtensions({ wordWrap, lineHeight, showLineNumbers, maxHeight, extraExtensions }),
-    [wordWrap, lineHeight, showLineNumbers, maxHeight, extraExtensions],
+    () => createReadonlyCodeMirrorExtensions({ wordWrap, lineHeight, showLineNumbers, maxHeight, lineNumberWidth, extraExtensions }),
+    [wordWrap, lineHeight, showLineNumbers, maxHeight, lineNumberWidth, extraExtensions],
   )
 
   useEffect(() => {

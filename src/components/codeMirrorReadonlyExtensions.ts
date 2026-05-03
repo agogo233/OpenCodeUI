@@ -33,12 +33,14 @@ export function createReadonlyCodeMirrorExtensions({
   lineHeight,
   showLineNumbers = true,
   maxHeight,
+  lineNumberWidth,
   extraExtensions = [],
 }: {
   wordWrap: boolean
   lineHeight: number
   showLineNumbers?: boolean
   maxHeight?: number
+  lineNumberWidth: number
   extraExtensions?: Extension[]
 }): Extension[] {
   const extensions: Extension[] = [
@@ -49,7 +51,7 @@ export function createReadonlyCodeMirrorExtensions({
     search({ top: true, createPanel: createCodeMirrorSearchPanel }),
     highlightSelectionMatches(),
     shikiDecorationsField,
-    readonlyCodeMirrorTheme(lineHeight, maxHeight),
+    readonlyCodeMirrorTheme(lineHeight, maxHeight, lineNumberWidth),
     ...extraExtensions,
   ]
 
@@ -96,26 +98,29 @@ function buildShikiDecorations(state: EditorState, tokens: HighlightTokens | nul
   return Decoration.set(ranges, true)
 }
 
-function readonlyCodeMirrorTheme(lineHeight: number, maxHeight?: number): Extension {
+function readonlyCodeMirrorTheme(lineHeight: number, maxHeight: number | undefined, lineNumberWidth: number): Extension {
   const fillContainer = maxHeight === undefined
 
   return EditorView.theme({
     '&': { color: 'hsl(var(--text-100))', backgroundColor: 'transparent', fontSize: 'var(--fs-code)', position: 'relative', ...(fillContainer ? { height: '100%' } : {}) },
     '.cm-editor': fillContainer ? { height: '100%' } : {},
     '.cm-scroller': { overflow: 'auto', fontFamily: 'var(--font-mono)', lineHeight: `${lineHeight}px`, ...(fillContainer ? { height: '100%' } : { maxHeight: `${maxHeight}px` }) },
-    '.cm-content': { padding: '0', caretColor: 'hsl(var(--accent-main-100))', ...(fillContainer ? { minHeight: '100%' } : {}) },
+    '.cm-content': { margin: '0', padding: '0', caretColor: 'hsl(var(--accent-main-100))', ...(fillContainer ? { minHeight: '100%' } : {}) },
     '.cm-cursor': { borderLeftColor: 'hsl(var(--accent-main-100))', borderLeftWidth: '2px' },
-    '.cm-line': { padding: '0 1rem 0 0.75rem', minHeight: `${lineHeight}px` },
+    '.cm-line': { padding: '0 1rem 0 0', minHeight: `${lineHeight}px` },
     '.cm-gutters': {
       backgroundColor: 'hsl(var(--bg-100))',
       color: 'hsl(var(--text-400))',
-      borderRight: '1px solid hsl(var(--border-100) / 0.35)',
+      borderRight: '0',
+      margin: '0',
+      padding: '0',
+      userSelect: 'none',
       zIndex: '3',
     },
-    '.cm-gutter': { backgroundColor: 'hsl(var(--bg-100))' },
-    '.cm-lineNumbers': { minWidth: 'max-content' },
-    '.cm-lineNumbers .cm-gutterElement': { minWidth: 'max-content', padding: '0 0.75rem 0 1rem' },
-    '.cm-activeLineGutter': { backgroundColor: 'hsl(var(--accent-main-100) / 0.08)', color: 'hsl(var(--accent-main-100))' },
+    '.cm-gutter': { backgroundColor: 'hsl(var(--bg-100))', margin: '0', padding: '0', userSelect: 'none' },
+    '.cm-lineNumbers': { width: `${lineNumberWidth}px`, minWidth: `${lineNumberWidth}px`, margin: '0', padding: '0' },
+    '.cm-lineNumbers .cm-gutterElement': { boxSizing: 'border-box', width: `${lineNumberWidth}px`, minWidth: `${lineNumberWidth}px`, padding: '0 0.75rem 0 1rem', textAlign: 'right', userSelect: 'none' },
+    '.cm-activeLineGutter': { backgroundColor: 'transparent', color: 'hsl(var(--accent-main-100))' },
     '.cm-activeLine': { backgroundColor: 'transparent' },
     '.cm-selectionBackground, &.cm-focused .cm-selectionBackground': { backgroundColor: 'hsl(var(--accent-main-100) / 0.2)' },
     '&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground': { backgroundColor: 'hsl(var(--accent-main-100) / 0.26)' },

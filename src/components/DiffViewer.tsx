@@ -16,6 +16,7 @@ import { useSyntaxHighlight, type HighlightTokens } from '../hooks/useSyntaxHigh
 import { useDynamicVirtualScroll } from '../hooks/useDynamicVirtualScroll'
 import { themeStore } from '../store/themeStore'
 import type { DiffStyle } from '../store/themeStore'
+import { getLineCount, getLineNumberColumnWidth } from '../utils/lineNumberUtils'
 
 // ============================================
 // 常量
@@ -269,20 +270,6 @@ function getEmptyBufferBackgroundStyle(rowIndex: number, lineHeight: number, xOf
 
 function getEmptyBufferRowStyle(rowIndex: number, lineHeight: number, xOffset = 0): CSSProperties {
   return { height: lineHeight, ...getEmptyBufferBackgroundStyle(rowIndex, lineHeight, xOffset) }
-}
-
-function getLineNumberColumnWidth(maxLineNo: number): number {
-  const digits = String(Math.max(1, maxLineNo)).length
-  return Math.max(44, digits * 8 + 28)
-}
-
-function getLineCount(text: string): number {
-  if (text === '') return 1
-  let count = 1
-  for (let i = 0; i < text.length; i++) {
-    if (text.charCodeAt(i) === 10) count++
-  }
-  return count
 }
 
 function useDiffLineNumberWidth(before: string, after: string): number {
