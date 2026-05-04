@@ -1,5 +1,11 @@
 # Changelog
 
+## [v0.6.2] - 2026-05-04
+
+- fix: smooth wrapped diff scrolling (e46d0e5)
+- fix: center collapsed diff buttons on mobile (9c1c6ef)
+- fix: keep empty diff buffer textures aligned (3b70696)
+
 ## [v0.6.1] - 2026-05-03
 
 - fix: align readonly code gutters with diffs (b9a15d3)
