@@ -1,5 +1,9 @@
 # Changelog
 
+## [v0.6.4] - 2026-05-04
+
+- fix: keep delete change bars continuous (843d861)
+
 ## [v0.6.3] - 2026-05-04
 
 - ui: simplify tool diff result headers (a5889a5)
