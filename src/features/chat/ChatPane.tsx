@@ -268,23 +268,23 @@ export const ChatPane = memo(function ChatPane({
     handleCommand,
     handleUndoWithAnimation,
     handleRedoWithAnimation,
-    handleForkMessage,
-    handleNewSession,
-    handleVisibleMessageIdsChange,
-    handleArchiveSession,
-    handlePreviousSession,
-    handleNextSession,
-    handleCopyLastResponse,
-    restoreAgentFromMessage,
-  } = useChatSession({
-    paneId,
-    chatAreaRef,
-    currentModel,
-    refetchModels,
-    sessionId,
-    navigateToSession,
-    navigateHome,
-  })
+     handleForkMessage,
+     handleNewSession,
+     handleVisibleMessageIdsChange,
+     handleArchiveSession,
+     handlePreviousSession,
+     handleNextSession,
+     handleCopyLastResponse,
+     restoreAgentFromMessage,
+   } = useChatSession({
+     paneId,
+     chatAreaRef,
+     selectedModelKey,
+     refetchModels,
+     sessionId,
+     navigateToSession,
+     navigateHome,
+   })
 
   const messageView = useMemo(() => ({ sessionId: routeSessionId, messages }), [routeSessionId, messages])
   const deferredMessageView = useDeferredValue(messageView)

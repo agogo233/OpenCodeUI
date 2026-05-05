@@ -128,6 +128,16 @@ vi.mock('../utils/perServerStorage', () => ({
   },
 }))
 
+vi.mock('../utils/modelUtils', () => ({
+  parseModelKey: vi.fn((key: string) => {
+    const parts = key.split(':')
+    if (parts.length === 2) {
+      return { providerId: parts[0], modelId: parts[1] }
+    }
+    return null
+  }),
+}))
+
 describe('useChatSession handleCommand', () => {
   beforeEach(() => {
     createSessionMock.mockReset()
@@ -161,7 +171,7 @@ describe('useChatSession handleCommand', () => {
       useChatSession({
         paneId: 'pane-1',
         chatAreaRef: { current: null },
-        currentModel: { id: 'model-1', providerId: 'provider-1', variants: [] } as never,
+        selectedModelKey: 'provider-1:model-1',
         refetchModels: vi.fn(async () => {}),
         sessionId: 'session-1',
         navigateToSession: vi.fn(),
@@ -197,7 +207,7 @@ describe('useChatSession handleCommand', () => {
       useChatSession({
         paneId: 'pane-1',
         chatAreaRef: { current: null },
-        currentModel: { id: 'model-1', providerId: 'provider-1', variants: [] } as never,
+        selectedModelKey: 'provider-1:model-1',
         refetchModels: vi.fn(async () => {}),
         sessionId: 'session-1',
         navigateToSession: vi.fn(),
@@ -261,7 +271,7 @@ describe('useChatSession handleCommand', () => {
         useChatSession({
           paneId: 'pane-1',
           chatAreaRef: { current: null },
-          currentModel: { id: 'model-1', providerId: 'provider-1', variants: [] } as never,
+          selectedModelKey: 'provider-1:model-1',
           refetchModels: vi.fn(async () => {}),
           sessionId: 'session-1',
           navigateToSession: vi.fn(),

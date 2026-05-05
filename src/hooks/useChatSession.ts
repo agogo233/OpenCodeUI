@@ -39,11 +39,11 @@ import {
   type ApiSession,
   type ApiAgent,
   type Attachment,
-  type ModelInfo,
 } from '../api'
 import { getMessageText, isUserMessage, type AssistantMessageInfo, type Message as UIMessage } from '../types/message'
 import { clipboardErrorHandler, copyTextToClipboard, createErrorHandler } from '../utils'
 import { serverStorage } from '../utils/perServerStorage'
+import { parseModelKey } from '../utils/modelUtils'
 import { STORAGE_KEY_SELECTED_AGENT } from '../constants'
 import type { ChatAreaHandle } from '../features/chat'
 import { followupQueueStore, useFollowupQueue } from '../store/followupQueueStore'
@@ -77,7 +77,7 @@ const EMPTY_SESSION_STATE = {
 interface UseChatSessionOptions {
   paneId: string
   chatAreaRef: React.RefObject<ChatAreaHandle | null>
-  currentModel: ModelInfo | undefined
+  selectedModelKey: string | null
   refetchModels: () => Promise<void>
   sessionId: string | null
   navigateToSession: (sessionId: string, directory?: string) => void
@@ -94,7 +94,7 @@ interface LiveRetryStatus {
 export function useChatSession({
   paneId,
   chatAreaRef,
-  currentModel,
+  selectedModelKey,
   refetchModels,
   sessionId: routeSessionId,
   navigateToSession,
@@ -102,6 +102,9 @@ export function useChatSession({
 }: UseChatSessionOptions) {
   const { statusMap } = useActiveSessionStore()
   const { queueFollowupMessages } = useSyncExternalStore(themeStore.subscribe, themeStore.getSnapshot)
+
+  // 解析 selectedModelKey 获取 providerId 和 modelId
+  const parsedModel = selectedModelKey ? parseModelKey(selectedModelKey) : null
 
   // Agents
   const [agents, setAgents] = useState<ApiAgent[]>([])
@@ -624,7 +627,7 @@ export function useChatSession({
   // Send message handler
   const handleSend = useCallback(
     async (content: string, attachments: Attachment[], options?: { agent?: string; variant?: string }) => {
-      if (!currentModel) {
+      if (!parsedModel) {
         handleError('send message', new Error('No model selected'))
         return false
       }
@@ -644,8 +647,8 @@ export function useChatSession({
           text: content,
           attachments,
           model: {
-            providerID: currentModel.providerId,
-            modelID: currentModel.id,
+            providerID: parsedModel.providerId,
+            modelID: parsedModel.modelId,
             variant: options?.variant,
           },
           variant: options?.variant,
@@ -670,8 +673,8 @@ export function useChatSession({
         content,
         attachments,
         model: {
-          providerID: currentModel.providerId,
-          modelID: currentModel.id,
+          providerID: parsedModel.providerId,
+          modelID: parsedModel.modelId,
         },
         options,
         directory: effectiveDirectory || '',
@@ -679,7 +682,7 @@ export function useChatSession({
       })
     },
     [
-      currentModel,
+      selectedModelKey,
       routeSessionId,
       queuedFollowups.length,
       queuedFollowupFailedId,
@@ -871,7 +874,7 @@ export function useChatSession({
         }
 
         if (command === 'compact') {
-          if (!currentModel) {
+          if (!parsedModel) {
             handleError('execute command', new Error('No model selected'))
             return false
           }
@@ -880,7 +883,7 @@ export function useChatSession({
           // Do not keep the draft alive until the long-running compaction finishes.
           void summarizeSession(
             sessionId,
-            { providerID: currentModel.providerId, modelID: currentModel.id },
+            { providerID: parsedModel.providerId, modelID: parsedModel.modelId },
             effectiveDirectory,
           ).catch(err => {
             handleError('execute command', err)
@@ -901,7 +904,7 @@ export function useChatSession({
         return false
       }
     },
-    [routeSessionId, effectiveDirectory, createSession, navigateToSession, currentModel, navigateHome, handleNewChat],
+    [routeSessionId, effectiveDirectory, createSession, navigateToSession, selectedModelKey, navigateHome, handleNewChat],
   )
 
   // Undo with animation
