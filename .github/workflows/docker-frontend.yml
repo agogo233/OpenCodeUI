@@ -67,7 +67,7 @@ jobs:
 
       - uses: actions/delete-package-versions@v5
         with: 
-          package-name: ${{ env.CONTAINER_NAME }}
+          package-name: opencodeui-frontend
           package-type: 'container'
           min-versions-to-keep: 2
           delete-only-untagged-versions: 'true'
