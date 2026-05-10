@@ -2,18 +2,6 @@ name: Build & Push Frontend Docker Image
 
 on:
   push:
-    branches: [main]
-    paths:
-      - 'src/**'
-      - 'public/**'
-      - 'index.html'
-      - 'package.json'
-      - 'package-lock.json'
-      - 'vite.config.ts'
-      - 'tsconfig*.json'
-      - 'docker/Dockerfile.frontend'
-      - 'docker/Caddyfile'
-      - 'docker/Caddyfile.standalone'
   workflow_dispatch:
 
 env:
@@ -24,11 +12,20 @@ jobs:
   build-and-push:
     runs-on: ubuntu-latest
     permissions:
+      actions: write
       contents: read
-      packages: write
+      packages: write # 必须授权以推送镜像
 
     steps:
       - uses: actions/checkout@v6
+
+      - name: Delete workflow runs
+        uses: Mattraks/delete-workflow-runs@v2
+        with:
+          token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          retain_days: 0
+          keep_minimum_runs: 3
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -67,3 +64,10 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - uses: actions/delete-package-versions@v5
+        with: 
+          package-name: ${{ env.CONTAINER_NAME }}
+          package-type: 'container'
+          min-versions-to-keep: 2
+          delete-only-untagged-versions: 'true'
