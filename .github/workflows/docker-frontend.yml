@@ -58,7 +58,7 @@ jobs:
           build-args: |
             NPM_REGISTRY=https://registry.npmjs.org/
             NPM_REGISTRY_FALLBACK=https://registry.npmmirror.com/
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
