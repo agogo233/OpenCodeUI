@@ -45,6 +45,8 @@ services:
       - opencode-net
 
   # ---- 前端：预构建镜像 ----
+  # VITE_DEFAULT_PROJECT_DIR 需在构建时传入（build arg），
+  # 本地构建时在 docker-compose.build.yml 中配置，参考 .env.example
   frontend:
     image: ghcr.io/lehhair/opencodeui-frontend:latest
     container_name: opencode-frontend
