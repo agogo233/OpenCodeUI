@@ -290,7 +290,7 @@ export const Sidebar = memo(function Sidebar({
           isOpen={isProjectDialogVisible}
           onClose={closeProjectDialog}
           onSelect={handleAddProject}
-          initialPath={pathInfo?.home}
+          initialPath={import.meta.env.VITE_DEFAULT_PROJECT_DIR || pathInfo?.home}
         />
       </>
     )
@@ -344,7 +344,7 @@ export const Sidebar = memo(function Sidebar({
         isOpen={isProjectDialogVisible}
         onClose={closeProjectDialog}
         onSelect={handleAddProject}
-        initialPath={pathInfo?.home}
+        initialPath={import.meta.env.VITE_DEFAULT_PROJECT_DIR || pathInfo?.home}
       />
     </>
   )

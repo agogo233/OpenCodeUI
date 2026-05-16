@@ -28,7 +28,9 @@ RUN set -eux; \
     npm ci --ignore-scripts
 COPY . .
 RUN node scripts/copy-material-icons.mjs
+ARG VITE_DEFAULT_PROJECT_DIR
 ENV VITE_API_BASE_URL=/api
+ENV VITE_DEFAULT_PROJECT_DIR=$VITE_DEFAULT_PROJECT_DIR
 RUN npm run build
 
 # ---- Stage 2: Caddy 运行时 ----
