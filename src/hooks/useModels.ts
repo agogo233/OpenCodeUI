@@ -1,5 +1,24 @@
 import { useSyncExternalStore, useCallback } from 'react'
 import { getActiveModels, type ModelInfo } from '../api'
+import { serverStorage } from '../utils/perServerStorage'
+
+// ============================================
+// Storage cache for model list — survives page refresh so users don't
+// lose model visibility/selection when the backend API temporarily
+// returns fewer models or is unreachable.
+// ============================================
+
+const STORAGE_KEY_CACHED_MODELS = 'cached-models'
+
+function readCachedModels(): ModelInfo[] {
+  const data = serverStorage.getJSON<ModelInfo[]>(STORAGE_KEY_CACHED_MODELS)
+  if (!Array.isArray(data) || data.length === 0) return []
+  return data
+}
+
+function writeCachedModels(models: ModelInfo[]) {
+  serverStorage.setJSON(STORAGE_KEY_CACHED_MODELS, models)
+}
 
 // ============================================
 // Global singleton so every ChatPane shares one models array.
@@ -16,7 +35,8 @@ interface ModelsState {
 
 type Listener = () => void
 
-let _state: ModelsState = { models: [], isLoading: true, error: null }
+const cached = readCachedModels()
+let _state: ModelsState = { models: cached, isLoading: cached.length === 0, error: null }
 let _fetchPromise: Promise<void> | null = null
 const _listeners = new Set<Listener>()
 
@@ -36,9 +56,18 @@ async function _fetchModels() {
     _setState({ isLoading: true, error: null })
     try {
       const data = await getActiveModels()
-      _setState({ models: data, isLoading: false })
+      if (data.length > 0) {
+        writeCachedModels(data)
+        _setState({ models: data, isLoading: false })
+      } else {
+        // API returned empty — keep current models (cache fallback)
+        _setState({ isLoading: false, error: new Error('No active models returned from API') })
+      }
     } catch (e) {
-      _setState({ error: e instanceof Error ? e : new Error('Failed to fetch models'), isLoading: false })
+      _setState({
+        error: e instanceof Error ? e : new Error('Failed to fetch models'),
+        isLoading: false,
+      })
     } finally {
       _fetchPromise = null
     }
