@@ -194,4 +194,40 @@ describe('useModelSelection', () => {
 
     await waitFor(() => expect(result.current.selectedModelKey).toBe('openai:gpt-4o-mini'))
   })
+
+  it('preserves user selection when models load async and session selection exists', async () => {
+    sessionSelections.set('session-1', { modelKey: 'openai:gpt-4.1' })
+
+    const { result, rerender } = renderHook(
+      ({ models }) => useModelSelection({ models, sessionId: 'session-1' }),
+      { initialProps: { models: [] as ModelInfo[] } },
+    )
+
+    expect(result.current.selectedModelKey).toBeNull()
+
+    act(() => {
+      result.current.handleModelChange('openai:gpt-4o-mini', MODELS[1])
+    })
+    expect(result.current.selectedModelKey).toBe('openai:gpt-4o-mini')
+
+    rerender({ models: MODELS })
+
+    await waitFor(() => {
+      expect(result.current.selectedModelKey).toBe('openai:gpt-4o-mini')
+    })
+  })
+
+  it('does not re-read session selection from storage on every render', () => {
+    sessionSelections.set('session-1', { modelKey: 'openai:gpt-4.1' })
+
+    const { result, rerender } = renderHook(() => useModelSelection({ models: MODELS, sessionId: 'session-1' }))
+
+    expect(result.current.selectedModelKey).toBe('openai:gpt-4.1')
+
+    sessionSelections.set('session-1', { modelKey: 'openai:gpt-4o-mini' })
+
+    rerender()
+
+    expect(result.current.selectedModelKey).toBe('openai:gpt-4.1')
+  })
 })

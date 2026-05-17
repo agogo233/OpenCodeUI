@@ -33,18 +33,25 @@ interface UseModelSelectionReturn {
 }
 
 export function useModelSelection({ models, sessionId = null }: UseModelSelectionOptions): UseModelSelectionReturn {
-  const sessionSelection = sessionId ? getSessionModelSelection(sessionId) : undefined
-  const initialSessionSelection = sessionId ? getSessionModelSelection(sessionId) : undefined
-  const initialSessionModel = initialSessionSelection ? findModelByKey(models, initialSessionSelection.modelKey) : undefined
+  const prevSessionIdRef = useRef(sessionId)
+  const sessionSelectionRef = useRef<{ modelKey: string; variant?: string } | undefined>(undefined)
+
+  if (prevSessionIdRef.current !== sessionId) {
+    prevSessionIdRef.current = sessionId
+    sessionSelectionRef.current = sessionId ? getSessionModelSelection(sessionId) : undefined
+  }
+
+  const sessionSelection = sessionSelectionRef.current
+  const initialSessionModel = sessionSelection ? findModelByKey(models, sessionSelection.modelKey) : undefined
 
   const [{ selectedModelKey, selectedVariant }, setSelection] = useState<{
     selectedModelKey: string | null
     selectedVariant: string | undefined
   }>(() => {
-    if (initialSessionSelection && initialSessionModel) {
+    if (sessionSelection && initialSessionModel) {
       return {
-        selectedModelKey: initialSessionSelection.modelKey,
-        selectedVariant: initialSessionSelection.variant ?? getModelVariantPref(initialSessionSelection.modelKey),
+        selectedModelKey: sessionSelection.modelKey,
+        selectedVariant: sessionSelection.variant ?? getModelVariantPref(sessionSelection.modelKey),
       }
     }
 
@@ -55,7 +62,7 @@ export function useModelSelection({ models, sessionId = null }: UseModelSelectio
       selectedVariant: initialModelKey ? getModelVariantPref(initialModelKey) : undefined,
     }
   })
-  const hydratedSessionRef = useRef<string | null>(initialSessionSelection && !initialSessionModel ? null : sessionId)
+  const hydratedSessionRef = useRef<string | null>(sessionSelection && !initialSessionModel ? null : sessionId)
   const skipPersistenceRef = useRef<string | null>(null)
 
   const persistedModel = selectedModelKey ? findModelByKey(models, selectedModelKey) : undefined
@@ -82,6 +89,12 @@ export function useModelSelection({ models, sessionId = null }: UseModelSelectio
       return
     }
 
+    // 用户已手动选择了不同于存储值的模型，跳过 hydration
+    if (selectedModelKey && selectedModelKey !== sessionSelection.modelKey) {
+      hydratedSessionRef.current = sessionId
+      return
+    }
+
     const restoredModel = findModelByKey(models, sessionSelection.modelKey)
     if (!restoredModel) {
       if (models.length > 0) {
@@ -100,10 +113,18 @@ export function useModelSelection({ models, sessionId = null }: UseModelSelectio
     })
     skipPersistenceRef.current = sessionId
     hydratedSessionRef.current = sessionId
-  }, [models, sessionId, sessionSelection])
+  }, [models, sessionId])
 
   useLayoutEffect(() => {
-    if (sessionId && sessionSelection && hydratedSessionRef.current !== sessionId) return
+    // 有存储的 session 选择且尚未 hydration 时，延迟持久化。
+    // 但如果用户已手动选择不同模型，允许立即持久化（防止被 hydration 覆盖）
+    if (
+      sessionId &&
+      sessionSelection &&
+      hydratedSessionRef.current !== sessionId &&
+      (!selectedModelKey || selectedModelKey === sessionSelection.modelKey)
+    ) return
+
     if (sessionId && skipPersistenceRef.current === sessionId) {
       skipPersistenceRef.current = null
       return
@@ -118,7 +139,7 @@ export function useModelSelection({ models, sessionId = null }: UseModelSelectio
     }
 
     serverStorage.remove(STORAGE_KEY_SELECTED_MODEL)
-  }, [selectedModelKey, resolvedSelectedVariant, sessionId, sessionSelection])
+  }, [selectedModelKey, resolvedSelectedVariant, sessionId])
 
   // 切换模型
   const handleModelChange = useCallback(
