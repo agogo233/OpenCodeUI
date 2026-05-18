@@ -230,4 +230,29 @@ describe('useModelSelection', () => {
 
     expect(result.current.selectedModelKey).toBe('openai:gpt-4.1')
   })
+
+  it('restoreFromMessage does not override manual model selection', () => {
+    const { result } = renderHook(() => useModelSelection({ models: MODELS }))
+
+    act(() => {
+      result.current.handleModelChange('openai:gpt-4o-mini', MODELS[1])
+    })
+    expect(result.current.selectedModelKey).toBe('openai:gpt-4o-mini')
+
+    act(() => {
+      result.current.restoreFromMessage({ providerID: 'openai', modelID: 'gpt-4.1' }, null)
+    })
+
+    expect(result.current.selectedModelKey).toBe('openai:gpt-4o-mini')
+  })
+
+  it('restoreFromMessage works normally when no manual selection was made', () => {
+    const { result } = renderHook(() => useModelSelection({ models: MODELS }))
+
+    act(() => {
+      result.current.restoreFromMessage({ providerID: 'openai', modelID: 'gpt-4.1' }, null)
+    })
+
+    expect(result.current.selectedModelKey).toBe('openai:gpt-4.1')
+  })
 })

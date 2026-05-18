@@ -64,6 +64,8 @@ export function useModelSelection({ models, sessionId = null }: UseModelSelectio
   })
   const hydratedSessionRef = useRef<string | null>(sessionSelection && !initialSessionModel ? null : sessionId)
   const skipPersistenceRef = useRef<string | null>(null)
+  const selectedModelKeyRef = useRef(selectedModelKey)
+  selectedModelKeyRef.current = selectedModelKey
 
   const persistedModel = selectedModelKey ? findModelByKey(models, selectedModelKey) : undefined
   const currentModel = useMemo(() => persistedModel ?? models[0], [models, persistedModel])
@@ -170,11 +172,14 @@ export function useModelSelection({ models, sessionId = null }: UseModelSelectio
   )
 
   // 从消息中恢复模型选择（仅更新内存状态，不写 storage）
+  // 如果用户已手动选择了不同的模型，跳过恢复
   const restoreFromMessage = useCallback(
     (model: { providerID: string; modelID: string } | null | undefined, variant: string | null | undefined) => {
       if (!model) return
 
       const modelKey = `${model.providerID}:${model.modelID}`
+      if (selectedModelKeyRef.current && selectedModelKeyRef.current !== modelKey) return
+
       const exists = findModelByKey(models, modelKey)
 
       if (exists) {
