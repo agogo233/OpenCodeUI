@@ -20,17 +20,6 @@ function writeCachedModels(models: ModelInfo[]) {
   serverStorage.setJSON(STORAGE_KEY_CACHED_MODELS, models)
 }
 
-function getModelKey(m: ModelInfo): string {
-  return `${m.providerId}:${m.id}`
-}
-
-function mergeModels(existing: ModelInfo[], incoming: ModelInfo[]): ModelInfo[] {
-  const map = new Map<string, ModelInfo>()
-  for (const m of existing) map.set(getModelKey(m), m)
-  for (const m of incoming) map.set(getModelKey(m), m)
-  return Array.from(map.values())
-}
-
 // ============================================
 // Global singleton so every ChatPane shares one models array.
 // Prevents duplicate API requests and the race condition where a
@@ -68,11 +57,11 @@ async function _fetchModels() {
     try {
       const data = await getActiveModels()
       if (data.length > 0) {
-        const merged = mergeModels(_state.models, data)
-        writeCachedModels(merged)
-        _setState({ models: merged, isLoading: false })
+        writeCachedModels(data)
+        _setState({ models: data, isLoading: false })
       } else {
-        // API returned empty — keep current models (cache fallback)
+        // API returned empty — keep current models (cache fallback).
+        // 不主动清空已有 models，确保 API 短暂不可用时 UI 不闪失。
         _setState({ isLoading: false, error: new Error('No active models returned from API') })
       }
     } catch (e) {

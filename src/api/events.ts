@@ -477,6 +477,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function getMessageInfo(properties: unknown): ApiMessage | undefined {
   if (!isRecord(properties)) return undefined
+  // SSE MESSAGE_UPDATED 事件携带 info 字段；导出/导入通道使用 message 字段。
+  // 两者不会在同一事件中同时出现，优先取 info 保持与标准格式一致。
   const message = properties.info ?? properties.message
   return isRecord(message) ? (message as ApiMessage) : undefined
 }
