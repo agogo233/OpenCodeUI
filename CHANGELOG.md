@@ -1,5 +1,9 @@
 # Changelog
 
+## [v0.6.11-canary.1] - 2026-05-25 (Pre-release)
+
+- fix: stabilize chat scrolling with paged virtualization (a7bb14a)
+
 ## [v0.6.10] - 2026-05-17
 
 - fix: refresh sidebar child session links (a49908a)
