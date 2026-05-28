@@ -642,6 +642,13 @@ export function useChatSession({
         return false
       }
 
+      // 防御性检查：确保 providerId 和 modelId 非空
+      if (!parsedModel.providerId || !parsedModel.modelId) {
+        console.warn(
+          `[useChatSession] Invalid model key: "${selectedModelKey}" resolved to providerId="${parsedModel.providerId}", modelId="${parsedModel.modelId}". Falling back may occur on backend.`,
+        )
+      }
+
       // 如果队列头有失败项，用户重新发送时先清掉失败项（内容已恢复到输入框）
       if (routeSessionId && queuedFollowupFailedId) {
         followupQueueStore.remove(routeSessionId, queuedFollowupFailedId)

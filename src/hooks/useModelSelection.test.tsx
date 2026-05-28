@@ -105,14 +105,22 @@ describe('useModelSelection', () => {
     expect(result.current.selectedModelKey).toBe('openai:gpt-4.1')
   })
 
-  it('keeps the persisted model key when it disappears from the list', () => {
+  it('auto-fallbacks to models[0] when persisted model disappears from the list', async () => {
     storage.set(STORAGE_KEY_SELECTED_MODEL, 'openai:gpt-4o-mini')
     
-    const { result } = renderHook(() => useModelSelection({ models: [MODELS[0]] }))
+    const { result, rerender } = renderHook(({ models }) => useModelSelection({ models }), {
+      initialProps: { models: [MODELS[0]] },
+    })
     
-    // 保持用户的选择，即使模型不在列表中
-    expect(result.current.selectedModelKey).toBe('openai:gpt-4o-mini')
-    expect(storage.get(STORAGE_KEY_SELECTED_MODEL)).toBe('openai:gpt-4o-mini')
+    // 初始渲染时 selectedModelKey 仍是旧值（state 未变），但 resolvedModelKey 已回退
+    expect(result.current.selectedModelKey).toBe('openai:gpt-4.1')
+
+    // 当 models 列表更新后，stale key 检测 effect 会清除旧 key
+    rerender({ models: [MODELS[0], MODELS[1]] })
+    
+    await waitFor(() => {
+      expect(result.current.selectedModelKey).toBe('openai:gpt-4.1')
+    })
   })
 
   it('saves variant preference for the resolved fallback model before switching away', () => {
@@ -254,5 +262,33 @@ describe('useModelSelection', () => {
     })
 
     expect(result.current.selectedModelKey).toBe('openai:gpt-4.1')
+  })
+
+  it('resolvedModelKey falls back immediately when selected model is stale', () => {
+    storage.set(STORAGE_KEY_SELECTED_MODEL, 'openai:gpt-4o-mini')
+
+    const { result } = renderHook(() => useModelSelection({ models: [MODELS[0]] }))
+
+    // resolvedModelKey 应立即回退到 models[0]，而不是保持旧 key
+    expect(result.current.selectedModelKey).toBe('openai:gpt-4.1')
+    expect(result.current.currentModel?.name).toBe('GPT-4.1')
+  })
+
+  it('stale key detection resets internal state when models change', async () => {
+    storage.set(STORAGE_KEY_SELECTED_MODEL, 'openai:gpt-4o-mini')
+
+    const { result, rerender } = renderHook(({ models }) => useModelSelection({ models }), {
+      initialProps: { models: [] as ModelInfo[] },
+    })
+
+    // models 为空时 selectedModelKey 为 null
+    expect(result.current.selectedModelKey).toBeNull()
+
+    // models 加载后，stale key 检测 effect 触发回退
+    rerender({ models: [MODELS[0]] })
+
+    await waitFor(() => {
+      expect(result.current.selectedModelKey).toBe('openai:gpt-4.1')
+    })
   })
 })

@@ -70,7 +70,11 @@ export function useModelSelection({ models, sessionId = null }: UseModelSelectio
   const persistedModel = selectedModelKey ? findModelByKey(models, selectedModelKey) : undefined
   const currentModel = useMemo(() => persistedModel ?? models[0], [models, persistedModel])
   // resolvedModelKey: 优先用用户选择的 key，否则回退到当前模型（保证总有有效值）
-  const resolvedModelKey = selectedModelKey || (currentModel ? getModelKey(currentModel) : null)
+  // 如果 selectedModelKey 指向的模型已不在列表中（被隐藏/下线），立即回退到 currentModel
+  const isKeyStale = selectedModelKey !== null && models.length > 0 && !persistedModel
+  const resolvedModelKey = isKeyStale
+    ? (currentModel ? getModelKey(currentModel) : null)
+    : (selectedModelKey || (currentModel ? getModelKey(currentModel) : null))
   // 计算 variant 偏好：如果模型存在且是用户选择的，用当前 variant；否则从存储读取
   const resolvedSelectedVariant = useMemo(() => {
     if (!selectedModelKey) return undefined
@@ -116,6 +120,25 @@ export function useModelSelection({ models, sessionId = null }: UseModelSelectio
     skipPersistenceRef.current = sessionId
     hydratedSessionRef.current = sessionId
   }, [models, sessionId])
+
+  // ============================================
+  // Stale key 检测：当 models 列表变化后，如果 selectedModelKey 指向的模型
+  // 不再存在于列表中（被隐藏/下线/移除），自动回退到 models[0] 并清除无效 key。
+  // 这防止了 UI 显示 "选择模型" 而 API 仍然发送已不存在的旧 key 的问题。
+  // ============================================
+  useEffect(() => {
+    if (models.length === 0) return
+    if (!selectedModelKey) return
+    if (findModelByKey(models, selectedModelKey)) return
+
+    // Key 已失效，回退到第一个可见模型
+    const fallbackKey = getModelKey(models[0])
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setSelection({
+      selectedModelKey: fallbackKey,
+      selectedVariant: getModelVariantPref(fallbackKey),
+    })
+  }, [models, selectedModelKey])
 
   useLayoutEffect(() => {
     // 有存储的 session 选择且尚未 hydration 时，延迟持久化。
