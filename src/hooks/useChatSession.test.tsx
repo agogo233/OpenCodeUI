@@ -294,7 +294,7 @@ describe('useChatSession handleCommand', () => {
       useChatSession({
         paneId: 'pane-1',
         chatAreaRef: { current: null },
-        currentModel: { id: 'model-1', providerId: 'provider-1', variants: [] } as never,
+        selectedModelKey: null,
         refetchModels: vi.fn(async () => {}),
         sessionId: 'session-1',
         navigateToSession: vi.fn(),
@@ -321,7 +321,7 @@ describe('useChatSession handleCommand', () => {
       useChatSession({
         paneId: 'pane-1',
         chatAreaRef: { current: null },
-        currentModel: { id: 'model-1', providerId: 'provider-1', variants: [] } as never,
+        selectedModelKey: null,
         refetchModels: vi.fn(async () => {}),
         sessionId: 'session-1',
         navigateToSession: vi.fn(),
