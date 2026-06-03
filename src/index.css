@@ -529,6 +529,11 @@ body {
   height: 6px;
 }
 
+.internal-drag-active,
+.internal-drag-active * {
+  cursor: default !important;
+}
+
 /* ============================================
  * Input Textarea + Overlay - 共享样式确保完全对齐
  * ============================================ */

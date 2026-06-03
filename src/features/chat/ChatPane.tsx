@@ -27,6 +27,7 @@ import { restoreModelSelection } from '../../utils/sessionHelpers'
 import { findModelByKey, getModelKey } from '../../utils/modelUtils'
 import { useTheme } from '../../hooks/useTheme'
 import type { Attachment } from '../../api'
+import { getInternalDragSnapshot, subscribeInternalDrag, subscribeInternalDrop } from '../../lib/internalDragCore'
 
 interface ChatPaneProps {
   paneId: string
@@ -450,6 +451,7 @@ export const ChatPane = memo(function ChatPane({
   // drop() prefers the pending value so it never loses a last-frame move.
   // ============================================
   const overlayRef = useRef<PaneDropOverlayHandle>(null)
+  const paneRootRef = useRef<HTMLDivElement>(null)
   const currentZoneRef = useRef<DropZone | null>(null)
   const pendingZoneRef = useRef<DropZone | null>(null)
   const dropRafRef = useRef<number | null>(null)
@@ -473,37 +475,25 @@ export const ChatPane = memo(function ChatPane({
     writeZone(null)
   }, [cancelPendingZone, writeZone])
 
-  // Drag end can fire on the source (SessionListItem) — we listen globally so
-  // the overlay always clears even if the user aborts with ESC inside the pane.
   useEffect(() => {
-    const handleGlobalDragEnd = () => resetDropState()
-    window.addEventListener('dragend', handleGlobalDragEnd)
     return () => {
-      window.removeEventListener('dragend', handleGlobalDragEnd)
       if (dropRafRef.current !== null) cancelAnimationFrame(dropRafRef.current)
     }
-  }, [resetDropState])
-
-  const readSessionDragPayload = useCallback((e: React.DragEvent): { sessionId: string; directory: string } | null => {
-    if (!e.dataTransfer.types.includes('text/x-session-id')) return null
-    const sessionId = e.dataTransfer.getData('text/x-session-id')
-    if (!sessionId) return null
-    const directory = e.dataTransfer.getData('text/x-session-directory') || ''
-    return { sessionId, directory }
   }, [])
 
-  const handlePaneDragOver = useCallback(
-    (e: React.DragEvent<HTMLDivElement>) => {
-      if (!splitPaneEnabled) return
-      if (!e.dataTransfer.types.includes('text/x-session-id')) return
-      e.preventDefault()
-      e.dataTransfer.dropEffect = 'move'
+  const updateSessionDropZoneAt = useCallback(
+    (clientX: number, clientY: number) => {
+      if (!splitPaneEnabled) return null
+      const element = paneRootRef.current
+      if (!element) return null
+      const rect = element.getBoundingClientRect()
+      if (rect.width === 0 || rect.height === 0) return null
+      if (clientX < rect.left || clientX > rect.right || clientY < rect.top || clientY > rect.bottom) return null
 
-      const rect = e.currentTarget.getBoundingClientRect()
-      if (rect.width === 0 || rect.height === 0) return
-      const xRel = (e.clientX - rect.left) / rect.width
-      const yRel = (e.clientY - rect.top) / rect.height
-      pendingZoneRef.current = resolveDropZone({ xRel, yRel })
+      const xRel = (clientX - rect.left) / rect.width
+      const yRel = (clientY - rect.top) / rect.height
+      const zone = resolveDropZone({ xRel, yRel })
+      pendingZoneRef.current = zone
 
       if (dropRafRef.current === null) {
         dropRafRef.current = requestAnimationFrame(() => {
@@ -511,41 +501,36 @@ export const ChatPane = memo(function ChatPane({
           writeZone(pendingZoneRef.current)
         })
       }
+
+      return zone
     },
     [splitPaneEnabled, writeZone],
   )
 
-  const handlePaneDragLeave = useCallback(
-    (e: React.DragEvent<HTMLDivElement>) => {
-      // Ignore bubbles that stay within the pane
-      const related = e.relatedTarget as Node | null
-      if (related && e.currentTarget.contains(related)) return
-      resetDropState()
+  const clearSessionDropZoneAt = useCallback(
+    (clientX: number, clientY: number) => {
+      const element = paneRootRef.current
+      if (!element) return resetDropState()
+      const rect = element.getBoundingClientRect()
+      if (clientX < rect.left || clientX > rect.right || clientY < rect.top || clientY > rect.bottom) {
+        resetDropState()
+      }
     },
     [resetDropState],
   )
 
-  const handlePaneDrop = useCallback(
-    (e: React.DragEvent<HTMLDivElement>) => {
-      // Prefer pending (freshly-written by the last dragover) over current
-      // (what rAF had a chance to commit) so we never miss a last-frame move.
-      const zone = pendingZoneRef.current ?? currentZoneRef.current
+  const handleSessionDrop = useCallback(
+    (payload: { sessionId: string; directory?: string }, zone: DropZone) => {
       resetDropState()
       cancelPendingSplitSessionNavigation()
 
-      const payload = readSessionDragPayload(e)
-      if (!payload || !zone) return
-      e.preventDefault()
-
-      // Same session dropped onto its own pane → nothing to do
       if (payload.sessionId === routeSessionId && zone === 'center') return
 
       if (zone === 'center') {
-        navigatePaneToSession(paneId, payload.sessionId, payload.directory || undefined)
+        navigatePaneToSession(paneId, payload.sessionId, payload.directory)
         return
       }
 
-      // Split: create new pane on the chosen side, then route the new pane to the session
       const previousFocusedPaneId = paneLayoutStore.getFocusedPaneId()
       const newPaneId = paneLayoutStore.splitPaneToSide(paneId, zone, null)
       if (newPaneId) {
@@ -555,12 +540,44 @@ export const ChatPane = memo(function ChatPane({
 
         scheduleSplitSessionNavigation(() => {
           if (!paneLayoutStore.findLeaf(newPaneId)) return
-          navigatePaneToSession(newPaneId, payload.sessionId, payload.directory || undefined)
+          navigatePaneToSession(newPaneId, payload.sessionId, payload.directory)
         })
       }
     },
-    [paneId, routeSessionId, navigatePaneToSession, readSessionDragPayload, resetDropState],
+    [paneId, routeSessionId, navigatePaneToSession, resetDropState],
   )
+
+  useEffect(() => {
+    return subscribeInternalDrag(() => {
+      const active = getInternalDragSnapshot().active
+      if (!active || active.payload.kind !== 'session') {
+        resetDropState()
+        return
+      }
+
+      const zone = updateSessionDropZoneAt(active.current.x, active.current.y)
+      if (!zone) clearSessionDropZoneAt(active.current.x, active.current.y)
+    })
+  }, [clearSessionDropZoneAt, resetDropState, updateSessionDropZoneAt])
+
+  useEffect(() => {
+    return subscribeInternalDrop(event => {
+      if (event.payload.kind !== 'session') return
+      const zone = updateSessionDropZoneAt(event.point.x, event.point.y)
+      if (!zone) {
+        resetDropState()
+        return
+      }
+
+      handleSessionDrop(
+        {
+          sessionId: event.payload.sessionId,
+          directory: event.payload.directory,
+        },
+        zone,
+      )
+    })
+  }, [handleSessionDrop, resetDropState, updateSessionDropZoneAt])
 
   const handleToggleFullAuto = useCallback(() => {
     autoApproveStore.cyclePaneFullAutoMode(paneId)
@@ -875,6 +892,7 @@ export const ChatPane = memo(function ChatPane({
   const content = (
     <SessionNavigationContext.Provider value={navigationCtx}>
       <div
+        ref={paneRootRef}
         className={
           showCompactShell
             ? `relative h-full flex flex-col overflow-hidden rounded-lg transition-all duration-200 ${
@@ -885,9 +903,6 @@ export const ChatPane = memo(function ChatPane({
             : 'relative h-full flex flex-col overflow-hidden bg-bg-100'
         }
         onClick={handlePaneFocus}
-        onDragOver={handlePaneDragOver}
-        onDragLeave={handlePaneDragLeave}
-        onDrop={handlePaneDrop}
       >
         {showCompactShell && (
           <PaneHeader

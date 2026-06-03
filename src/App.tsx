@@ -36,6 +36,7 @@ import { createPtySession } from './api/pty'
 import type { TerminalTab } from './store/layoutStore'
 import type { SettingsTab } from './features/settings/SettingsDialog'
 import { isTauri, isTauriMobile } from './utils/tauri'
+import { InternalDragLayer } from './components/InternalDragLayer'
 
 const SettingsDialog = lazy(() =>
   import('./features/settings/SettingsDialog').then(module => ({ default: module.SettingsDialog })),
@@ -565,6 +566,7 @@ function App() {
   return (
     <div className="relative flex h-full flex-col bg-bg-100 overflow-hidden">
       <DesktopTitlebar />
+      <InternalDragLayer />
       <ChatViewportProvider value={chatViewport}>
         <div className="relative flex min-h-0 flex-1 overflow-hidden">
           <Sidebar
