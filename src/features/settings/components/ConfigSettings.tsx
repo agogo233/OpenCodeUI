@@ -119,11 +119,12 @@ function ConfigEditorDialog({ isOpen, onClose }: { isOpen: boolean; onClose: () 
     } finally {
       setValidating(false)
     }
-    if (officialResult.unavailable) {
-      setSchemaWarning(tx('Official schema could not be loaded; the OpenCode server will still validate on save.', '无法加载官方 schema；保存时 OpenCode 服务端仍会做最终校验。', lang))
-    }
+    const schemaUnavailableMessage = officialResult.unavailable
+      ? tx('Official schema could not be loaded; this save relies on OpenCode server validation.', '无法加载官方 schema；本次保存将依赖 OpenCode 服务端校验。', lang)
+      : null
     const nextValidationErrors = [...officialResult.errors, ...validateConfig(config, lang, original)]
     if (nextValidationErrors.length > 0) {
+      if (schemaUnavailableMessage) setSchemaWarning(schemaUnavailableMessage)
       setValidationErrors(nextValidationErrors)
       return
     }
@@ -133,7 +134,9 @@ function ConfigEditorDialog({ isOpen, onClose }: { isOpen: boolean; onClose: () 
       setOriginal(clone(saved))
       setConfig(clone(saved))
       setEffective(await getConfig(directory))
+      setSchemaWarning(null)
     } catch (err) {
+      if (schemaUnavailableMessage) setSchemaWarning(schemaUnavailableMessage)
       setError(err instanceof Error ? err.message : t('config.saveFailed'))
     } finally {
       setSaving(false)

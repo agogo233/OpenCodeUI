@@ -31,26 +31,26 @@ export function Drill({ rootTitle, rootKey, targetKey, targetStack, children }: 
       <DrillDepthContext.Provider value={0}>
         <div className="min-w-0">
           {liveStack.length > 0 && (
-            <div className="mb-3 flex items-center gap-2 border-b border-border-200/40 pb-2.5">
+            <div className="mb-3 flex items-start gap-2 border-b border-border-200/40 pb-2.5">
               <button
                 type="button"
                 onClick={() => api.back(liveStack.length - 1)}
-                className="inline-flex items-center gap-1 rounded-lg border border-border-200/60 px-2 py-1 text-[length:var(--fs-xs)] text-text-300 transition-colors hover:bg-bg-100"
+                className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-lg border border-border-200/60 px-2 py-1 text-[length:var(--fs-xs)] text-text-300 transition-colors hover:bg-bg-100"
               >
                 <ChevronLeftIcon size={13} />
                 {tx('Back', '返回', lang)}
               </button>
-              <nav className="flex min-w-0 flex-wrap items-center gap-1 text-[length:var(--fs-xs)]">
+              <nav className="flex min-w-0 flex-1 flex-wrap items-center gap-1 text-[length:var(--fs-xs)]">
                 {trail.map((frame, index) => {
                   const isLast = index === trail.length - 1
                   return (
-                    <span key={frame.id} className="flex items-center gap-1">
+                    <span key={frame.id} className="flex min-w-0 max-w-full items-center gap-1">
                       {index > 0 && <ChevronRightIcon size={11} className="text-text-500" />}
                       <button
                         type="button"
                         disabled={isLast}
                         onClick={() => api.back(index)}
-                        className={`max-w-[180px] truncate rounded px-1 font-mono ${isLast ? 'text-text-200' : 'text-accent-main-100 hover:underline'}`}
+                        className={`min-w-0 max-w-[180px] truncate rounded px-1 font-mono ${isLast ? 'text-text-200' : 'text-accent-main-100 hover:underline'}`}
                       >
                         {frame.title}
                       </button>
