@@ -21,19 +21,19 @@ vi.mock('./CodeBlock', () => ({
     language,
     variant,
     deferHighlight,
-    highlightDelayMs,
+    forceHighlight,
   }: {
     code: string
     language?: string
     variant?: string
     deferHighlight?: boolean
-    highlightDelayMs?: number
+    forceHighlight?: boolean
   }) => (
     <div
       data-testid="code-block"
       data-variant={variant ?? 'default'}
       data-defer-highlight={String(!!deferHighlight)}
-      data-highlight-delay={String(highlightDelayMs ?? 0)}
+      data-force-highlight={String(!!forceHighlight)}
     >
       {`${language ?? 'text'}:${code}`}
     </div>
@@ -133,18 +133,18 @@ describe('MarkdownRenderer', () => {
     expect(block.dataset.variant).toBe('default')
   })
 
-  it('debounces code block highlighting while content is streaming', () => {
+  it('starts code block highlighting while content is streaming', () => {
     render(<MarkdownRenderer content={'```ts\nconst x = 1\n```'} isStreaming />)
 
     expect(screen.getByTestId('code-block')).toHaveAttribute('data-defer-highlight', 'false')
-    expect(screen.getByTestId('code-block')).toHaveAttribute('data-highlight-delay', '48')
+    expect(screen.getByTestId('code-block')).toHaveAttribute('data-force-highlight', 'true')
   })
 
   it('keeps the declared language for an incomplete streaming code fence', () => {
     render(<MarkdownRenderer content={'```ts\nconst x = 1'} isStreaming />)
 
     expect(screen.getByTestId('code-block')).toHaveTextContent('ts:const x = 1')
-    expect(screen.getByTestId('code-block')).toHaveAttribute('data-highlight-delay', '48')
+    expect(screen.getByTestId('code-block')).toHaveAttribute('data-force-highlight', 'true')
   })
 
   it('reserves enough marker space for large ordered list numbers', () => {
@@ -275,5 +275,32 @@ describe('MarkdownRenderer', () => {
     expect(img).toBeInTheDocument()
     expect(img.tagName).toBe('IMG')
     expect(screen.queryByTitle('Download image')).not.toBeInTheDocument()
+  })
+
+  it('renders Windows absolute path links without blocked indicator', () => {
+    const filePath = 'G:/projects/koishi_projects/koishi-new/external/chatluna/packages/core/src/commands/conversation.ts'
+    render(<MarkdownRenderer content={`[conversation.ts](${filePath})`} />)
+
+    const link = screen.getByRole('link', { name: 'conversation.ts' })
+    expect(link).toHaveAttribute('href', `#opencode-local-file:${encodeURIComponent(filePath)}`)
+    expect(link).toHaveAttribute('title', filePath)
+    expect(screen.queryByText(/\[blocked\]/)).not.toBeInTheDocument()
+  })
+
+  it('renders Windows backslash path links without blocked indicator', () => {
+    const filePath = 'C:\\Users\\test\\projects\\assets\\script.js'
+    render(<MarkdownRenderer content={`[script.js](${filePath})`} />)
+
+    const link = screen.getByRole('link', { name: 'script.js' })
+    expect(link).toHaveAttribute('href', `#opencode-local-file:${encodeURIComponent(filePath)}`)
+    expect(link).toHaveAttribute('title', filePath)
+    expect(screen.queryByText(/\[blocked\]/)).not.toBeInTheDocument()
+  })
+
+  it('still blocks unsafe javascript links', () => {
+    render(<MarkdownRenderer content={'[bad](javascript:alert(1))'} />)
+
+    expect(screen.getByText('bad [blocked]')).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'bad' })).not.toBeInTheDocument()
   })
 })
