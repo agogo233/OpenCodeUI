@@ -1,5 +1,9 @@
 # Changelog
 
+## [v0.6.16] - 2026-06-07
+
+- fix(startup): cancel stale local endpoint requests (9c789e5)
+
 ## [v0.6.15] - 2026-06-06
 
 - fix(settings): validate opencode server health (0c19e18)
