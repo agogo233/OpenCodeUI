@@ -160,10 +160,7 @@ export function useModelSelection({ models, sessionId = null }: UseModelSelectio
       if (sessionId) {
         saveSessionModelSelection(sessionId, selectedModelKey, resolvedSelectedVariant)
       }
-      return
     }
-
-    serverStorage.remove(STORAGE_KEY_SELECTED_MODEL)
   }, [selectedModelKey, resolvedSelectedVariant, sessionId])
 
   // 切换模型
