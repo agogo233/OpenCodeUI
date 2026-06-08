@@ -1,12 +1,8 @@
 import { useSyncExternalStore, useCallback } from 'react'
 import { getActiveModels, type ModelInfo } from '../api'
+import { getSDKClientAsync } from '../api/sdk'
+import { serverStore } from '../store/serverStore'
 import { serverStorage } from '../utils/perServerStorage'
-
-// ============================================
-// Storage cache for model list — survives page refresh so users don't
-// lose model visibility/selection when the backend API temporarily
-// returns fewer models or is unreachable.
-// ============================================
 
 const STORAGE_KEY_CACHED_MODELS = 'cached-models'
 
@@ -20,13 +16,6 @@ function writeCachedModels(models: ModelInfo[]) {
   serverStorage.setJSON(STORAGE_KEY_CACHED_MODELS, models)
 }
 
-// ============================================
-// Global singleton so every ChatPane shares one models array.
-// Prevents duplicate API requests and the race condition where a
-// late-mounting pane sees an empty models list, falls back to
-// models[0], and overwrites the persisted model selection.
-// ============================================
-
 interface ModelsState {
   models: ModelInfo[]
   isLoading: boolean
@@ -38,6 +27,7 @@ type Listener = () => void
 const cached = readCachedModels()
 let _state: ModelsState = { models: cached, isLoading: cached.length === 0, error: null }
 let _fetchPromise: Promise<void> | null = null
+let _fetchGeneration = 0
 const _listeners = new Set<Listener>()
 
 function _notify() {
@@ -49,36 +39,47 @@ function _setState(patch: Partial<ModelsState>) {
   _notify()
 }
 
-async function _fetchModels() {
-  if (_fetchPromise) return _fetchPromise
+async function _fetchModels(force = false) {
+  if (_fetchPromise && !force) return _fetchPromise
+
+  const generation = ++_fetchGeneration
 
   _fetchPromise = (async () => {
     _setState({ isLoading: true, error: null })
     try {
+      await getSDKClientAsync()
       const data = await getActiveModels()
-      if (data.length > 0) {
-        writeCachedModels(data)
-        _setState({ models: data, isLoading: false })
-      } else {
-        // API returned empty — keep current models (cache fallback).
-        // 不主动清空已有 models，确保 API 短暂不可用时 UI 不闪失。
-        _setState({ isLoading: false, error: new Error('No active models returned from API') })
+      if (generation === _fetchGeneration) {
+        if (data.length > 0) {
+          writeCachedModels(data)
+          _setState({ models: data, isLoading: false })
+        } else {
+          _setState({ isLoading: false, error: new Error('No active models returned from API') })
+        }
       }
     } catch (e) {
-      _setState({
-        error: e instanceof Error ? e : new Error('Failed to fetch models'),
-        isLoading: false,
-      })
+      if (generation === _fetchGeneration) {
+        _setState({ error: e instanceof Error ? e : new Error('Failed to fetch models'), isLoading: false })
+      }
     } finally {
-      _fetchPromise = null
+      if (generation === _fetchGeneration) {
+        _fetchPromise = null
+      }
     }
   })()
 
   return _fetchPromise
 }
 
-// First fetch on module load — models are ready before any component mounts.
+export function refreshModels() {
+  return _fetchModels(true)
+}
+
 _fetchModels()
+
+serverStore.onServerChange(() => {
+  void refreshModels()
+})
 
 function _subscribe(listener: Listener) {
   _listeners.add(listener)
@@ -89,10 +90,6 @@ function _getSnapshot(): ModelsState {
   return _state
 }
 
-// ============================================
-// Hook — drop-in replacement, same return type
-// ============================================
-
 interface UseModelsResult {
   models: ModelInfo[]
   isLoading: boolean
@@ -102,7 +99,7 @@ interface UseModelsResult {
 
 export function useModels(): UseModelsResult {
   const state = useSyncExternalStore(_subscribe, _getSnapshot)
-  const refetch = useCallback(() => _fetchModels(), [])
+  const refetch = useCallback(() => refreshModels(), [])
 
   return {
     models: state.models,

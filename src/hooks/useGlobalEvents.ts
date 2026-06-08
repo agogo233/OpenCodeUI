@@ -14,6 +14,7 @@ import { activeSessionStore } from '../store/activeSessionStore'
 import { notificationStore } from '../store/notificationStore'
 import { soundStore } from '../store/soundStore'
 import { playNotificationSoundDeduped } from '../utils/notificationSoundBridge'
+import { clearSessionRuntimeState } from '../utils/sessionLifecycle'
 import { subscribeToEvents, getSessionStatus, getPendingPermissions, getPendingQuestions } from '../api'
 import { replyPermission } from '../api/permission'
 import { autoApproveStore } from '../store/autoApproveStore'
@@ -337,6 +338,11 @@ export function useGlobalEvents(directories?: string[]) {
         })
     }
 
+    const refreshActiveServerHealth = () => {
+      const activeServerId = serverStore.getActiveServerId()
+      void serverStore.checkHealth(activeServerId).catch(() => {})
+    }
+
     refreshRef.current = fetchAndInitialize
 
     const approveGlobalPendingPermissions = () => {
@@ -365,6 +371,9 @@ export function useGlobalEvents(directories?: string[]) {
     }
 
     const unsubscribeAutoApprove = autoApproveStore.subscribe(approveGlobalPendingPermissions)
+    const unsubscribeServerChange = serverStore.onServerChange(serverId => {
+      void serverStore.checkHealth(serverId).catch(() => {})
+    })
 
     const unsubscribe = subscribeToEvents({
       // ============================================
@@ -461,6 +470,12 @@ export function useGlobalEvents(directories?: string[]) {
         if (session.title && messageStore.getSessionState(session.id)) {
           messageStore.updateSessionMetadata(session.id, { title: session.title })
         }
+      },
+
+      onSessionDeleted: sessionId => {
+        const removedSessionIds = childSessionStore.getSessionAndDescendants(sessionId)
+        clearSessionRuntimeState(sessionId)
+        for (const id of removedSessionIds) paneLayoutStore.clearSession(id)
       },
 
       onServerConnected: data => {
@@ -616,6 +631,7 @@ export function useGlobalEvents(directories?: string[]) {
         if (import.meta.env.DEV) {
           console.log(`[GlobalEvents] SSE reconnected (reason: ${reason}), notifying for data refresh`)
         }
+        refreshActiveServerHealth()
         // 重连后重新拉取全量状态 + pending requests
         fetchAndInitialize()
         // 通知所有 pub/sub 消费者
@@ -626,6 +642,7 @@ export function useGlobalEvents(directories?: string[]) {
     })
 
     fetchAndInitialize()
+    refreshActiveServerHealth()
     approveGlobalPendingPermissions()
 
     return () => {
@@ -634,6 +651,7 @@ export function useGlobalEvents(directories?: string[]) {
         refreshRef.current = null
       }
       unsubscribeAutoApprove()
+      unsubscribeServerChange()
       unsubscribe()
     }
   }, [])

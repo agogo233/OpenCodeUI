@@ -12,6 +12,11 @@ import type { ApiSession, SessionListParams, FileDiff, ApiMessageWithParts, ApiU
 import type { SessionStatusMap } from '../types/api/session'
 import type { TodoItem } from '../types/api/event'
 
+function normalizeSessionList(value: unknown): ApiSession[] {
+  if (Array.isArray(value)) return value as ApiSession[]
+  throw new Error('Invalid OpenCode session list response')
+}
+
 // ============================================
 // Session Status & Diff
 // ============================================
@@ -26,7 +31,7 @@ export async function getSessionStatus(directory?: string): Promise<SessionStatu
 
 /**
  * 获取 session 的 diff
- * 返回上游最新的 SnapshotFileDiff 格式（file/patch/additions/deletions/status）
+ * 返回可在 UI 中渲染的 SnapshotFileDiff（过滤缺少 file 的异常项）
  */
 export async function getSessionDiff(sessionId: string, directory?: string, messageId?: string): Promise<FileDiff[]> {
   const sdk = getSDKClient()
@@ -73,14 +78,16 @@ export async function getLastTurnDiff(sessionId: string, directory?: string): Pr
 export async function getSessions(params: SessionListParams = {}): Promise<ApiSession[]> {
   const sdk = getSDKClient()
   const { directory, roots, start, search, limit } = params
-  return unwrap(
-    await sdk.session.list({
-      directory: formatPathForApi(directory),
-      roots,
-      start,
-      search,
-      limit,
-    }),
+  return normalizeSessionList(
+    unwrap(
+      await sdk.session.list({
+        directory: formatPathForApi(directory),
+        roots,
+        start,
+        search,
+        limit,
+      }),
+    ),
   )
 }
 

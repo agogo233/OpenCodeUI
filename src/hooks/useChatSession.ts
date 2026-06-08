@@ -43,6 +43,7 @@ import {
 } from '../api'
 import { getMessageText, isUserMessage, type AssistantMessageInfo, type Message as UIMessage } from '../types/message'
 import { clipboardErrorHandler, copyTextToClipboard, createErrorHandler } from '../utils'
+import { clearSessionRuntimeState } from '../utils/sessionLifecycle'
 import { serverStorage } from '../utils/perServerStorage'
 import { parseModelKey } from '../utils/modelUtils'
 import { STORAGE_KEY_SELECTED_AGENT } from '../constants'
@@ -65,6 +66,7 @@ const EMPTY_SESSION_STATE = {
   messages: [] as import('../types/message').Message[],
   isStreaming: false,
   loadState: 'idle' as const,
+  loadError: undefined,
   revertState: null,
   canUndo: false,
   canRedo: false,
@@ -129,6 +131,21 @@ export function useChatSession({
   const { sendNotification } = useNotification()
 
   const routeStatus = routeSessionId ? statusMap[routeSessionId] : undefined
+  const routeSessionIdRef = useRef(routeSessionId)
+
+  useEffect(() => {
+    routeSessionIdRef.current = routeSessionId
+  }, [routeSessionId])
+
+  const handleMissingRouteSession = useCallback(
+    (missingSessionId: string) => {
+      if (routeSessionIdRef.current !== missingSessionId) return
+      clearSessionRuntimeState(missingSessionId)
+      navigateHome()
+    },
+    [navigateHome],
+  )
+
   const {
     items: queuedFollowups,
     sendingId: queuedFollowupSendingId,
@@ -147,6 +164,7 @@ export function useChatSession({
   const revertedContent = perSessionState.revertedContent
   const hasMoreHistory = perSessionState.hasMoreHistory
   const loadState = routeSessionId ? perSessionState.loadState : ('idle' as const)
+  const loadError = routeSessionId ? perSessionState.loadError : undefined
 
   // OpenAPI SessionStatus.retry: { attempt, message, next }
   const retryStatus = useMemo<LiveRetryStatus | null>(() => {
@@ -186,6 +204,7 @@ export function useChatSession({
   const { loadSession, loadMoreHistory, handleUndo, handleRedo, handleRedoAll, clearRevert } = useSessionManager({
     sessionId: routeSessionId,
     directory: currentDirectory,
+    onSessionMissing: handleMissingRouteSession,
   })
 
   // Permission handling
@@ -591,6 +610,15 @@ export function useChatSession({
       allowCreateSession?: boolean
     }) => {
       let sessionId = input.sessionId ?? routeSessionId
+
+      if (sessionId && input.allowCreateSession) {
+        const state = messageStore.getSessionState(sessionId)
+        if (state?.loadState === 'error' && state.messages.length === 0) {
+          clearSessionRuntimeState(sessionId)
+          sessionId = null
+        }
+      }
+
       let rollbackSnapshot = sessionId ? messageStore.createSendRollbackSnapshot(sessionId) : null
 
       try {
@@ -917,6 +945,14 @@ export function useChatSession({
       let sessionId = routeSessionId
 
       try {
+        if (sessionId) {
+          const state = messageStore.getSessionState(sessionId)
+          if (state?.loadState === 'error' && state.messages.length === 0) {
+            clearSessionRuntimeState(sessionId)
+            sessionId = null
+          }
+        }
+
         // Create session if needed (like handleSend does)
         if (!sessionId) {
           const newSession = await createSession()
@@ -1085,6 +1121,7 @@ export function useChatSession({
     revertedContent,
     restoredContent: activeRestoredContent,
     loadState,
+    loadError,
     hasMoreHistory,
     retryStatus,
     agents,

@@ -1,5 +1,36 @@
 # Changelog
 
+## [v0.6.17] - 2026-06-07
+
+- fix: default changes panel to last turn scope (0c341e9)
+- fix: read metadata.output for real-time bash streaming during execution (5da7b1f)
+- fix(settings): apply mobile viewport height to config editor (d442e66)
+- fix(titlebar): preserve decorum window controls (1892621)
+- fix: remove touchAction:none from FileTreeItem button that broke mobile scrolling (a619d72)
+- fix: replace 92vh with calc(var(--app-height) * 0.92) in mobile SettingsDialog to fix address bar hiding issue (f3558fc)
+
+## [v0.6.16] - 2026-06-07
+
+- fix(startup): cancel stale local endpoint requests (9c789e5)
+
+## [v0.6.15] - 2026-06-06
+
+- fix(settings): validate opencode server health (0c19e18)
+- fix(startup): refresh after local service URL changes (991a856)
+
+## [v0.6.14] - 2026-06-06
+
+- fix(pwa): clear stale iOS keyboard inset (f5eba98)
+- fix(chat): lock mobile sidebar swipe direction (7e1df88)
+- fix: apply detected local service URL before boot (e0c00bb)
+- fix(settings): improve config editor schema handling (b5a8978)
+- fix(session): reset missing routed sessions (46a35d0)
+- fix(chat): preserve streaming page height measurements (1c97439)
+- fix: detect local opencode service URL (e628ac7)
+- feat(settings): add visual opencode config editor (7965d06)
+- feat: auto-detect opencode service binary (b3b32bd)
+- refactor: align api types with sdk (ad5fb7b)
+
 ## [v0.6.13] - 2026-06-05
 
 - chore: update opencode sdk (4a4fe17)
