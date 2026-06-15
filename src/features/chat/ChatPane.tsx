@@ -729,7 +729,7 @@ export const ChatPane = memo(function ChatPane({
     if (questionRequestId) setQuestionCollapsed(false)
   }, [questionRequestId])
 
-  const { inlineToolRequests } = useTheme()
+  const { inlineToolRequests, outlineCurrentHighlight } = useTheme()
 
   const inlineToolRequestCtx = useMemo<InlineToolRequestContextValue>(
     () => ({
@@ -820,6 +820,7 @@ export const ChatPane = memo(function ChatPane({
         messages={renderedMessages}
         sourceEntries={chatPageViewModel.outlineSourceEntries}
         visibleMessageIds={visibleMessageIds}
+        currentHighlightEnabled={outlineCurrentHighlight}
         onScrollToMessageId={handleOutlineScrollToMessage}
       />
 

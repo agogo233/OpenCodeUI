@@ -34,6 +34,7 @@ interface OutlineIndexProps {
   messages: Message[]
   sourceEntries?: OutlineSourceEntry[]
   visibleMessageIds?: string[]
+  currentHighlightEnabled?: boolean
   onScrollToMessageId: (messageId: string) => void
 }
 
@@ -61,6 +62,8 @@ interface FisheyeProps {
   entries: OutlineEntry[]
   onSelect: (messageId: string) => void
   visual: VisualConfig
+  /** 包含可见消息所属 user prompt 的 ID 集合（territory 概念） */
+  ownerVisibleIds?: Set<string>
 }
 
 // ─── Fisheye Math ───────────────────────────
@@ -145,11 +148,55 @@ function queryCachedItems(container: HTMLElement | null): CachedItem[] {
     .filter(item => item.tick && item.label)
 }
 
+/** 从 entries 中找偏置后的可见索引。
+ *  取第二个匹配项（而非第一个），避免 viewport 顶部刚好落在上一条 prompt 尾部时误判。
+ *  若只有一条匹配则退化为第一条。 */
+function findBiasedVisibleIndex(entries: OutlineEntry[], ownerVisibleIds?: Set<string>): number {
+  if (!ownerVisibleIds || ownerVisibleIds.size === 0) return -1
+  let first = -1
+  let second = -1
+  for (let i = 0; i < entries.length; i++) {
+    const entry = entries[i]
+    if (entry && ownerVisibleIds.has(entry.messageId)) {
+      if (first === -1) first = i
+      else {
+        second = i
+        break
+      }
+    }
+  }
+  return second !== -1 ? second : first
+}
+
+function applyTickVisual(tick: HTMLElement, state: 'focused' | 'visible' | 'default') {
+  if (state === 'focused') {
+    tick.style.backgroundColor = 'hsl(var(--accent-brand))'
+    tick.style.boxShadow = '0 0 4px hsl(var(--accent-brand) / 0.5)'
+    return
+  }
+  if (state === 'visible') {
+    tick.style.backgroundColor = 'hsl(var(--text-000))'
+    tick.style.boxShadow = '0 0 3px hsl(var(--text-000) / 0.3)'
+    return
+  }
+  tick.style.backgroundColor = 'hsl(var(--border-300))'
+  tick.style.boxShadow = 'none'
+}
+
+function applyVisibleTickHighlight(items: CachedItem[], entries: OutlineEntry[], ownerVisibleIds?: Set<string>) {
+  const firstVisibleIndex = findBiasedVisibleIndex(entries, ownerVisibleIds)
+  for (let i = 0; i < items.length; i++) {
+    applyTickVisual(items[i].tick, i === firstVisibleIndex ? 'visible' : 'default')
+  }
+}
+
 function applyFisheye(
   items: CachedItem[],
+  entries: OutlineEntry[],
   cursorY: number | null,
   strengths: number[],
   config: FisheyeConfig,
+  ownerVisibleIds?: Set<string>,
 ): { alive: boolean; focusIndex: number; maxStrength: number } {
   let alive = false
   let focusIndex = -1
@@ -171,7 +218,10 @@ function applyFisheye(
     }
   }
 
-  // Pass 2: 应用视觉。颜色高亮只给 focusIndex，label 鱼眼渐显
+  // Pass 2: 应用视觉
+  // 优先级：focused（鼠标悬停）> firstVisible（territory 内偏置后的 user prompt）> 默认
+  const firstVisibleIndex = findBiasedVisibleIndex(entries, ownerVisibleIds)
+
   for (let i = 0; i < items.length; i++) {
     const { el, tick, label } = items[i]
     const s = strengths[i]
@@ -179,11 +229,11 @@ function applyFisheye(
 
     tick.style.width = `${config.tickWidth.min + s * (config.tickWidth.max - config.tickWidth.min)}px`
     if (focused) {
-      tick.style.backgroundColor = 'hsl(var(--accent-main-200))'
-      tick.style.boxShadow = '0 0 3px hsl(var(--accent-main-100) / 0.4)'
+      applyTickVisual(tick, 'focused')
+    } else if (i === firstVisibleIndex) {
+      applyTickVisual(tick, 'visible')
     } else {
-      tick.style.backgroundColor = 'hsl(var(--border-300))'
-      tick.style.boxShadow = 'none'
+      applyTickVisual(tick, 'default')
     }
 
     const m = config.margin.min + s * (config.margin.max - config.margin.min)
@@ -289,6 +339,7 @@ export const OutlineIndex = memo(function OutlineIndex({
   messages,
   sourceEntries,
   visibleMessageIds,
+  currentHighlightEnabled = true,
   onScrollToMessageId,
 }: OutlineIndexProps) {
   const { interaction, presentation } = useChatViewport()
@@ -300,18 +351,35 @@ export const OutlineIndex = memo(function OutlineIndex({
     [allEntries, visibleMessageIds, visual.maxEntries],
   )
 
+  // 构建 territory 映射：每个消息 ID → 所属 user prompt 的 ID
+  const ownerVisibleIds = useMemo(() => {
+    const set = new Set<string>()
+    if (!currentHighlightEnabled || !visibleMessageIds || !messages.length) return set
+    let lastUserMsgId: string | null = null
+    const ownerMap = new Map<string, string>()
+    for (const msg of messages) {
+      if (msg.info.role === 'user') lastUserMsgId = msg.info.id
+      if (lastUserMsgId) ownerMap.set(msg.info.id, lastUserMsgId)
+    }
+    for (const vid of visibleMessageIds) {
+      const owner = ownerMap.get(vid)
+      if (owner) set.add(owner)
+    }
+    return set
+  }, [currentHighlightEnabled, messages, visibleMessageIds])
+
   if (entries.length < 2) return null
 
   return interaction.outlineInteraction === 'touch' ? (
-    <TouchFisheye entries={entries} onSelect={onScrollToMessageId} visual={visual} />
+    <TouchFisheye entries={entries} onSelect={onScrollToMessageId} visual={visual} ownerVisibleIds={ownerVisibleIds} />
   ) : (
-    <PointerFisheye entries={entries} onSelect={onScrollToMessageId} visual={visual} />
+    <PointerFisheye entries={entries} onSelect={onScrollToMessageId} visual={visual} ownerVisibleIds={ownerVisibleIds} />
   )
 })
 
 // ─── PointerFisheye ─────────────────────────
 
-const PointerFisheye = memo(function PointerFisheye({ entries, onSelect, visual }: FisheyeProps) {
+const PointerFisheye = memo(function PointerFisheye({ entries, onSelect, visual, ownerVisibleIds }: FisheyeProps) {
   const zoneRef = useRef<HTMLDivElement>(null)
   const railRef = useRef<HTMLDivElement>(null)
   const cursorYRef = useRef<number | null>(null)
@@ -322,6 +390,10 @@ const PointerFisheye = memo(function PointerFisheye({ entries, onSelect, visual 
   const focusIdxRef = useRef(-1)
   const entriesRef = useRef(entries)
   entriesRef.current = entries
+  const ownerVisibleIdsRef = useRef(ownerVisibleIds)
+  ownerVisibleIdsRef.current = ownerVisibleIds
+  // 追踪 rAF 是否正在运行
+  const loopRunningRef = useRef(false)
 
   useEffect(() => {
     strengthsRef.current = entries.map(() => 0)
@@ -334,13 +406,36 @@ const PointerFisheye = memo(function PointerFisheye({ entries, onSelect, visual 
     return cachedRef.current
   }, [])
 
+  /** 根据 ownerVisibleIds 更新 tick DOM 颜色 */
+  const applyVisibleTicks = useCallback(() => {
+    applyVisibleTickHighlight(getItems(), entriesRef.current, ownerVisibleIdsRef.current)
+  }, [getItems])
+
+  // 当 ownerVisibleIds 变化时更新 tick，仅 loop 未激活时生效
+  useEffect(() => {
+    const raf = requestAnimationFrame(() => {
+      if (loopRunningRef.current) return
+      applyVisibleTicks()
+    })
+    return () => cancelAnimationFrame(raf)
+  }, [ownerVisibleIds, applyVisibleTicks, entries])
+
   const loop = useCallback(
     function tick() {
-      const { alive, focusIndex } = applyFisheye(getItems(), cursorYRef.current, strengthsRef.current, visual.fisheye)
+      loopRunningRef.current = true
+      const { alive, focusIndex } = applyFisheye(getItems(), entriesRef.current, cursorYRef.current, strengthsRef.current, visual.fisheye, ownerVisibleIdsRef.current)
       focusIdxRef.current = focusIndex
-      if (hoveringRef.current || alive) rafIdRef.current = requestAnimationFrame(tick)
+      if (hoveringRef.current || alive) {
+        rafIdRef.current = requestAnimationFrame(tick)
+      } else {
+        loopRunningRef.current = false
+        rafIdRef.current = requestAnimationFrame(() => {
+          applyVisibleTicks()
+          rafIdRef.current = 0
+        })
+      }
     },
-    [getItems, visual.fisheye],
+    [getItems, visual.fisheye, applyVisibleTicks],
   )
 
   const kick = useCallback(() => {
@@ -410,7 +505,7 @@ const PointerFisheye = memo(function PointerFisheye({ entries, onSelect, visual 
 
 // ─── TouchFisheye ───────────────────────────
 
-const TouchFisheye = memo(function TouchFisheye({ entries, onSelect, visual }: FisheyeProps) {
+const TouchFisheye = memo(function TouchFisheye({ entries, onSelect, visual, ownerVisibleIds }: FisheyeProps) {
   const [overlayVisible, setOverlayVisible] = useState(false)
   const railRef = useRef<HTMLDivElement>(null)
   const overlayRef = useRef<HTMLDivElement>(null)
@@ -420,6 +515,7 @@ const TouchFisheye = memo(function TouchFisheye({ entries, onSelect, visual }: F
   const touchingRef = useRef(false)
   const prevFocusRef = useRef(-1)
   const cachedRef = useRef<CachedItem[] | null>(null)
+  const loopRunningRef = useRef(false)
 
   const entriesRef = useRef(entries)
   entriesRef.current = entries
@@ -427,6 +523,8 @@ const TouchFisheye = memo(function TouchFisheye({ entries, onSelect, visual }: F
   onSelectRef.current = onSelect
   const visualRef = useRef(visual)
   visualRef.current = visual
+  const ownerVisibleIdsRef = useRef(ownerVisibleIds)
+  ownerVisibleIdsRef.current = ownerVisibleIds
 
   useEffect(() => {
     strengthsRef.current = entries.map(() => 0)
@@ -437,6 +535,20 @@ const TouchFisheye = memo(function TouchFisheye({ entries, onSelect, visual }: F
     cachedRef.current ??= queryCachedItems(railRef.current)
     return cachedRef.current
   }, [])
+
+  /** 根据 ownerVisibleIds 更新 tick DOM 颜色 */
+  const applyVisibleTicks = useCallback(() => {
+    applyVisibleTickHighlight(getItems(), entriesRef.current, ownerVisibleIdsRef.current)
+  }, [getItems])
+
+  // 当 ownerVisibleIds 变化时更新 tick，仅 loop 未激活时生效
+  useEffect(() => {
+    const raf = requestAnimationFrame(() => {
+      if (loopRunningRef.current) return
+      applyVisibleTicks()
+    })
+    return () => cancelAnimationFrame(raf)
+  }, [ownerVisibleIds, applyVisibleTicks, entries])
 
   const vibrate = useCallback(() => {
     try {
@@ -454,11 +566,14 @@ const TouchFisheye = memo(function TouchFisheye({ entries, onSelect, visual }: F
 
   const loop = useCallback(
     function tick() {
+      loopRunningRef.current = true
       const { alive, focusIndex, maxStrength } = applyFisheye(
         getItems(),
+        entriesRef.current,
         touchYRef.current,
         strengthsRef.current,
         visualRef.current.fisheye,
+        ownerVisibleIdsRef.current,
       )
 
       if (focusIndex >= 0 && maxStrength > 0.5 && focusIndex !== prevFocusRef.current) {
@@ -482,10 +597,15 @@ const TouchFisheye = memo(function TouchFisheye({ entries, onSelect, visual }: F
       if (touchingRef.current || alive) {
         rafIdRef.current = requestAnimationFrame(tick)
       } else {
+        loopRunningRef.current = false
         setOverlayVisible(false)
+        rafIdRef.current = requestAnimationFrame(() => {
+          applyVisibleTicks()
+          rafIdRef.current = 0
+        })
       }
     },
-    [getItems, vibrate],
+    [getItems, vibrate, applyVisibleTicks],
   )
 
   // 用 ref 包 kick，供原生事件回调读取最新闭包

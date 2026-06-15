@@ -12,6 +12,11 @@
   will-change: auto;
 }
 
+/* 导航到消息时保留顶部空间，避免被对话标题栏遮挡。 */
+[data-chat-scroll-root='true'] [data-message-id] {
+  scroll-margin-top: 72px;
+}
+
 /* ============================================
  * Mobile Viewport & Safe Area
  * ============================================ */
