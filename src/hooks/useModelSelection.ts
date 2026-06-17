@@ -136,7 +136,9 @@ export function useModelSelection({ models, sessionId = null }: UseModelSelectio
     if (findModelByKey(models, selectedModelKey)) return
 
     const timer = setTimeout(() => {
-      if (findModelByKey(models, selectedModelKeyRef.current)) return
+      const currentKey = selectedModelKeyRef.current
+      if (!currentKey) return
+      if (findModelByKey(models, currentKey)) return
 
       const fallbackKey = getModelKey(models[0])
       setSelection({
