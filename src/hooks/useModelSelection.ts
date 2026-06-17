@@ -125,19 +125,26 @@ export function useModelSelection({ models, sessionId = null }: UseModelSelectio
   // Stale key 检测：当 models 列表变化后，如果 selectedModelKey 指向的模型
   // 不再存在于列表中（被隐藏/下线/移除），自动回退到 models[0] 并清除无效 key。
   // 这防止了 UI 显示 "选择模型" 而 API 仍然发送已不存在的旧 key 的问题。
+  //
+  // 使用 setTimeout(0) 延迟回退，避免模型批量加载期间的竞态条件：
+  // 当 models 因 SSE 重连/服务器切换等原因过渡性地改变时，用户显式选择的
+  // 模型可能暂时不在列表中。延迟执行让模型列表先稳定下来再决定是否回退。
   // ============================================
   useEffect(() => {
     if (models.length === 0) return
     if (!selectedModelKey) return
     if (findModelByKey(models, selectedModelKey)) return
 
-    // Key 已失效，回退到第一个可见模型
-    const fallbackKey = getModelKey(models[0])
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setSelection({
-      selectedModelKey: fallbackKey,
-      selectedVariant: getModelVariantPref(fallbackKey),
-    })
+    const timer = setTimeout(() => {
+      if (findModelByKey(models, selectedModelKeyRef.current)) return
+
+      const fallbackKey = getModelKey(models[0])
+      setSelection({
+        selectedModelKey: fallbackKey,
+        selectedVariant: getModelVariantPref(fallbackKey),
+      })
+    }, 0)
+    return () => clearTimeout(timer)
   }, [models, selectedModelKey])
 
   useLayoutEffect(() => {
