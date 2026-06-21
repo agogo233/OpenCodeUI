@@ -34,7 +34,7 @@ import { useChatViewport } from './chatViewport'
 import type { ApiAgent } from '../../api/client'
 import type { ModelInfo, FileCapabilities } from '../../api'
 import type { Command } from '../../api/command'
-import { isTauri } from '../../utils/tauri'
+import { getDesktopPlatform, isTauri } from '../../utils/tauri'
 import {
   getInternalDragSnapshot,
   isPointInsideElement as isInternalPointInsideElement,
@@ -66,19 +66,27 @@ interface DroppedPathInfo {
 
 type TauriDropPosition = Extract<DragDropEvent, { type: 'drop' }>['position']
 
-function getDropClientPoint(position: TauriDropPosition): { x: number; y: number } {
+function getDropClientPoints(position: TauriDropPosition): Array<{ x: number; y: number }> {
+  const directPoint = { x: position.x, y: position.y }
   const scale = window.devicePixelRatio || 1
-  return {
-    x: position.x / scale,
-    y: position.y / scale,
-  }
+
+  if (scale === 1) return [directPoint]
+
+  return [
+    directPoint,
+    {
+      x: position.x / scale,
+      y: position.y / scale,
+    },
+  ]
 }
 
 function isPointInsideElement(position: TauriDropPosition, element: HTMLElement | null): boolean {
   if (!element) return false
-  const { x, y } = getDropClientPoint(position)
   const rect = element.getBoundingClientRect()
-  return x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom
+  return getDropClientPoints(position).some(
+    ({ x, y }) => x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom,
+  )
 }
 
 function getMentionPathForDroppedPath(absolutePath: string, rootPath: string): string {
@@ -1078,8 +1086,11 @@ function InputBoxComponent({
     [handleTauriExternalDrop],
   )
 
+  // macOS 上用 Rust WindowEvent::DragDrop 转发的 file-drop-* 事件（保底路径）
+  // 其他平台用 Tauri 标准 onDragDropEvent API
+  // 两条路径互斥，避免同一 drop 被处理两次
   useEffect(() => {
-    if (!isTauri()) return
+    if (!isTauri() || getDesktopPlatform() === 'macos') return
 
     let disposed = false
     let unlisten: (() => void) | null = null
@@ -1103,6 +1114,49 @@ function InputBoxComponent({
     return () => {
       disposed = true
       unlisten?.()
+    }
+  }, [handleTauriDragDropEvent])
+
+  // Rust 端 WindowEvent::DragDrop 转发的 file-drop-* 事件（仅 macOS，其他平台不用）
+  useEffect(() => {
+    if (!isTauri() || getDesktopPlatform() !== 'macos') return
+
+    let disposed = false
+    const cleanupFns: (() => void)[] = []
+
+    void import('@tauri-apps/api/event').then(async ({ listen }) => {
+      if (disposed) return
+
+      const { PhysicalPosition } = await import('@tauri-apps/api/dpi')
+
+      const onEnter = await listen<[string[], number, number]>('file-drop-enter', e => {
+        if (disposed) return
+        handleTauriDragDropEvent({ type: 'enter', paths: e.payload[0], position: new PhysicalPosition(e.payload[1], e.payload[2]) })
+      })
+      cleanupFns.push(onEnter)
+
+      const onOver = await listen<[number, number]>('file-drop-over', e => {
+        if (disposed) return
+        handleTauriDragDropEvent({ type: 'over', position: new PhysicalPosition(e.payload[0], e.payload[1]) })
+      })
+      cleanupFns.push(onOver)
+
+      const onDrop = await listen<[string[], number, number]>('file-drop-drop', e => {
+        if (disposed) return
+        handleTauriDragDropEvent({ type: 'drop', paths: e.payload[0], position: new PhysicalPosition(e.payload[1], e.payload[2]) })
+      })
+      cleanupFns.push(onDrop)
+
+      const onLeave = await listen<void>('file-drop-leave', () => {
+        if (disposed) return
+        handleTauriDragDropEvent({ type: 'leave' })
+      })
+      cleanupFns.push(onLeave)
+    })
+
+    return () => {
+      disposed = true
+      cleanupFns.forEach(fn => fn())
     }
   }, [handleTauriDragDropEvent])
 
@@ -1235,7 +1289,7 @@ function InputBoxComponent({
                   onDragOver={handleDragOver}
                   onDragLeave={handleDragLeave}
                   onDrop={handleDrop}
-                  className={`glass rounded-2xl relative transition-all focus-within:outline-none shadow-lg ${
+                  className={`glass rounded-2xl relative focus-within:outline-none shadow-lg ${
                     isDragging || isInternalFileDragging
                       ? 'border border-accent-main-100 ring-2 ring-accent-main-100/30'
                       : isStreaming
