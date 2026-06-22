@@ -1,5 +1,5 @@
 /* eslint-disable react-refresh/only-export-components -- exports viewport helpers, hooks, and provider */
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useInputCapabilities } from '../../hooks/useInputCapabilities'
 
 export type ChatSurfaceVariant = 'desktop' | 'compact'
@@ -219,11 +219,17 @@ function computeChatViewport(input: ComputedViewportInput): Omit<ChatViewportVal
         requestedWidth: requestedSidebarOpenWidth,
         openWidth: dockedSidebarOpenWidth,
         dockedWidth: overlayPanels ? 0 : sidebarExpanded ? dockedSidebarOpenWidth : closedSidebarWidth,
-        overlayWidth: clamp(
-          requestedSidebarOpenWidth,
-          SIDEBAR_PREFERRED_MIN_WIDTH,
-          Math.max(SIDEBAR_PREFERRED_MIN_WIDTH, viewportWidth - 48),
-        ),
+        overlayWidth: overlayPanels
+          ? clamp(
+              viewportWidth - 72,
+              SIDEBAR_PREFERRED_MIN_WIDTH,
+              Math.max(SIDEBAR_PREFERRED_MIN_WIDTH, Math.min(360, viewportWidth - 48)),
+            )
+          : clamp(
+              requestedSidebarOpenWidth,
+              SIDEBAR_PREFERRED_MIN_WIDTH,
+              Math.max(SIDEBAR_PREFERRED_MIN_WIDTH, viewportWidth - 48),
+            ),
         hardMinWidth: SIDEBAR_HARD_MIN_WIDTH,
         preferredMinWidth: SIDEBAR_PREFERRED_MIN_WIDTH,
         maxWidth: sidebarMaxWidth,
@@ -273,7 +279,10 @@ export function useChatViewportController({
 }) {
   const { preferTouchUi, hasCoarsePointer, hasTouch } = useInputCapabilities()
   const touchCapable = preferTouchUi || hasCoarsePointer || hasTouch
-  const surfaceRef = useRef<HTMLDivElement>(null)
+  const [surfaceElement, setSurfaceElement] = useState<HTMLElement | null>(null)
+  const surfaceRef = useCallback((node: HTMLElement | null) => {
+    setSurfaceElement(node)
+  }, [])
   const [viewportWidth, setViewportWidth] = useState(() => (typeof window === 'undefined' ? 1280 : window.innerWidth))
   const [viewportHeight, setViewportHeight] = useState(() => (typeof window === 'undefined' ? 800 : window.innerHeight))
   const [surfaceWidth, setSurfaceWidth] = useState(0)
@@ -303,8 +312,14 @@ export function useChatViewportController({
   }, [])
 
   useEffect(() => {
-    const el = surfaceRef.current
-    if (!el) return
+    if (!surfaceElement) {
+      const frameId = window.requestAnimationFrame(() => setSurfaceWidth(0))
+      return () => window.cancelAnimationFrame(frameId)
+    }
+
+    const frameId = window.requestAnimationFrame(() => {
+      setSurfaceWidth(surfaceElement.getBoundingClientRect().width)
+    })
 
     const ro = new ResizeObserver(entries => {
       for (const entry of entries) {
@@ -312,9 +327,12 @@ export function useChatViewportController({
       }
     })
 
-    ro.observe(el)
-    return () => ro.disconnect()
-  }, [])
+    ro.observe(surfaceElement)
+    return () => {
+      window.cancelAnimationFrame(frameId)
+      ro.disconnect()
+    }
+  }, [surfaceElement])
 
   const setSidebarRequestedWidth = useCallback((width: number) => {
     setSidebarHasCustomWidth(true)

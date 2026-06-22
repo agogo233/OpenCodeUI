@@ -34,6 +34,7 @@ interface PanelContainerProps {
   directory?: string
   onNewTerminal?: () => void // 仅 bottom 面板需要
   onCloseTerminal?: (ptyId: string) => void // Terminal 关闭回调
+  forceOpen?: boolean
 }
 
 // Tab 图标映射
@@ -85,12 +86,13 @@ export const PanelContainer = memo(function PanelContainer({
   directory,
   onNewTerminal,
   onCloseTerminal,
+  forceOpen = false,
 }: PanelContainerProps) {
   const { t } = useTranslation(['components', 'common'])
   const { manualTerminalTitles } = useTheme()
   const layout = useLayoutStore()
 
-  const isOpen = position === 'bottom' ? layout.bottomPanelOpen : layout.rightPanelOpen
+  const isOpen = forceOpen || (position === 'bottom' ? layout.bottomPanelOpen : layout.rightPanelOpen)
   const tabs = layout.panelTabs.filter(t => t.position === position)
   const activeTabId = layout.activeTabId[position]
   const activeTab = tabs.find(t => t.id === activeTabId) ?? tabs[0] ?? null
@@ -301,7 +303,7 @@ export const PanelContainer = memo(function PanelContainer({
   return (
     <>
       {/* Header with Tabs */}
-      <div className="flex items-center justify-between px-3 z-20 bg-bg-100 h-14 relative shrink-0">
+      <div className="mobile-safe-topbar-14 flex items-center justify-between px-3 z-20 bg-bg-100 relative shrink-0">
         {/* Tabs Container - 水平滚动 */}
         <div
           ref={tabsContainerRef}

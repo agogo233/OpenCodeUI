@@ -299,7 +299,7 @@ export function Dialog({
       onClick={handleBackdropClick}
     >
       <div
-        className="absolute inset-x-0 bottom-0 top-[var(--desktop-titlebar-height,0px)] flex items-center justify-center p-4"
+        className="dialog-safe-region absolute inset-x-0 bottom-0 flex items-center justify-center p-4"
         onPointerDown={e => {
           handleBackdropPointerDown(e)
           e.stopPropagation()
@@ -360,7 +360,7 @@ export function Dialog({
                       type="button"
                       onClick={requestClose}
                       aria-label={t('common:close')}
-                      className="p-2 text-text-400 hover:text-text-200 hover:bg-bg-100 rounded-md transition-colors"
+                      className="hidden md:block p-2 text-text-400 hover:text-text-200 hover:bg-bg-100 rounded-md transition-colors"
                       title={t('common:close')}
                     >
                       <CloseIcon size={18} />

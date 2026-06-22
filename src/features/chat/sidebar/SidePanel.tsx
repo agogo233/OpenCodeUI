@@ -872,7 +872,7 @@ export function SidePanel({
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* ===== Header ===== */}
-      <div className="h-14 shrink-0 flex items-center">
+      <div className="mobile-safe-topbar-14 shrink-0 flex items-center">
         {/* Logo 区域 - 展开时显示 */}
         <div
           className="overflow-hidden transition-all duration-300 ease-out"
@@ -889,19 +889,20 @@ export function SidePanel({
           </a>
         </div>
 
-        {/* Toggle Button - 桌面端和移动端都显示 */}
-        <div
-          className="flex-1 flex items-center transition-all duration-300 ease-out"
-          style={{ justifyContent: showLabels ? 'flex-end' : 'center', paddingRight: showLabels ? 8 : 0 }}
-        >
-          <button
-            onClick={onToggleSidebar}
-            aria-label={isExpanded ? t('sidebar.collapseSidebar') : t('sidebar.expandSidebar')}
-            className="h-8 w-8 flex items-center justify-center rounded-lg text-text-400 hover:text-text-100 hover:bg-bg-200 active:scale-[0.98] transition-all duration-200"
+        {!isMobile && (
+          <div
+            className="flex-1 flex items-center transition-all duration-300 ease-out"
+            style={{ justifyContent: showLabels ? 'flex-end' : 'center', paddingRight: showLabels ? 8 : 0 }}
           >
-            <SidebarIcon size={18} />
-          </button>
-        </div>
+            <button
+              onClick={onToggleSidebar}
+              aria-label={isExpanded ? t('sidebar.collapseSidebar') : t('sidebar.expandSidebar')}
+              className="h-8 w-8 flex items-center justify-center rounded-lg text-text-400 hover:text-text-100 hover:bg-bg-200 active:scale-[0.98] transition-all duration-200"
+            >
+              <SidebarIcon size={18} />
+            </button>
+          </div>
+        )}
       </div>
 
       {/* ===== Navigation - 图标位置固定 ===== */}
