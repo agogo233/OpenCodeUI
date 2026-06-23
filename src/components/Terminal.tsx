@@ -8,6 +8,7 @@ import { Terminal as XTerm } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { SerializeAddon } from '@xterm/addon-serialize'
 import { WebLinksAddon } from '@xterm/addon-web-links'
+import { WebglAddon } from '@xterm/addon-webgl'
 import '@xterm/xterm/css/xterm.css'
 import { getPtyConnectUrl, updatePtySession } from '../api/pty'
 import { useTheme } from '../hooks'
@@ -449,6 +450,20 @@ export const Terminal = memo(function Terminal({ ptyId, directory, isActive }: T
 
     terminal.open(containerRef.current)
 
+    // WebGL 渲染器: GPU 加速，大幅提升 TUI 渲染性能
+    // 若 WebGL 不可用则静默回退到内置 DOM 渲染器
+    const webglAddon = new WebglAddon()
+    webglAddon.onContextLoss(() => {
+      webglAddon.dispose()
+      logger.log('[Terminal] WebGL context lost, falling back to DOM renderer')
+    })
+    try {
+      terminal.loadAddon(webglAddon)
+    } catch {
+      webglAddon.dispose()
+      logger.log('[Terminal] WebGL not available, using DOM renderer')
+    }
+
     const textarea = terminal.textarea
     const handleTextareaBlur = () => clearStickyModifiers()
 
@@ -739,6 +754,7 @@ export const Terminal = memo(function Terminal({ ptyId, directory, isActive }: T
       fitAddon.dispose()
       serializeAddon.dispose()
       webLinksAddon.dispose()
+      webglAddon.dispose()
       terminal.dispose()
       terminalRef.current = null
       fitAddonRef.current = null
