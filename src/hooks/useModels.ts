@@ -59,7 +59,12 @@ async function _fetchModels(force = false) {
       }
     } catch (e) {
       if (generation === _fetchGeneration) {
-        _setState({ error: e instanceof Error ? e : new Error('Failed to fetch models'), isLoading: false })
+        const cached = readCachedModels()
+        _setState({
+          models: cached.length > 0 ? cached : [],
+          error: e instanceof Error ? e : new Error('Failed to fetch models'),
+          isLoading: false,
+        })
       }
     } finally {
       if (generation === _fetchGeneration) {
@@ -78,6 +83,7 @@ export function refreshModels() {
 _fetchModels()
 
 serverStore.onServerChange(() => {
+  serverStorage.remove(STORAGE_KEY_CACHED_MODELS)
   void refreshModels()
 })
 

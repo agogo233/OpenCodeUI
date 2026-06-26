@@ -105,22 +105,18 @@ describe('useModelSelection', () => {
     expect(result.current.selectedModelKey).toBe('openai:gpt-4.1')
   })
 
-  it('auto-fallbacks to models[0] when persisted model disappears from the list', async () => {
+  it('auto-fallbacks to models[0] when persisted model disappears from the list', () => {
     storage.set(STORAGE_KEY_SELECTED_MODEL, 'openai:gpt-4o-mini')
     
     const { result, rerender } = renderHook(({ models }) => useModelSelection({ models }), {
       initialProps: { models: [MODELS[0]] },
     })
     
-    // 初始渲染时 selectedModelKey 仍是旧值（state 未变），但 resolvedModelKey 已回退
     expect(result.current.selectedModelKey).toBe('openai:gpt-4.1')
 
-    // 当 models 列表更新后，stale key 检测 effect 会清除旧 key
     rerender({ models: [MODELS[0], MODELS[1]] })
     
-    await waitFor(() => {
-      expect(result.current.selectedModelKey).toBe('openai:gpt-4.1')
-    })
+    expect(result.current.selectedModelKey).toBe('openai:gpt-4.1')
   })
 
   it('saves variant preference for the resolved fallback model before switching away', () => {
@@ -274,21 +270,19 @@ describe('useModelSelection', () => {
     expect(result.current.currentModel?.name).toBe('GPT-4.1')
   })
 
-  it('stale key detection resets internal state when models change', async () => {
+  it('stale key detection resets internal state when models change', () => {
     storage.set(STORAGE_KEY_SELECTED_MODEL, 'openai:gpt-4o-mini')
 
     const { result, rerender } = renderHook(({ models }) => useModelSelection({ models }), {
       initialProps: { models: [] as ModelInfo[] },
     })
 
-    // models 为空时 selectedModelKey 为 null
+    // models 为空时 resolvedModelKey 回退到 null
     expect(result.current.selectedModelKey).toBeNull()
 
-    // models 加载后，stale key 检测 effect 触发回退
+    // models 加载后，stale key 检测 useLayoutEffect 同步回退
     rerender({ models: [MODELS[0]] })
 
-    await waitFor(() => {
-      expect(result.current.selectedModelKey).toBe('openai:gpt-4.1')
-    })
+    expect(result.current.selectedModelKey).toBe('openai:gpt-4.1')
   })
 })
