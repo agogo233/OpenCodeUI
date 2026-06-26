@@ -36,9 +36,12 @@ export function useModelSelection({ models, sessionId = null }: UseModelSelectio
   const prevSessionIdRef = useRef(sessionId)
   const sessionSelectionRef = useRef<{ modelKey: string; variant?: string } | undefined>(undefined)
 
+  const manualSelectionRef = useRef<string | null>(null)
+
   if (prevSessionIdRef.current !== sessionId) {
     prevSessionIdRef.current = sessionId
     sessionSelectionRef.current = sessionId ? getSessionModelSelection(sessionId) : undefined
+    manualSelectionRef.current = null
   }
 
   const sessionSelection = sessionSelectionRef.current
@@ -64,8 +67,6 @@ export function useModelSelection({ models, sessionId = null }: UseModelSelectio
   })
   const hydratedSessionRef = useRef<string | null>(sessionSelection && !initialSessionModel ? null : sessionId)
   const skipPersistenceRef = useRef<string | null>(null)
-  const selectedModelKeyRef = useRef(selectedModelKey)
-  selectedModelKeyRef.current = selectedModelKey
 
   const persistedModel = selectedModelKey ? findModelByKey(models, selectedModelKey) : undefined
   const currentModel = useMemo(() => persistedModel ?? models[0], [models, persistedModel])
@@ -121,37 +122,19 @@ export function useModelSelection({ models, sessionId = null }: UseModelSelectio
     hydratedSessionRef.current = sessionId
   }, [models, sessionId])
 
-  // ============================================
-  // Stale key 检测：当 models 列表变化后，如果 selectedModelKey 指向的模型
-  // 不再存在于列表中（被隐藏/下线/移除），自动回退到 models[0] 并清除无效 key。
-  // 这防止了 UI 显示 "选择模型" 而 API 仍然发送已不存在的旧 key 的问题。
-  //
-  // 使用 setTimeout(0) 延迟回退，避免模型批量加载期间的竞态条件：
-  // 当 models 因 SSE 重连/服务器切换等原因过渡性地改变时，用户显式选择的
-  // 模型可能暂时不在列表中。延迟执行让模型列表先稳定下来再决定是否回退。
-  // ============================================
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (models.length === 0) return
-    if (!selectedModelKey) return
+    if (selectedModelKey === null) return
     if (findModelByKey(models, selectedModelKey)) return
 
-    const timer = setTimeout(() => {
-      const currentKey = selectedModelKeyRef.current
-      if (!currentKey) return
-      if (findModelByKey(models, currentKey)) return
-
-      const fallbackKey = getModelKey(models[0])
-      setSelection({
-        selectedModelKey: fallbackKey,
-        selectedVariant: getModelVariantPref(fallbackKey),
-      })
-    }, 0)
-    return () => clearTimeout(timer)
+    const fallbackKey = getModelKey(models[0])
+    setSelection({
+      selectedModelKey: fallbackKey,
+      selectedVariant: getModelVariantPref(fallbackKey),
+    })
   }, [models, selectedModelKey])
 
   useLayoutEffect(() => {
-    // 有存储的 session 选择且尚未 hydration 时，延迟持久化。
-    // 但如果用户已手动选择不同模型，允许立即持久化（防止被 hydration 覆盖）
     if (
       sessionId &&
       sessionSelection &&
@@ -164,23 +147,28 @@ export function useModelSelection({ models, sessionId = null }: UseModelSelectio
       return
     }
 
-    if (resolvedModelKey) {
-      serverStorage.set(STORAGE_KEY_SELECTED_MODEL, resolvedModelKey)
+// 写入前校验 key 有效性：若 selectedModelKey 指向的模型不再存在，
+    // 改用回退 key，防止 stale key 被持久化到 storage
+    const effectiveKey = (selectedModelKey && findModelByKey(models, selectedModelKey))
+      ? selectedModelKey
+      : (models.length > 0 ? getModelKey(models[0]) : null)
+
+    if (effectiveKey) {
+      serverStorage.set(STORAGE_KEY_SELECTED_MODEL, effectiveKey)
       if (sessionId) {
-        saveSessionModelSelection(sessionId, selectedModelKey, resolvedSelectedVariant)
+        saveSessionModelSelection(sessionId, effectiveKey, resolvedSelectedVariant)
       }
     }
-  }, [selectedModelKey, resolvedSelectedVariant, sessionId])
+  }, [selectedModelKey, resolvedSelectedVariant, sessionId, models])
 
-  // 切换模型
   const handleModelChange = useCallback(
     (modelKey: string, _model: ModelInfo) => {
-      // 先保存当前模型的 variant 偏好
+      manualSelectionRef.current = modelKey
+
       if (selectedModelKey && resolvedSelectedVariant) {
         saveModelVariantPref(selectedModelKey, resolvedSelectedVariant)
       }
 
-      // 切换模型
       setSelection({
         selectedModelKey: modelKey,
         selectedVariant: getModelVariantPref(modelKey),
@@ -200,14 +188,15 @@ export function useModelSelection({ models, sessionId = null }: UseModelSelectio
     [selectedModelKey],
   )
 
-  // 从消息中恢复模型选择（仅更新内存状态，不写 storage）
-  // 如果用户已手动选择了不同的模型，跳过恢复
   const restoreFromMessage = useCallback(
     (model: { providerID: string; modelID: string } | null | undefined, variant: string | null | undefined) => {
       if (!model) return
 
       const modelKey = `${model.providerID}:${model.modelID}`
-      if (selectedModelKeyRef.current && selectedModelKeyRef.current !== modelKey) return
+      // 只在用户仍持有一个有效的、不同的手动选择时跳过恢复
+      if (manualSelectionRef.current && manualSelectionRef.current !== modelKey) {
+        if (findModelByKey(models, manualSelectionRef.current)) return
+      }
 
       const exists = findModelByKey(models, modelKey)
 
