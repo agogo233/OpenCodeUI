@@ -118,6 +118,14 @@ ENV MISE_DATA_DIR=/root/.local/share/mise \
 
 ENV PATH="/root/.local/bin:/root/.cargo/bin:/root/.local/share/mise/shims:/root/.local/share/mise/bin:${PATH}"
 
+ARG GO_VERSION=latest
+RUN mise use --global go@${GO_VERSION} \
+    && GO_DIR="$(mise where go)/go" \
+    && for dir in src test misc api doc; do \
+         rm -rf "${GO_DIR}/${dir}"; \
+       done \
+    && go version
+
 COPY ./docker/backend-entrypoint.sh /usr/local/bin/backend-entrypoint.sh
 RUN chmod +x /usr/local/bin/backend-entrypoint.sh
 
