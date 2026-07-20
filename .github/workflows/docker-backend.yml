@@ -6,9 +6,9 @@ on:
     paths:
       - 'docker/Dockerfile.backend'
       - 'docker/backend-entrypoint.sh'
-  schedule:
-    # 每天自动重建，跟进 opencode 最新版本
-    - cron: '0 4 * * *'
+  # schedule:
+  #   # 每天自动重建，跟进 opencode 最新版本
+  #   - cron: '0 4 * * *'
   workflow_dispatch:
 
 concurrency:
@@ -29,9 +29,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v6
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -58,7 +55,7 @@ jobs:
         with:
           context: .
           file: docker/Dockerfile.backend
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
