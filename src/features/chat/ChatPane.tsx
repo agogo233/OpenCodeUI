@@ -27,8 +27,7 @@ import { useDirectory } from '../../contexts/useDirectory'
 import { paneLayoutStore } from '../../store/paneLayoutStore'
 import { autoApproveStore } from '../../store/autoApproveStore'
 import { messageStore, paneControllerStore, useHiddenModelKeys } from '../../store'
-import { restoreModelSelection } from '../../utils/sessionHelpers'
-import { findModelByKey, getModelKey } from '../../utils/modelUtils'
+import { findModelByKey, getModelKey, getSessionModelSelection } from '../../utils/modelUtils'
 import { useTheme } from '../../hooks/useTheme'
 import type { Attachment } from '../../api'
 import type { MessageError } from '../../types/message'
@@ -448,15 +447,8 @@ export const ChatPane = memo(function ChatPane({
   // revert/undo 恢复：inputRestoreContent 变化时立即恢复
   useEffect(() => {
     if (!inputRestoreContent?.model) return
-    const modelSelection = restoreModelSelection(
-      inputRestoreContent.model,
-      inputRestoreContent.variant ?? null,
-      visibleModels,
-    )
-    if (modelSelection) {
-      restoreFromMessage(inputRestoreContent.model, inputRestoreContent.variant)
-    }
-  }, [inputRestoreContent, visibleModels, restoreFromMessage])
+    restoreFromMessage(inputRestoreContent.model, inputRestoreContent.variant)
+  }, [inputRestoreContent, restoreFromMessage])
 
   // session 切换：只在 routeSessionId 变化时，从最后一条 user 消息恢复模型
   const restoredSessionRef = useRef<string | null>(null)
@@ -467,6 +459,10 @@ export const ChatPane = memo(function ChatPane({
     if (messages.length === 0) return
 
     restoredSessionRef.current = routeSessionId
+
+    // 优先使用 session-local 存储的模型选择（用户在浏览器中为本 session 选的）
+    const sessionModel = getSessionModelSelection(routeSessionId)
+    if (sessionModel) return
 
     const lastUserMsg = [...messages].reverse().find(m => m.info.role === 'user')
     if (lastUserMsg && 'model' in lastUserMsg.info) {
@@ -483,17 +479,21 @@ export const ChatPane = memo(function ChatPane({
   // ============================================
   // Agent Restoration Effect
   // ============================================
+  const agentRestoredSessionRef = useRef<string | null>(null)
   useEffect(() => {
     if (inputRestoreContent?.agent) {
       restoreAgentFromMessage(inputRestoreContent.agent)
       return
     }
+    if (!routeSessionId || agentRestoredSessionRef.current === routeSessionId) return
     if (messages.length === 0) return
+    agentRestoredSessionRef.current = routeSessionId
+
     const lastUserMsg = [...messages].reverse().find(m => m.info.role === 'user')
     if (lastUserMsg && 'agent' in lastUserMsg.info) {
       restoreAgentFromMessage((lastUserMsg.info as { agent?: string }).agent)
     }
-  }, [inputRestoreContent, messages, restoreAgentFromMessage])
+  }, [inputRestoreContent, routeSessionId, messages, restoreAgentFromMessage])
 
   // ============================================
   // Focus handling
