@@ -2,6 +2,10 @@ import { useCallback, useMemo, useState, useEffect, useRef, useSyncExternalStore
 import { useTranslation } from 'react-i18next'
 import { SessionList } from '../../sessions'
 import { FolderRecentList } from './FolderRecentList'
+import { MultiServerFolderList } from './MultiServerFolderList'
+import { SearchResults } from './SearchResults'
+import { useMultiServerStore, multiServerStore } from '../../../store/multiServerStore'
+import { useServerStore } from '../../../hooks/useServerStore'
 import { getProjectGroupIdentity } from './projectGrouping'
 import { ConfirmDialog } from '../../../components/ui/ConfirmDialog'
 import { ActiveSessionItem } from './ActiveSessionItem'
@@ -31,6 +35,8 @@ import { useBusySessions, useBusyCount } from '../../../store/activeSessionStore
 import { notificationStore, useNotifications, useUnreadNotificationCount } from '../../../store/notificationStore'
 import { pinnedSessionsStore } from '../../../store/pinnedSessionsStore'
 import { serverStore } from '../../../store/serverStore'
+import { readServerWorkspaces, addServerWorkspace } from '../../../utils/serverWorkspaces'
+import { subscribePerServerStorageVersion, getStorageVersion } from '../../../utils/perServerStorage'
 import type { NotificationEntry } from '../../../store/notificationStore'
 import {
   updateSession,
@@ -41,6 +47,7 @@ import {
   type ConnectionInfo,
 } from '../../../api'
 import { getDirectoryName, isSameDirectory, normalizeToForwardSlash } from '../../../utils'
+import { splitSessionKey } from '../../../utils/sessionKey'
 import { uiErrorHandler } from '../../../utils'
 
 // 侧边栏设计模式：
@@ -135,10 +142,34 @@ export function SidePanel({
       ),
     [savedDirectories, currentDirectory],
   )
-  const { catalog: gitWorkspaceCatalog, isLoading: isGitWorkspaceCatalogLoading } =
-    useGitWorkspaceCatalog(catalogDirectories)
-  const { vcsInfo: currentDirectoryVcsInfo, isLoading: isCurrentDirectoryVcsLoading } = useVcsInfo(currentDirectory)
+  // 多服务器订阅模式配置
+  const multiServerConfig = useMultiServerStore()
+  // 多服务器模式：Git/路径信息跟随「焦点服务器」（焦点缺省 = 活动服务器）
+  const { activeServer } = useServerStore()
+  const catalogServerId = multiServerConfig.enabled
+    ? (multiServerConfig.focusedServerId ?? activeServer?.id)
+    : undefined
+  const { catalog: gitWorkspaceCatalog, isLoading: isGitWorkspaceCatalogLoading } = useGitWorkspaceCatalog(
+    catalogDirectories,
+    catalogServerId,
+  )
+  const { vcsInfo: currentDirectoryVcsInfo, isLoading: isCurrentDirectoryVcsLoading } = useVcsInfo(
+    currentDirectory,
+    catalogServerId,
+  )
   const { sidebarFolderRecents, sidebarShowChildSessions } = useLayoutStore()
+  // per-server storage 版本（添加/排序工作区时刷新项目选择器；版本号递增触发重渲染）
+  const storageVersionSnapshot = useSyncExternalStore(
+    subscribePerServerStorageVersion,
+    getStorageVersion,
+    getStorageVersion,
+  )
+  const subscribedServerIds = useMemo(() => {
+    // 白名单精确生效：只展示用户在设置里勾选的服务器
+    return multiServerConfig.subscribedServerIds.filter(id => serverStore.getServers().some(s => s.id === id))
+  }, [multiServerConfig.subscribedServerIds])
+  // 多服务器列表按复合 key（serverId::sessionId）比较，避免跨服务器同名 session 串高亮
+  const multiServerSelectedSessionKey = selectedSessionId
   const [globalFolderIndex, setGlobalFolderIndex] = useState<number>(() => {
     const saved = localStorage.getItem('opencode-sidebar-global-folder-index')
     const parsed = saved ? Number.parseInt(saved, 10) : 0
@@ -579,7 +610,19 @@ export function SidePanel({
     return buildProjectGroups(savedDirectories)
   }, [buildProjectGroups, savedDirectories])
 
+  // 多服务器模式：项目选择器显示「焦点服务器」的工作区（读该服务器 per-server saved-directories）
+  const focusedServerWorkspaces = useMemo(() => {
+    if (!multiServerConfig.enabled) return [] as (typeof savedDirectories)[number][]
+    const serverId = multiServerStore.getFocusedServerId()
+    return readServerWorkspaces(serverId).map(
+      dir => ({ path: dir, addedAt: 0 } as (typeof savedDirectories)[number]),
+    )
+  }, [multiServerConfig, storageVersionSnapshot])
+
   const selectorProjectGroups = useMemo<ProjectItem[]>(() => {
+    if (multiServerConfig.enabled) {
+      return buildProjectGroups(focusedServerWorkspaces)
+    }
     const sortedDirectories = [...savedDirectories].sort((a, b) => {
       const aTime = recentProjects[a.path] || a.addedAt
       const bTime = recentProjects[b.path] || b.addedAt
@@ -587,7 +630,7 @@ export function SidePanel({
     })
 
     return buildProjectGroups(sortedDirectories)
-  }, [buildProjectGroups, recentProjects, savedDirectories])
+  }, [multiServerConfig.enabled, focusedServerWorkspaces, buildProjectGroups, recentProjects, savedDirectories])
 
   const globalProject = useMemo<ProjectItem>(
     () => ({
@@ -653,7 +696,7 @@ export function SidePanel({
     const insertAt = Math.min(Math.max(globalFolderIndex, 0), list.length)
     return [...list.slice(0, insertAt), globalFolderProject, ...list.slice(insertAt)]
   }, [folderProjectGroups, currentDirectory, currentProject, globalFolderProject, globalFolderIndex])
-  const canShowFolderRecents = sidebarFolderRecents && !search && folderProjects.length > 0
+  // 文件夹模式开启（搜索时由 SearchResults 接管，文件夹与 session 一起搜）
 
   const workspaceDirectoriesByProjectId = useMemo(() => {
     const map = new Map<string, string[]>()
@@ -803,23 +846,63 @@ export function SidePanel({
     [currentDirectory, addDirectory, onSelectSession, onCloseMobile],
   )
 
-  // Active tab 专用：跨目录的 session 需要确保目录在项目列表中
-  const handleSelectActive = useCallback(
-    (session: ApiSession) => {
-      if (session.directory) {
-        addDirectory(session.directory)
-      }
+  // 多服务器模式：从分组列表选择 session（serverId 已由 MultiServerFolderList 附加）
+  const handleSelectMultiServer = useCallback(
+    (session: ApiSession & { serverId?: string }) => {
       onSelectSession(session)
       if (window.innerWidth < 768 && onCloseMobile) {
         onCloseMobile()
       }
     },
-    [addDirectory, onSelectSession, onCloseMobile],
+    [onSelectSession, onCloseMobile],
+  )
+
+  // Active tab 专用：跨目录的 session 需要确保目录在项目列表中
+  // 多服务器模式：活跃 session 按服务器分组（组内保留父子结构）
+  const activeServerGroups = useMemo(() => {
+    if (!multiServerConfig.enabled) return [] as Array<{ serverId: string; roots: (typeof busySessions)[number][] }>
+    const map = new Map<string, (typeof busySessions)[number][]>()
+    for (const entry of activeSessionTree.rootEntries) {
+      const serverId = splitSessionKey(entry.sessionId).serverId
+      const list = map.get(serverId) ?? []
+      list.push(entry)
+      map.set(serverId, list)
+    }
+    return Array.from(map.entries()).map(([serverId, roots]) => ({ serverId, roots }))
+  }, [multiServerConfig.enabled, activeSessionTree.rootEntries])
+
+  const handleSelectActive = useCallback(
+    (session: ApiSession & { serverId?: string }) => {
+      if (session.directory) {
+        if (session.serverId) {
+          // 多服务器模式：写入该 session 所属服务器的工作区（避免污染活动服务器）
+          addServerWorkspace(session.serverId, session.directory)
+        } else {
+          addDirectory(session.directory)
+        }
+      }
+      // 多服务器模式：session 附带 serverId（App 用它合成复合 key 打开）
+      onSelectSession(session)
+      if (window.innerWidth < 768 && onCloseMobile) {
+        onCloseMobile()
+      }
+    },
+    [addDirectory, addServerWorkspace, onSelectSession, onCloseMobile],
   )
 
   const renderActiveSessionNode = useCallback(
     function renderActiveSessionNode(entry: (typeof busySessions)[number], level = 0): ReactNode {
-      const resolvedSession = sessionLookup.get(entry.sessionId)
+      // entry.sessionId 是复合 key（serverId::sessionId），解析出服务器与原始 id
+      const { serverId, sessionId } = splitSessionKey(entry.sessionId)
+      const resolvedSession =
+        sessionLookup.get(sessionId) ??
+        (entry.title || entry.directory
+          ? ({
+              id: sessionId,
+              title: entry.title,
+              directory: entry.directory,
+            } as ApiSession)
+          : undefined)
       const childEntries = activeSessionTree.childrenByParent.get(entry.sessionId) ?? []
 
       return (
@@ -828,7 +911,9 @@ export function SidePanel({
             entry={entry}
             resolvedSession={resolvedSession}
             isSelected={entry.sessionId === selectedSessionId}
-            onSelect={handleSelectActive}
+            onSelect={session =>
+              handleSelectActive({ ...session, serverId } as ApiSession & { serverId?: string })
+            }
           />
           {childEntries.map(childEntry => renderActiveSessionNode(childEntry, level + 1))}
         </div>
@@ -1184,6 +1269,25 @@ export function SidePanel({
             </div>
             <div className="relative p-1 pt-1.5">
               <div className="pointer-events-none absolute inset-x-3 top-0 h-px bg-border-200/30" />
+              {/* 多服务器模式：当前「焦点服务器」— 与项目项同款样式（图标位=状态点） */}
+              {multiServerConfig.enabled && subscribedServerIds.length > 0 && (
+                <div className="group mb-1 flex w-full items-center gap-2 rounded-md bg-bg-200/40 px-2 py-1.5">
+                  <span className="relative w-5 h-5 flex items-center justify-center shrink-0">
+                    <span className="h-2 w-2 rounded-full bg-success-100" />
+                  </span>
+                  <div className="flex-1 min-w-0 text-left">
+                    <div className="text-left text-[length:var(--fs-sm)] text-text-200 truncate">
+                      {serverStore.getServer(multiServerStore.getFocusedServerId())?.name ??
+                        multiServerStore.getFocusedServerId()}
+                    </div>
+                    <div className="text-[length:var(--fs-xxs)] text-text-400 truncate opacity-70">
+                      {t('sidebar.focusServerHint', {
+                        defaultValue: '焦点服务器 · 点击列表中服务器节点切换',
+                      })}
+                    </div>
+                  </div>
+                </div>
+              )}
               <button
                 type="button"
                 onClick={onAddProject}
@@ -1365,15 +1469,53 @@ export function SidePanel({
               ref={recentsSelectionRootRef}
               className={`flex-1 overflow-hidden ${isEditMode ? 'select-none' : ''}`}
             >
-              {canShowFolderRecents ? (
-                <FolderRecentList
-                  projects={folderProjects}
-                  {...commonFolderRecentListProps}
-                  onReorderProject={handleReorderProjectGroup}
-                  workspaceDirectoriesByProjectId={workspaceDirectoriesByProjectId}
-                  pinnedSessions={resolvedPinnedSessions}
-                  unavailablePinnedEntries={unavailablePinnedEntries}
-                />
+              {multiServerConfig.enabled ? (
+                subscribedServerIds.length > 0 ? (
+                  search ? (
+                    <SearchResults
+                      search={search}
+                      selectedSessionId={multiServerSelectedSessionKey}
+                      onSelectSession={handleSelectMultiServer}
+                    />
+                  ) : (
+                    <MultiServerFolderList
+                      serverIds={subscribedServerIds}
+                      selectedSessionId={multiServerSelectedSessionKey}
+                      currentDirectory={currentDirectory}
+                      onSelectSession={handleSelectMultiServer}
+                      onNewSession={onNewSession}
+                    />
+                  )
+                ) : (
+                  <div className="flex h-full flex-col items-center justify-center gap-2 px-6 text-center text-[length:var(--fs-xs)] text-text-400/70">
+                    <span>{t('sidebar.noSubscribedServers', { defaultValue: 'No servers subscribed yet.' })}</span>
+                    <button
+                      type="button"
+                      onClick={onOpenSettings}
+                      className="rounded-md px-2 py-1 text-[length:var(--fs-xs)] text-accent-main-100 hover:bg-accent-main-100/10 transition-colors"
+                    >
+                      {t('sidebar.openServerSettings', { defaultValue: 'Open Server Settings' })}
+                    </button>
+                  </div>
+                )
+              ) : sidebarFolderRecents ? (
+                search ? (
+                  /* 文件夹模式 + 搜索：文件夹 + session 一起搜（单服务器：无服务器组头） */
+                  <SearchResults
+                    search={search}
+                    selectedSessionId={selectedSessionId}
+                    onSelectSession={handleSelect}
+                  />
+                ) : (
+                  <FolderRecentList
+                    projects={folderProjects}
+                    {...commonFolderRecentListProps}
+                    onReorderProject={handleReorderProjectGroup}
+                    workspaceDirectoriesByProjectId={workspaceDirectoriesByProjectId}
+                    pinnedSessions={resolvedPinnedSessions}
+                    unavailablePinnedEntries={unavailablePinnedEntries}
+                  />
+                )
               ) : shouldRenderWorkspaceTreeOnly ? (
                 <FolderRecentList
                   projects={currentProjectTreeProjects}
@@ -1426,6 +1568,61 @@ export function SidePanel({
                 <div className="flex flex-col items-center justify-center py-12 text-text-400 opacity-60">
                   <p className="text-[length:var(--fs-sm)]">{t('sidebar.noActiveSessions')}</p>
                 </div>
+              ) : multiServerConfig.enabled && activeServerGroups.length > 0 ? (
+                <div className="mt-1 space-y-2">
+                  {/* 多服务器模式：活跃 session 按服务器分组 */}
+                  {activeServerGroups.map(({ serverId, roots }) => (
+                    <div key={serverId}>
+                      <div className="px-[6px] pt-0.5 pb-1 text-[length:var(--fs-xxs)] font-medium uppercase tracking-wider text-text-400">
+                        {serverStore.getServer(serverId)?.name ?? serverId}
+                      </div>
+                      <div className="space-y-0.5">
+                        {roots.map(entry => renderActiveSessionNode(entry))}
+                      </div>
+                    </div>
+                  ))}
+
+                  {/* Divider + actions between busy and notifications */}
+                  {notifications.length > 0 && (
+                    <div className="flex items-center justify-between gap-2 mt-2 pt-2 border-t border-border-200/30">
+                      <span className="text-[length:var(--fs-xxs)] font-medium text-text-400 uppercase tracking-wider pl-[6px]">
+                        {t('sidebar.notifications')}
+                      </span>
+                      <div className="flex items-center gap-0.5">
+                        {notifications.some((n: NotificationEntry) => !n.read) && (
+                          <button
+                            className="text-[length:var(--fs-xxs)] text-text-400 hover:text-text-200 px-1.5 py-0.5 rounded-md hover:bg-bg-200 transition-all duration-150 active:scale-95"
+                            onClick={() => notificationStore.markAllRead()}
+                          >
+                            {t('sidebar.readAll')}
+                          </button>
+                        )}
+                        <button
+                          className="text-[length:var(--fs-xxs)] text-text-400 hover:text-text-200 px-1.5 py-0.5 rounded-md hover:bg-bg-200 transition-all duration-150 active:scale-95"
+                          onClick={() => notificationStore.clearAll()}
+                        >
+                          {t('common:clear')}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Notification history */}
+                  {notifications.map((entry: NotificationEntry) => {
+                    const { serverId, sessionId } = splitSessionKey(entry.sessionId)
+                    const resolvedSession = sessionLookup.get(sessionId)
+                    return (
+                      <NotificationItem
+                        key={entry.id}
+                        entry={entry}
+                        resolvedSession={resolvedSession}
+                        onSelect={session =>
+                          handleSelectActive({ ...session, serverId } as ApiSession & { serverId?: string })
+                        }
+                      />
+                    )
+                  })}
+                </div>
               ) : (
                 <div className="mt-1 space-y-0.5">
                   {/* Busy sessions — 子 session 挂在父下面 */}
@@ -1460,13 +1657,16 @@ export function SidePanel({
 
                   {/* Notification history */}
                   {notifications.map((entry: NotificationEntry) => {
-                    const resolvedSession = sessionLookup.get(entry.sessionId)
+                    const { serverId, sessionId } = splitSessionKey(entry.sessionId)
+                    const resolvedSession = sessionLookup.get(sessionId)
                     return (
                       <NotificationItem
                         key={entry.id}
                         entry={entry}
                         resolvedSession={resolvedSession}
-                        onSelect={handleSelectActive}
+                        onSelect={session =>
+                          handleSelectActive({ ...session, serverId } as ApiSession & { serverId?: string })
+                        }
                       />
                     )
                   })}

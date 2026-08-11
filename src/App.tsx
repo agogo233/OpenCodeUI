@@ -31,6 +31,9 @@ import {
   useChatViewportController,
 } from './features/chat/chatViewport'
 import { uiErrorHandler, isSameDirectory, collectActiveDirectories } from './utils'
+import { makeSessionKey, splitSessionKey } from './utils/sessionKey'
+import { multiServerStore } from './store/multiServerStore'
+import { serverStore } from './store/serverStore'
 import { initNotificationSound } from './utils/notificationSoundBridge'
 import { createPtySession } from './api/pty'
 import type { TerminalTab } from './store/layoutStore'
@@ -58,11 +61,20 @@ function App() {
   const router = useRouter()
   const {
     sessionId: routeSessionId,
+    serverId: routeServerId,
     directory: routeDirectory,
     navigateToSession: navigateRouteToSession,
     navigateHome: navigateRouteHome,
     replaceSession,
   } = router
+  // 路由里 sessionId 直接是「服务器作用域复合 key」（serverId::sessionId）；
+  // 旧书签（无 :: 前缀）视为活动服务器，合成复合 key
+  const routeSessionKey = useMemo(() => {
+    if (!routeSessionId) return null
+    if (routeSessionId.includes('::')) return routeSessionId
+    return makeSessionKey(serverStore.getActiveServerId(), routeSessionId)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [routeSessionId])
   const { currentDirectory, savedDirectories, sidebarExpanded, setSidebarExpanded } = useDirectory()
   const { rightPanelOpen, rightPanelWidth, wakeLock } = useLayoutStore()
   const { surfaceRef, value: chatViewport } = useChatViewportController({
@@ -124,12 +136,29 @@ function App() {
 
   // URL -> focused pane session
   useEffect(() => {
-    if (lastRouteSessionIdRef.current === routeSessionId) return
-    lastRouteSessionIdRef.current = routeSessionId
-    if (paneLayoutStore.getFocusedSessionId() === routeSessionId) return
+    if (lastRouteSessionIdRef.current === routeSessionKey) return
+    lastRouteSessionIdRef.current = routeSessionKey
+    if (paneLayoutStore.getFocusedSessionId() === routeSessionKey) return
     syncingFromRouteRef.current = true
-    paneLayoutStore.setFocusedSession(routeSessionId)
-  }, [routeSessionId])
+    paneLayoutStore.setFocusedSession(routeSessionKey)
+  }, [routeSessionKey])
+
+  // home（无 session）且 URL 指定了服务器：同步 active server（恢复链接/新建会话的服务器上下文）
+  useEffect(() => {
+    if (routeSessionKey || !routeServerId) return
+    if (serverStore.getActiveServerId() === routeServerId) return
+    serverStore.setActiveServer(routeServerId)
+  }, [routeSessionKey, routeServerId])
+
+  // 多服务器模式：项目选择器焦点跟随当前聚焦 pane 的 session（切换 pane / 分屏聚焦时同步）
+  useEffect(() => {
+    if (!multiServerStore.isEnabled()) return
+    const focusedSessionKey = paneLayout.focusedSessionId
+    if (!focusedSessionKey) return
+    // 只同步焦点服务器；目录由 URL 派生（pane -> URL 同步会写入对应 dir，不再手动 setCurrentDirectory
+    // 以免清掉 session 路由）
+    multiServerStore.setFocusedServerId(splitSessionKey(focusedSessionKey).serverId)
+  }, [paneLayout.focusedSessionId])
 
   // focused pane session -> URL（路由只反映当前 focused pane）
   useEffect(() => {
@@ -138,22 +167,29 @@ function App() {
       return
     }
     if (paneLayoutStore.getFocusedSessionId() !== paneLayout.focusedSessionId) return
-    if (paneLayout.focusedSessionId === routeSessionId && isSameDirectory(routeDirectory, focusedRouteDirectory)) return
-    replaceSession(paneLayout.focusedSessionId, focusedRouteDirectory)
+    const focusedSessionKey = paneLayout.focusedSessionId
+    if (focusedSessionKey === routeSessionKey && isSameDirectory(routeDirectory, focusedRouteDirectory)) return
+    // 复合 key 直接写入 URL（本身携带服务器身份）
+    replaceSession(focusedSessionKey, focusedRouteDirectory)
   }, [
     paneLayout.focusedPaneId,
     paneLayout.focusedSessionId,
-    routeSessionId,
+    routeSessionKey,
     routeDirectory,
     replaceSession,
     focusedRouteDirectory,
   ])
 
   const navigatePaneToSession = useCallback(
-    (paneId: string, sessionId: string, directory?: string) => {
+    (paneId: string, sessionKey: string, directory?: string) => {
       paneLayoutStore.focusPane(paneId)
-      paneLayoutStore.setPaneSession(paneId, sessionId)
-      navigateRouteToSession(sessionId, directory)
+      paneLayoutStore.setPaneSession(paneId, sessionKey)
+      // 项目选择器焦点跟随打开的 session：服务器 + 工作区目录
+      // （注意：不用 setCurrentDirectory——它会把 URL 清成 #/?dir= 导致 session 路由丢失；
+      //  目录通过 navigateRouteToSession 写入 URL，currentDirectory 由 URL 派生自动跟随）
+      const { serverId } = splitSessionKey(sessionKey)
+      multiServerStore.setFocusedServerId(serverId)
+      navigateRouteToSession(sessionKey, directory)
     },
     [navigateRouteToSession],
   )
@@ -162,16 +198,28 @@ function App() {
     (paneId: string) => {
       paneLayoutStore.focusPane(paneId)
       paneLayoutStore.setPaneSession(paneId, null)
-      navigateRouteHome()
+      // 多服务器模式：进入 home（新建对话）时切到焦点服务器。
+      // 切到不同服务器：server-switch 会清掉 currentDirectory/目录参数（新服务器不一定有旧目录）；
+      // 同一服务器内新建：保留当前工作区目录
+      if (multiServerStore.isEnabled()) {
+        const focusedServerId = multiServerStore.getFocusedServerId()
+        if (serverStore.getActiveServerId() !== focusedServerId) {
+          serverStore.setActiveServer(focusedServerId)
+        }
+        navigateRouteHome(focusedServerId)
+      } else {
+        navigateRouteHome()
+      }
     },
     [navigateRouteHome],
   )
 
   const handleSelectSession = useCallback(
-    (session: { id: string; directory?: string }) => {
+    (session: { id: string; serverId?: string; directory?: string }) => {
       const paneId = paneLayout.focusedPaneId ?? paneLayoutStore.getFocusedPaneId()
       if (!paneId) return
-      navigatePaneToSession(paneId, session.id, session.directory)
+      const sessionKey = makeSessionKey(session.serverId ?? serverStore.getActiveServerId(), session.id)
+      navigatePaneToSession(paneId, sessionKey, session.directory)
     },
     [paneLayout.focusedPaneId, navigatePaneToSession],
   )

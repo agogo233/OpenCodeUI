@@ -6,7 +6,7 @@
  * compact viewport wrapper.
  */
 
-import { memo, useRef, useEffect, useState, useCallback, useMemo, useDeferredValue } from 'react'
+import { memo, useRef, useEffect, useState, useCallback, useMemo, useDeferredValue, useSyncExternalStore } from 'react'
 import { Trans, useTranslation } from 'react-i18next'
 
 import { ChatArea, Header, InputBox, PermissionDialog, QuestionDialog, type ChatAreaHandle } from '.'
@@ -19,6 +19,8 @@ import { FolderProjectDropOverlay } from './FolderProjectDropOverlay'
 import { useChatSession, useModels, useModelSelection } from '../../hooks'
 import { useServerStore } from '../../hooks/useServerStore'
 import { useCancelHint } from '../../hooks/useCancelHint'
+import { makeSessionKey, sessionKeyToServerId } from '../../utils/sessionKey'
+import { serverStore } from '../../store/serverStore'
 import { InlineToolRequestContext, type InlineToolRequestContextValue } from './InlineToolRequestContext'
 import { ChatViewportProvider, canUseSplitPane, useChatViewportMaybe, type ChatViewportValue } from './chatViewport'
 import { useChatPageViewModel } from './useChatPageViewModel'
@@ -154,10 +156,21 @@ export const ChatPane = memo(function ChatPane({
   const modelSelectorRef = useRef<ModelSelectorHandle>(null)
   const { addDirectory } = useDirectory()
 
+  // 当前 pane 绑定的服务器（sessionId 为复合 key，split 出 serverId；home 状态跟随 active server 实时变化）
+  const activeServerId = useSyncExternalStore(
+    cb => serverStore.subscribe(cb),
+    () => serverStore.getActiveServerId(),
+    () => serverStore.getActiveServerId(),
+  )
+  const paneServerId = useMemo(
+    () => (sessionId ? sessionKeyToServerId(sessionId) : activeServerId),
+    [sessionId, activeServerId],
+  )
+
   // ============================================
-  // Models
+  // Models（per-server：模型列表跟随当前 pane 绑定的服务器）
   // ============================================
-  const { models, isLoading: modelsLoading, refetch: refetchModels } = useModels()
+  const { models, isLoading: modelsLoading, refetch: refetchModels } = useModels(paneServerId)
   const { activeServer, getHealth } = useServerStore()
   const activeServerHealth = activeServer ? getHealth(activeServer.id) : null
   const hiddenModelKeys = useHiddenModelKeys()
@@ -199,11 +212,19 @@ export const ChatPane = memo(function ChatPane({
   // ============================================
   // Pane-local navigation
   // ============================================
+  /** 规范化 session 标识为复合 key：已是复合 key 则原样，原始 id 用 pane 的服务器合成 */
+  const normalizeSessionKey = useCallback(
+    (sid: string): string => {
+      return sid.includes('::') ? sid : makeSessionKey(paneServerId, sid)
+    },
+    [paneServerId],
+  )
+
   const navigateToSession = useCallback(
     (sid: string, directory?: string) => {
-      navigatePaneToSession(paneId, sid, directory)
+      navigatePaneToSession(paneId, normalizeSessionKey(sid), directory)
     },
-    [paneId, navigatePaneToSession],
+    [paneId, navigatePaneToSession, normalizeSessionKey],
   )
 
   const navigateHome = useCallback(() => {
@@ -597,14 +618,18 @@ export const ChatPane = memo(function ChatPane({
   )
 
   const handleSessionDrop = useCallback(
-    (payload: { sessionId: string; directory?: string }, zone: DropZone) => {
+    (payload: { sessionId: string; serverId?: string; directory?: string }, zone: DropZone) => {
       resetDropState()
       cancelPendingSplitSessionNavigation()
 
-      if (payload.sessionId === routeSessionId && zone === 'center') return
+      // 拖拽 payload 带源服务器：用它合成复合 key（否则会用目标 pane 的服务器，拖错服务器）
+      const sessionKey = payload.serverId
+        ? makeSessionKey(payload.serverId, payload.sessionId)
+        : normalizeSessionKey(payload.sessionId)
+      if (sessionKey === routeSessionId && zone === 'center') return
 
       if (zone === 'center') {
-        navigatePaneToSession(paneId, payload.sessionId, payload.directory)
+        navigatePaneToSession(paneId, sessionKey, payload.directory)
         return
       }
 
@@ -617,11 +642,11 @@ export const ChatPane = memo(function ChatPane({
 
         scheduleSplitSessionNavigation(() => {
           if (!paneLayoutStore.findLeaf(newPaneId)) return
-          navigatePaneToSession(newPaneId, payload.sessionId, payload.directory)
+          navigatePaneToSession(newPaneId, sessionKey, payload.directory)
         })
       }
     },
-    [paneId, routeSessionId, navigatePaneToSession, resetDropState],
+    [paneId, routeSessionId, navigatePaneToSession, resetDropState, normalizeSessionKey],
   )
 
   useEffect(() => {
@@ -649,6 +674,7 @@ export const ChatPane = memo(function ChatPane({
       handleSessionDrop(
         {
           sessionId: event.payload.sessionId,
+          serverId: event.payload.serverId,
           directory: event.payload.directory,
         },
         zone,
