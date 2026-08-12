@@ -1,5 +1,28 @@
 # Changelog
 
+## [v0.6.42] - 2026-08-12
+
+- fix(sessions): remaining composite-key mismatches in selection, busy & unread markers (8de12315)
+- fix(sessions): child sessions under parent no longer broken (composite-key mismatch) (f245160f)
+
+## [v0.6.41] - 2026-08-11
+
+- fix(multi-server): force auto path style while multi-server mode is enabled (247f12ed)
+- fix(tauri): terminal bridge connects the pty's own server, not the active one (7dd92778)
+
+## [v0.6.40] - 2026-08-11
+
+- fix(multi-server): terminal tabs keep their own server; connections no longer break after focus switch (3bd25276)
+
+## [v0.6.39] - 2026-08-11
+
+- fix(multi-server): per-server path style detection (Windows/Linux coexistence) (15491eb7)
+
+## [v0.6.38] - 2026-08-11
+
+- fix(right-panel): remount file/diff content when the server changes (77dee66e)
+- fix(multi-server): right panel (files/diff/terminal) follows focused session's server (327d8f47)
+
 ## [v0.6.37] - 2026-08-11
 
 - fix(mobile): restore gap between collapsed reply capsule and scroll-to-bottom button (e202887a)

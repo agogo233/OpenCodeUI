@@ -31,7 +31,7 @@ import {
   useChatViewportController,
 } from './features/chat/chatViewport'
 import { uiErrorHandler, isSameDirectory, collectActiveDirectories } from './utils'
-import { makeSessionKey, splitSessionKey } from './utils/sessionKey'
+import { makeSessionKey, sessionKeyToServerId, splitSessionKey } from './utils/sessionKey'
 import { multiServerStore } from './store/multiServerStore'
 import { serverStore } from './store/serverStore'
 import { initNotificationSound } from './utils/notificationSoundBridge'
@@ -501,6 +501,13 @@ function App() {
   }, [ensureMobileRightPanelRendered, isMobilePanelLayout, rightPanelOpen, scrollMobilePagerTo, setSidebarExpanded, sidebarExpanded])
 
   const focusedDirectory = focusedRouteDirectory || ''
+
+  // 右侧面板（文件/diff/终端）绑定焦点 session 的服务器：
+  // 切换焦点 session 到另一服务器时，右侧面板内容跟随该服务器而不是活动服务器
+  const focusedServerId = useMemo(() => {
+    if (!paneLayout.focusedSessionId) return undefined
+    return sessionKeyToServerId(paneLayout.focusedSessionId)
+  }, [paneLayout.focusedSessionId])
 
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false)
   const [settingsInitialTab, setSettingsInitialTab] = useState<SettingsTab>('servers')
@@ -988,13 +995,14 @@ function App() {
                   <RightPanel
                     directory={focusedDirectory}
                     sessionId={paneLayout.focusedSessionId}
+                    serverId={focusedServerId}
                     inline
                     renderPanelContent={rightPanelOpen || shouldRenderMobileRightPanel}
                   />
                 </section>
               </div>
 
-              <BottomPanel directory={focusedDirectory} />
+              <BottomPanel directory={focusedDirectory} serverId={focusedServerId} />
             </>
           ) : (
             <>
@@ -1025,10 +1033,14 @@ function App() {
                     />
                   </div>
 
-                  <BottomPanel directory={focusedDirectory} />
+                  <BottomPanel directory={focusedDirectory} serverId={focusedServerId} />
                 </div>
 
-                <RightPanel directory={focusedDirectory} sessionId={paneLayout.focusedSessionId} />
+                <RightPanel
+                  directory={focusedDirectory}
+                  sessionId={paneLayout.focusedSessionId}
+                  serverId={focusedServerId}
+                />
               </div>
             </>
           )}
