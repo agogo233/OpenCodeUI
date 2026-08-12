@@ -280,7 +280,7 @@ describe('useChatSession handleCommand', () => {
       await Promise.resolve()
     })
 
-    expect(executeCommandMock).toHaveBeenCalledWith('session-1', 'review', 'src/App.tsx', '/workspace/demo', 'local')
+    expect(executeCommandMock).toHaveBeenCalledWith('session-1', 'review', 'src/App.tsx', '/workspace/demo', 'local', 'provider-1/model-1')
     expect(settled).toBe(true)
     expect(commandResult).toBe(true)
   })

@@ -1021,7 +1021,14 @@ export function useChatSession({
 
         // Keep command submission semantics aligned with normal messages:
         // once the command is dispatched, clear the draft immediately.
-        void executeCommand(sessionId, command, args, effectiveDirectory, paneServerId).catch(err => {
+        void executeCommand(
+          sessionId,
+          command,
+          args,
+          effectiveDirectory,
+          paneServerId,
+          currentModel ? `${currentModel.providerId}/${currentModel.id}` : undefined,
+        ).catch(err => {
           handleError('execute command', err)
         })
 

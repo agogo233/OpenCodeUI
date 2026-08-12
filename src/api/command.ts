@@ -85,6 +85,7 @@ export async function executeCommand(
   args: string = '',
   directory?: string,
   serverId?: string,
+  model?: string,
 ): Promise<unknown> {
   const target = resolveSessionTarget(sessionId, serverId)
   const sdk = getSDKClient(target.serverId)
@@ -94,6 +95,7 @@ export async function executeCommand(
       directory: formatPathForApi(directory, target.serverId),
       command,
       arguments: args,
+      ...(model ? { model } : {}),
     }),
   )
 }
