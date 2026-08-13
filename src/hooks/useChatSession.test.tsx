@@ -22,6 +22,9 @@ const {
   pendingPermissionRequestsMock,
   handlePermissionReplyMock,
   refreshPendingRequestsMock,
+  resetPendingRequestsMock,
+  getPendingPermissionsMock,
+  useDirectoryMock,
   useSessionStateMock,
   activeSessionStatusMap,
 } = vi.hoisted(() => ({
@@ -46,6 +49,11 @@ const {
     (_requestId: string, _reply: string, _directory?: string, _sessionId?: string) => Promise.resolve(true),
   ),
   refreshPendingRequestsMock: vi.fn((_sessionIds?: string | string[], _directory?: string) => Promise.resolve()),
+  resetPendingRequestsMock: vi.fn(),
+  getPendingPermissionsMock: vi.fn((_sessionId?: string, _directory?: string, _serverId?: string) =>
+    Promise.resolve([]),
+  ),
+  useDirectoryMock: vi.fn(() => ({ currentDirectory: '/workspace/demo' })),
   useSessionStateMock: vi.fn((_sessionId: string | null) => null as null | { isStreaming: boolean; messages: unknown[] }),
   activeSessionStatusMap: {} as Record<string, { type: string; attempt?: number; message?: string; next?: number }>,
 }))
@@ -110,7 +118,7 @@ vi.mock('../hooks', () => ({
     handleQuestionReply: vi.fn(),
     handleQuestionReject: vi.fn(),
     refreshPendingRequests: refreshPendingRequestsMock,
-    resetPendingRequests: vi.fn(),
+    resetPendingRequests: resetPendingRequestsMock,
     isReplying: false,
   }),
   useMessageAnimation: () => ({
@@ -119,7 +127,7 @@ vi.mock('../hooks', () => ({
     animateUndo: vi.fn(),
     animateRedo: vi.fn(),
   }),
-  useDirectory: () => ({ currentDirectory: '/workspace/demo' }),
+  useDirectory: () => useDirectoryMock(),
   useSessionContext: () => ({
     createSession: createSessionMock,
     sessions: [],
@@ -141,7 +149,7 @@ vi.mock('../api', () => ({
   getSessionMessages: vi.fn(),
   abortSession: vi.fn(),
   getSelectableAgents: (...args: unknown[]) => getSelectableAgentsMock(...args),
-  getPendingPermissions: vi.fn(() => Promise.resolve([])),
+  getPendingPermissions: (...args: [string?, string?, string?]) => getPendingPermissionsMock(...args),
   getPendingQuestions: vi.fn(() => Promise.resolve([])),
   prefetchCommands: vi.fn(() => Promise.resolve()),
   prefetchRootDirectory: vi.fn(() => Promise.resolve()),
@@ -186,6 +194,9 @@ describe('useChatSession handleCommand', () => {
     useSessionFamilyMock.mockReset()
     handlePermissionReplyMock.mockReset()
     refreshPendingRequestsMock.mockReset()
+    resetPendingRequestsMock.mockReset()
+    getPendingPermissionsMock.mockReset()
+    useDirectoryMock.mockReset()
     useSessionStateMock.mockReset()
     pendingPermissionRequestsMock.length = 0
     for (const key of Object.keys(activeSessionStatusMap)) {
@@ -200,6 +211,8 @@ describe('useChatSession handleCommand', () => {
     claimAutoReplyMock.mockReturnValue(true)
     useSessionFamilyMock.mockReturnValue([])
     useSessionStateMock.mockReturnValue(null)
+    useDirectoryMock.mockReturnValue({ currentDirectory: '/workspace/demo' })
+    getPendingPermissionsMock.mockResolvedValue([])
     handlePermissionReplyMock.mockResolvedValue(true)
     refreshPendingRequestsMock.mockResolvedValue(undefined)
     autoApproveState.approvePendingOnFullAuto = false
@@ -411,6 +424,9 @@ describe('useChatSession busy UI signal', () => {
     useSessionFamilyMock.mockReset()
     handlePermissionReplyMock.mockReset()
     refreshPendingRequestsMock.mockReset()
+    resetPendingRequestsMock.mockReset()
+    getPendingPermissionsMock.mockReset()
+    useDirectoryMock.mockReset()
     useSessionStateMock.mockReset()
     pendingPermissionRequestsMock.length = 0
     for (const key of Object.keys(activeSessionStatusMap)) {
@@ -425,6 +441,8 @@ describe('useChatSession busy UI signal', () => {
     claimAutoReplyMock.mockReturnValue(true)
     useSessionFamilyMock.mockReturnValue([])
     useSessionStateMock.mockReturnValue(null)
+    useDirectoryMock.mockReturnValue({ currentDirectory: '/workspace/demo' })
+    getPendingPermissionsMock.mockResolvedValue([])
     handlePermissionReplyMock.mockResolvedValue(true)
     refreshPendingRequestsMock.mockResolvedValue(undefined)
     autoApproveState.approvePendingOnFullAuto = false
@@ -499,5 +517,125 @@ describe('useChatSession busy UI signal', () => {
 
     expect(result.current.isStreaming).toBe(true)
     expect(result.current.messageIsStreaming).toBe(true)
+  })
+})
+
+describe('useChatSession pending request reset on session/directory change', () => {
+  beforeEach(() => {
+    createSessionMock.mockReset()
+    summarizeSessionMock.mockReset()
+    executeCommandMock.mockReset()
+    getSelectableAgentsMock.mockReset()
+    registerSessionConsumerMock.mockReset()
+    updateConsumerSessionIdMock.mockReset()
+    sendNotificationMock.mockReset()
+    isSystemEnabledMock.mockReset()
+    errorHandlerMock.mockReset()
+    getPaneFullAutoModeMock.mockReset()
+    onFullAutoChangeMock.mockReset()
+    autoApproveSubscribeMock.mockReset()
+    shouldAutoApproveMock.mockReset()
+    claimAutoReplyMock.mockReset()
+    releaseAutoReplyMock.mockReset()
+    useSessionFamilyMock.mockReset()
+    handlePermissionReplyMock.mockReset()
+    refreshPendingRequestsMock.mockReset()
+    resetPendingRequestsMock.mockReset()
+    getPendingPermissionsMock.mockReset()
+    useDirectoryMock.mockReset()
+    useSessionStateMock.mockReset()
+    pendingPermissionRequestsMock.length = 0
+    for (const key of Object.keys(activeSessionStatusMap)) {
+      delete activeSessionStatusMap[key]
+    }
+
+    registerSessionConsumerMock.mockReturnValue(vi.fn())
+    getPaneFullAutoModeMock.mockReturnValue('off')
+    onFullAutoChangeMock.mockReturnValue(vi.fn())
+    autoApproveSubscribeMock.mockReturnValue(vi.fn())
+    shouldAutoApproveMock.mockReturnValue(false)
+    claimAutoReplyMock.mockReturnValue(true)
+    useSessionFamilyMock.mockReturnValue([])
+    useSessionStateMock.mockReturnValue(null)
+    useDirectoryMock.mockReturnValue({ currentDirectory: '/workspace/demo' })
+    getPendingPermissionsMock.mockResolvedValue([])
+    handlePermissionReplyMock.mockResolvedValue(true)
+    refreshPendingRequestsMock.mockResolvedValue(undefined)
+    autoApproveState.approvePendingOnFullAuto = false
+    getSelectableAgentsMock.mockResolvedValue([{ name: 'build', mode: 'primary', hidden: false }])
+    isSystemEnabledMock.mockImplementation((type: string) => type !== 'permission')
+
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation(cb => window.setTimeout(() => cb(0), 16))
+    vi.spyOn(window, 'cancelAnimationFrame').mockImplementation(id => {
+      clearTimeout(id)
+    })
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  const render = () =>
+    renderHook(
+      ({ sessionId }: { sessionId: string | null }) =>
+        useChatSession({
+          paneId: 'pane-1',
+          chatAreaRef: { current: null },
+          currentModel: { id: 'model-1', providerId: 'provider-1', variants: [] } as never,
+          refetchModels: vi.fn(async () => {}),
+          sessionId,
+          navigateToSession: vi.fn(),
+          navigateHome: vi.fn(),
+        }),
+      { initialProps: { sessionId: 'session-1' } as { sessionId: string | null } },
+    )
+
+  it('keeps pending requests when effectiveDirectory changes but session stays the same', async () => {
+    const { rerender } = render()
+    await waitFor(() => {
+      expect(getPendingPermissionsMock).toHaveBeenCalled()
+    })
+    expect(resetPendingRequestsMock).not.toHaveBeenCalled()
+
+    const baselineCalls = getPendingPermissionsMock.mock.calls.length
+
+    // effectiveDirectory 变化（如 session 元数据加载完成后 directory 就位）会触发 effect 重跑并重新加载
+    useDirectoryMock.mockReturnValue({ currentDirectory: '/workspace/other' })
+    rerender({ sessionId: 'session-1' })
+
+    await waitFor(() => {
+      expect(getPendingPermissionsMock.mock.calls.length).toBeGreaterThan(baselineCalls)
+    })
+    // 但 reset 被 gate 拦截，SSE 刚推送的 pending 请求得以保留
+    expect(resetPendingRequestsMock).not.toHaveBeenCalled()
+  })
+
+  it('resets pending requests when switching to a different session', async () => {
+    const { rerender } = render()
+
+    rerender({ sessionId: 'session-2' })
+
+    expect(resetPendingRequestsMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('resets pending requests when moving from null to a session', async () => {
+    const { rerender } = render()
+
+    rerender({ sessionId: null })
+
+    expect(resetPendingRequestsMock).toHaveBeenCalledTimes(1)
+
+    rerender({ sessionId: 'session-1' })
+
+    expect(resetPendingRequestsMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('resets pending requests when switching back to a previously visited session', async () => {
+    const { rerender } = render()
+
+    rerender({ sessionId: 'session-2' })
+    rerender({ sessionId: 'session-1' })
+
+    expect(resetPendingRequestsMock).toHaveBeenCalledTimes(2)
   })
 })

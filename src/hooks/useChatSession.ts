@@ -572,9 +572,16 @@ export function useChatSession({
   // Load child sessions and pending permissions on session change
   // 页面刷新时 childSessionStore 是空的，需要先从 API 恢复子 session 关系
   // 然后再加载权限请求（包括子 session 的权限）
-  // 切换 session 时同样要清空旧 session 的 pending 权限/问题，否则 A 会话的请求会残留在 B 会话
+  // 切换 session 时同样要清空旧 session 的 pending 权限/问题，否则 A 会话的请求会残留在 B 会话。
+  // 注意 reset 只应在 routeSessionId 变化（真正的会话切换）时执行：
+  // effectiveDirectory 变化（如 session 元数据加载完成后 directory 就位）也会触发本 effect，
+  // 若此时无条件 reset，会清空 SSE 刚推送、尚未被 /permission 列出的提问，导致弹窗消失。
+  const prevRouteSessionIdRef = useRef(routeSessionId)
   useEffect(() => {
-    resetPendingRequests()
+    if (prevRouteSessionIdRef.current !== routeSessionId) {
+      prevRouteSessionIdRef.current = routeSessionId
+      resetPendingRequests()
+    }
     if (!routeSessionId) {
       return
     }
