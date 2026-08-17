@@ -108,15 +108,11 @@ export const ToolPartView = memo(function ToolPartView({
   const permissionResolved = !permissionRequest && !!cachedPermissionRequest && isFilePermission && !toolDone
 
   const hasPendingInteraction = !!permissionRequest || !!questionRequest
-  // 精简模式：非 edit/write 权限时不隐藏 ToolBody（ToolBody 已经渲染了命令内容）
+  // edit/write 权限（含授权后工具运行中的保留期）
   const isEditWritePermission =
     permissionRequest?.permission === 'edit' || permissionRequest?.permission === 'write' || permissionResolved
-  const hideToolBodyForPermission = isEditWritePermission
-  // 精简模式：ToolBody 已渲染时，InlinePermission 只显示按钮
   // task 工具除外：task renderer 无法显示详细的工具请求内容，需要完整展示权限信息
   const isTaskTool = toolName.toLowerCase() === 'task'
-  const permissionContentHidden =
-    compactInlinePermission && !isEditWritePermission && !isTaskTool && !!permissionRequest
   const isReadable = isReadableTool(toolName)
   const shouldStartExpanded =
     isActive ||
@@ -192,6 +188,13 @@ export const ToolPartView = memo(function ToolPartView({
 
   // Memoize once — shared by both the descriptive header (diffStats) and ToolBody.
   const toolData = useMemo(() => extractToolData(part), [part])
+  // edit/write 权限：有实际内容时显示 ToolBody，让授权前就能看到将修改的 diff；无内容时保持隐藏，由 InlinePermission 兜底展示
+  const hasToolBodyContent = !!(toolData.diff || toolData.files || toolData.input?.trim())
+  const hideToolBodyForPermission = isEditWritePermission && !hasToolBodyContent
+  const permissionContentHidden =
+    !isTaskTool && hasToolBodyContent &&
+    (isEditWritePermission || compactInlinePermission) &&
+    (!!permissionRequest || permissionResolved)
 
   const handleFullscreenChange = useCallback((isFullscreen: boolean) => {
     setIsChildFullscreen(isFullscreen)

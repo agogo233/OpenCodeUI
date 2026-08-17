@@ -21,7 +21,7 @@ export function DefaultRenderer({ part, data, onFullscreenChange }: ToolRenderer
 
   const hasInput = !!data.input?.trim()
   const hasError = !!data.error
-  const hasOutput = !!(data.files || data.diff || data.output?.trim() || data.exitCode !== undefined)
+  const hasOutput = !!(data.files || data.diff || data.output?.trim() || (!isActive && data.exitCode !== undefined))
   const hasDiagnostics = !!data.diagnostics?.length
 
   const showOutput = hasOutput || hasError || (isActive && !hasOutput)
@@ -113,8 +113,8 @@ function OutputBlock({
     )
   }
 
-  // 2. 工具活跃时（running/pending）统一显示 loading — compact 模式下不显示
-  if (isActive) {
+  // 2. 工具活跃时（running/pending）：已有输出数据时直接渲染，否则 loading — compact 模式下 loading 不显示
+  if (isActive && !hasOutput) {
     if (compact) return null
     return (
       <ContentBlock
