@@ -21,6 +21,7 @@ import { useServerStore } from '../../hooks/useServerStore'
 import { useCancelHint } from '../../hooks/useCancelHint'
 import { makeSessionKey, sessionKeyToServerId } from '../../utils/sessionKey'
 import { serverStore } from '../../store/serverStore'
+import type { RevertHistoryItem } from '../../store'
 import { InlineToolRequestContext, type InlineToolRequestContextValue } from './InlineToolRequestContext'
 import { ChatViewportProvider, canUseSplitPane, useChatViewportMaybe, type ChatViewportValue } from './chatViewport'
 import { useChatPageViewModel } from './useChatPageViewModel'
@@ -432,6 +433,9 @@ export const ChatPane = memo(function ChatPane({
   // ============================================
   // Agent Change with Model Sync
   // ============================================
+  // 标记"本会话 agent 已恢复"。用户手动切换 agent 时会立即标记，
+  // 使会话加载完成后的自动恢复跳过，避免加载窗口内被历史消息覆盖。
+  const restoredAgentSessionRef = useRef<string | null>(null)
   const syncModelForAgent = useCallback(
     (agentName: string) => {
       const agent = agents.find(a => a.name === agentName)
@@ -450,8 +454,10 @@ export const ChatPane = memo(function ChatPane({
     (agentName: string) => {
       setSelectedAgent(agentName)
       syncModelForAgent(agentName)
+      // 用户手动选择优先：标记本会话已恢复，阻止加载完成后的自动恢复覆盖
+      restoredAgentSessionRef.current = routeSessionId
     },
-    [setSelectedAgent, syncModelForAgent],
+    [setSelectedAgent, syncModelForAgent, routeSessionId],
   )
 
   const handleToggleAgentWithSync = useCallback(() => {
@@ -505,13 +511,19 @@ export const ChatPane = memo(function ChatPane({
   // ============================================
   // Agent Restoration Effect
   // ============================================
+  // 记录已处理的恢复内容，避免 agents 重载（restoreAgentFromMessage 引用变化）重复强制恢复
+  const lastAgentRestoreContentRef = useRef<RevertHistoryItem | null>(null)
   useEffect(() => {
-    if (inputRestoreContent?.agent) {
-      restoreAgentFromMessage(inputRestoreContent.agent)
+    if (!inputRestoreContent?.agent) {
+      lastAgentRestoreContentRef.current = null
+      return
     }
+    // 仅在恢复内容引用变化时执行
+    if (lastAgentRestoreContentRef.current === inputRestoreContent) return
+    lastAgentRestoreContentRef.current = inputRestoreContent
+    restoreAgentFromMessage(inputRestoreContent.agent)
   }, [inputRestoreContent, restoreAgentFromMessage])
 
-  const restoredAgentSessionRef = useRef<string | null>(null)
   useEffect(() => {
     if (!routeSessionId || restoredAgentSessionRef.current === routeSessionId) return
     if (messages.length === 0) return

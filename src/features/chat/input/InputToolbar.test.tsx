@@ -237,4 +237,43 @@ describe('InputToolbar file selection', () => {
 
     await waitFor(() => expect(screen.getByRole('textbox', { name: 'Chat input' })).toHaveFocus())
   })
+
+  it('falls back to the first selectable agent when none is selected', () => {
+    const reversedAgents: ApiAgent[] = [
+      { name: 'plan', description: 'Plan work', mode: 'primary', permission: [], options: {} },
+      { name: 'build', description: 'Build things', mode: 'primary', permission: [], options: {} },
+    ]
+
+    render(
+      <InputToolbar
+        agents={reversedAgents}
+        selectedAgent=""
+        onAgentChange={vi.fn()}
+        fileCapabilities={{ image: false, pdf: false, audio: false, video: false }}
+        onFilesSelected={vi.fn()}
+        canSend={false}
+        onSend={vi.fn()}
+      />,
+    )
+
+    // 锁定"第一个可选项"语义，而非硬编码 'build' 字面量
+    expect(screen.getByTitle('plan')).toBeInTheDocument()
+  })
+
+  it('does not hardcode "build" when agents have not loaded yet', () => {
+    const { container } = render(
+      <InputToolbar
+        agents={[]}
+        selectedAgent=""
+        onAgentChange={vi.fn()}
+        fileCapabilities={{ image: false, pdf: false, audio: false, video: false }}
+        onFilesSelected={vi.fn()}
+        canSend={false}
+        onSend={vi.fn()}
+      />,
+    )
+
+    // agents 未加载时不渲染 agent 选择器，也不应出现硬编码的 "build" 标签
+    expect(container.textContent).not.toContain('build')
+  })
 })

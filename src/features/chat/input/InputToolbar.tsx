@@ -304,6 +304,9 @@ export function InputToolbar({
 
   const selectableAgents = agents.filter(a => a.mode !== 'subagent' && !a.hidden)
   const currentAgent = agents.find(a => a.name === selectedAgent)
+  // 显示层兜底：selectedAgent 为空时（从未选择 / agents 未加载）不硬编码 'build'，
+  // 已加载则显示第一个可选项，避免误导当前 agent（按钮仅在 agents>1 时渲染，此处始终有值）。
+  const displayAgentName = selectedAgent || selectableAgents[0]?.name || ''
 
   return (
     <div className="flex items-center justify-between px-3 pb-3 relative">
@@ -348,7 +351,7 @@ export function InputToolbar({
               title={
                 currentAgent
                   ? `${currentAgent.name}${currentAgent.description ? ': ' + currentAgent.description : ''}`
-                  : selectedAgent || 'build'
+                  : displayAgentName
               }
             >
               {/* 紧凑信息流隐藏 AgentIcon 节省空间 */}
@@ -358,7 +361,7 @@ export function InputToolbar({
               >
                 <AgentIcon />
               </span>
-              <span className="text-[length:var(--fs-sm)] text-text-300 capitalize truncate">{selectedAgent || 'build'}</span>
+              <span className="text-[length:var(--fs-sm)] text-text-300 capitalize truncate">{displayAgentName}</span>
               <span className={`text-text-400 shrink-0 ${isCompact ? 'hidden' : ''}`}>
                 <ChevronDownIcon />
               </span>
