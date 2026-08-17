@@ -183,7 +183,7 @@ describe('ToolPartView pending edit/write permission content', () => {
       inlineToolRequests: true,
       immersiveMode: false,
       compactInlinePermission: false,
-    })
+    } as never)
     vi.mocked(findPermissionRequestForTool).mockReset()
     vi.mocked(extractToolData).mockReset()
     vi.mocked(DefaultRenderer).mockReset()
