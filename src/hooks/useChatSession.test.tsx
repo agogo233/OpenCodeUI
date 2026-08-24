@@ -639,3 +639,130 @@ describe('useChatSession pending request reset on session/directory change', () 
     expect(resetPendingRequestsMock).toHaveBeenCalledTimes(2)
   })
 })
+
+describe('useChatSession agent restoration', () => {
+  beforeEach(() => {
+    getSelectableAgentsMock.mockReset()
+    registerSessionConsumerMock.mockReset()
+    getPaneFullAutoModeMock.mockReset()
+    onFullAutoChangeMock.mockReset()
+    autoApproveSubscribeMock.mockReset()
+    useSessionFamilyMock.mockReset()
+    handlePermissionReplyMock.mockReset()
+    refreshPendingRequestsMock.mockReset()
+    getPendingPermissionsMock.mockReset()
+    useDirectoryMock.mockReset()
+    useSessionStateMock.mockReset()
+
+    registerSessionConsumerMock.mockReturnValue(vi.fn())
+    getPaneFullAutoModeMock.mockReturnValue('off')
+    onFullAutoChangeMock.mockReturnValue(vi.fn())
+    autoApproveSubscribeMock.mockReturnValue(vi.fn())
+    useSessionFamilyMock.mockReturnValue([])
+    useDirectoryMock.mockReturnValue({ currentDirectory: '/workspace/demo' })
+    getPendingPermissionsMock.mockResolvedValue([])
+    handlePermissionReplyMock.mockResolvedValue(true)
+    refreshPendingRequestsMock.mockResolvedValue(undefined)
+
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation(cb => window.setTimeout(() => cb(0), 16))
+    vi.spyOn(window, 'cancelAnimationFrame').mockImplementation(id => {
+      clearTimeout(id)
+    })
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  const AGENTS = [
+    { name: 'build', mode: 'primary', hidden: false },
+    { name: 'plan', mode: 'primary', hidden: false },
+  ]
+
+  // serverStorage.get 全局 mock 返回 'build'，即初始 selectedAgent='build'（模拟已持久化的选择）
+  const render = () =>
+    renderHook(
+      ({ sessionId }: { sessionId: string | null }) =>
+        useChatSession({
+          paneId: 'pane-1',
+          chatAreaRef: { current: null },
+          currentModel: { id: 'model-1', providerId: 'provider-1', variants: [] } as never,
+          refetchModels: vi.fn(async () => {}),
+          sessionId,
+          navigateToSession: vi.fn(),
+          navigateHome: vi.fn(),
+        }),
+      { initialProps: { sessionId: 'session-1' } as { sessionId: string | null } },
+    )
+
+  const sessionStateWithLastUserMessage = (info: Record<string, unknown>) => ({
+    isStreaming: false,
+    directory: '/workspace/demo',
+    canUndo: false,
+    canRedo: false,
+    redoSteps: [],
+    revertedContent: null,
+    hasMoreHistory: false,
+    loadState: 'loaded' as const,
+    messages: [{ info: { id: 'u1', role: 'user', ...info } }],
+  })
+
+  it('restores agent from last user message even when agents resolve after messages', async () => {
+    // 复现竞态：消息先就绪，agents 列表延迟返回
+    let resolveAgents: (value: typeof AGENTS) => void = () => {}
+    getSelectableAgentsMock.mockReturnValue(new Promise<typeof AGENTS>(resolve => {
+      resolveAgents = resolve
+    }))
+    useSessionStateMock.mockReturnValue(sessionStateWithLastUserMessage({ agent: 'plan' }))
+
+    const { result } = render()
+
+    // agents 未就绪窗口内保持初始选择
+    expect(result.current.selectedAgent).toBe('build')
+
+    await act(async () => {
+      resolveAgents(AGENTS)
+    })
+
+    await waitFor(() => {
+      expect(result.current.selectedAgent).toBe('plan')
+    })
+  })
+
+  it('keeps current selection when last user message has no agent field', async () => {
+    getSelectableAgentsMock.mockResolvedValue(AGENTS)
+    useSessionStateMock.mockReturnValue(sessionStateWithLastUserMessage({}))
+
+    const { result } = render()
+
+    await act(async () => {})
+
+    await waitFor(() => {
+      expect(getSelectableAgentsMock).toHaveBeenCalled()
+    })
+    expect(result.current.selectedAgent).toBe('build')
+  })
+
+  it('skips auto restore after explicit markAgentRestored', async () => {
+    let resolveAgents: (value: typeof AGENTS) => void = () => {}
+    getSelectableAgentsMock.mockReturnValue(new Promise<typeof AGENTS>(resolve => {
+      resolveAgents = resolve
+    }))
+    useSessionStateMock.mockReturnValue(sessionStateWithLastUserMessage({ agent: 'plan' }))
+
+    const { result } = render()
+
+    // 模拟用户手动切换后的标记（handleAgentChange 的核心副作用）
+    act(() => {
+      result.current.markAgentRestored()
+    })
+
+    await act(async () => {
+      resolveAgents(AGENTS)
+    })
+
+    await act(async () => {})
+
+    expect(result.current.selectedAgent).toBe('build')
+  })
+})

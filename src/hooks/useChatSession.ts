@@ -1152,6 +1152,31 @@ export function useChatSession({
     [agents, setSelectedAgent],
   )
 
+  // 会话级 agent 恢复：从最后一条用户消息恢复选中 agent。
+  // agents 未就绪时不标记完成，待加载后由依赖变化触发重试，
+  // 避免恢复被静默跳过后被兜底逻辑误设为第一个 primary agent（如 build）。
+  const restoredAgentSessionRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    if (!routeSessionId || restoredAgentSessionRef.current === routeSessionId) return
+    if (messages.length === 0) return
+    const lastUserMsg = [...messages].reverse().find(m => m.info.role === 'user')
+    if (!lastUserMsg || !('agent' in lastUserMsg.info)) {
+      restoredAgentSessionRef.current = routeSessionId
+      return
+    }
+    if (agents.length === 0) return
+    restoredAgentSessionRef.current = routeSessionId
+    restoreAgentFromMessage((lastUserMsg.info as { agent?: string }).agent)
+    // Streaming only changes message content; agent restoration follows session/load boundaries.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [routeSessionId, messages.length, agents.length, restoreAgentFromMessage])
+
+  /** 用户手动切换 agent 后调用，阻止本会话的自动恢复覆盖手选结果 */
+  const markAgentRestored = useCallback(() => {
+    restoredAgentSessionRef.current = routeSessionIdRef.current
+  }, [])
+
   // Copy last AI response to clipboard
   const handleCopyLastResponse = useCallback(async () => {
     const lastAssistant = [...messages].reverse().find(m => m.info.role === 'assistant')
@@ -1236,5 +1261,6 @@ export function useChatSession({
     handleToggleAgent,
     handleCopyLastResponse,
     restoreAgentFromMessage,
+    markAgentRestored,
   }
 }
