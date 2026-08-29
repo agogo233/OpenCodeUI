@@ -61,3 +61,17 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Report image size
+        run: |
+          set -euo pipefail
+          REPO="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
+          RAW="$(docker buildx imagetools inspect --raw "${REPO}:${{ steps.meta.outputs.version }}")"
+          # buildx 推送后 tag 指向 index（含 attestation），需跟随到 linux/amd64 子 manifest 才有镜像 layers。
+          if printf '%s' "$RAW" | jq -e '.manifests' >/dev/null; then
+            DIGEST="$(printf '%s' "$RAW" \
+              | jq -r '.manifests[] | select(.platform.os=="linux" and .platform.architecture=="amd64") | .digest')"
+            RAW="$(docker buildx imagetools inspect --raw "${REPO}@${DIGEST}")"
+          fi
+          printf '%s' "$RAW" \
+            | jq -r '[.layers[].size] | add / 1048576 | round | "\(.) MiB (compressed)"'
