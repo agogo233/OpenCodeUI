@@ -58,9 +58,19 @@ EOF
   fi
 }
 
+ensure_rtk_plugin() {
+  # rtk 插件文件写入 /root/.config（opencode-home 卷），只能在运行时生成；
+  # 仅在插件缺失时初始化，不覆盖用户已有的 ~/.config/rtk/config.toml。
+  command -v rtk >/dev/null 2>&1 || return 0
+  if [ ! -f /root/.config/opencode/plugins/rtk.ts ]; then
+    rtk init -g --opencode </dev/null || echo "rtk init failed, continuing without rtk plugin"
+  fi
+}
+
 ensure_mise
 ensure_opencode
 ensure_package_mirrors
+ensure_rtk_plugin
 
 if [ "$#" -eq 0 ]; then
   set -- opencode serve --port 4096 --hostname 0.0.0.0
