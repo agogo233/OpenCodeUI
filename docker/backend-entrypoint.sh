@@ -63,7 +63,7 @@ ensure_rtk_plugin() {
   # 仅在插件缺失时初始化，不覆盖用户已有的 ~/.config/rtk/config.toml。
   command -v rtk >/dev/null 2>&1 || return 0
   if [ ! -f /root/.config/opencode/plugins/rtk.ts ]; then
-    rtk init -g --opencode </dev/null || echo "rtk init failed, continuing without rtk plugin"
+    rtk init -g --opencode </dev/null || echo "rtk init failed, continuing without rtk plugin" >&2
   fi
 }
 

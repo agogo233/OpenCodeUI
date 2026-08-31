@@ -104,14 +104,15 @@ RUN case "${TARGETARCH}" in \
 # 安装 rtk（token 节省命令包装器，opencode 插件依赖）。Release 仅提供 linux-amd64
 # 静态二进制，arm64 跳过（插件检测不到 rtk 会自动禁用）。放 /usr/local/bin，
 # 避开 opencode-home:/root 卷遮蔽；插件文件由入口脚本运行时 rtk init 生成。
-RUN if [ "${TARGETARCH}" = "amd64" ]; then \
-      curl -fsSL -o /usr/local/bin/rtk \
-        "https://github.com/agogo233/rtk/releases/download/latest/rtk-linux-amd64" \
-      && chmod +x /usr/local/bin/rtk \
-      && rtk --version; \
-    else \
-      echo "rtk: no linux-arm64 release asset, skipped"; \
-    fi
+RUN case "${TARGETARCH}" in \
+      amd64) \
+        curl -fsSL -o /usr/local/bin/rtk \
+          "https://github.com/agogo233/rtk/releases/download/latest/rtk-linux-amd64" \
+        && chmod +x /usr/local/bin/rtk \
+        && rtk --version ;; \
+      arm64) echo "rtk: no linux-arm64 release asset, skipped" ;; \
+      *) echo "unsupported arch: ${TARGETARCH}" >&2; exit 1 ;; \
+    esac
 
 # 工作目录
 RUN mkdir -p /workspace
