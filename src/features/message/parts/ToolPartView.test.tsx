@@ -216,3 +216,51 @@ describe('ToolPartView pending edit/write permission content', () => {
     expect(DefaultRenderer).not.toHaveBeenCalled()
   })
 })
+
+function createReadToolPart(title?: string): ToolPart {
+  return {
+    id: 'tool-1',
+    sessionID: 'session-1',
+    messageID: 'message-1',
+    type: 'tool',
+    callID: 'call-1',
+    tool: 'read',
+    state: {
+      status: 'running',
+      title,
+      input: { filePath: 'src/foo.ts' },
+      time: { start: 7_500 },
+    },
+  }
+}
+
+describe('ToolPartView title fallback to file path', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    vi.setSystemTime(10_000)
+    getActiveCalibratedNowMock.mockReturnValue(undefined)
+    vi.mocked(extractToolData).mockReset()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.restoreAllMocks()
+  })
+
+  it('shows file path in header when tool has no title or description', () => {
+    vi.mocked(extractToolData).mockReturnValue({ filePath: 'src/foo.ts' })
+
+    render(<ToolPartView part={createReadToolPart()} />)
+
+    expect(screen.getByText('src/foo.ts')).toBeInTheDocument()
+  })
+
+  it('prefers state.title over file path', () => {
+    vi.mocked(extractToolData).mockReturnValue({ filePath: 'src/foo.ts' })
+
+    render(<ToolPartView part={createReadToolPart('custom title')} />)
+
+    expect(screen.getByText('custom title')).toBeInTheDocument()
+    expect(screen.queryByText('src/foo.ts')).not.toBeInTheDocument()
+  })
+})

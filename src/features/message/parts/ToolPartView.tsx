@@ -55,7 +55,10 @@ export const ToolPartView = memo(function ToolPartView({
 }: ToolPartViewProps) {
   const { t } = useTranslation('message')
   const { state, tool: toolName } = part
-  const title = state.title || getInputDescription(part) || ''
+
+  // Memoize once — shared by the title, descriptive header (diffStats) and ToolBody.
+  const toolData = useMemo(() => extractToolData(part), [part])
+  const title = state.title || getInputDescription(part) || toolData.filePath || ''
 
   const isActive = state.status === 'running' || state.status === 'pending'
   const isError = state.status === 'error'
@@ -186,8 +189,6 @@ export const ToolPartView = memo(function ToolPartView({
   // 需要渲染权限组件的请求对象：优先用活跃的，否则用缓存的（resolved 态）
   const displayPermission = permissionRequest || (permissionResolved ? cachedPermissionRequest : undefined)
 
-  // Memoize once — shared by both the descriptive header (diffStats) and ToolBody.
-  const toolData = useMemo(() => extractToolData(part), [part])
   // edit/write 权限：有实际内容时显示 ToolBody，让授权前就能看到将修改的 diff；无内容时保持隐藏，由 InlinePermission 兜底展示
   const hasToolBodyContent = !!(toolData.diff || toolData.files || toolData.input?.trim())
   const hideToolBodyForPermission = isEditWritePermission && !hasToolBodyContent
