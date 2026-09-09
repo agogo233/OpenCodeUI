@@ -8,7 +8,8 @@ import { memo, useState, useEffect, useCallback, useRef, useMemo, useId } from '
 import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
 import { RetryIcon, ChevronRightIcon, MaximizeIcon, ClockIcon, GitBranchIcon, GitDiffIcon, LayersIcon } from './Icons'
-import { getMaterialIconUrl } from '../utils/materialIcons'
+import { getMaterialIconName } from '../utils/materialIcons'
+import { MaterialIcon } from './MaterialIcon'
 import { DiffViewer, useDiffViewerData, type ViewMode } from './DiffViewer'
 import { ViewModeSwitch } from './FullscreenViewer'
 import { getCurrentProject, initGitProject } from '../api/client'
@@ -872,18 +873,7 @@ export const SessionChangesPanel = memo(function SessionChangesPanel({
                        text-text-300
                      `}
                       >
-                        <img
-                          src={getMaterialIconUrl(diff.file, 'file')}
-                          alt=""
-                          width={16}
-                          height={16}
-                          className="shrink-0"
-                          loading="lazy"
-                          decoding="async"
-                          onError={e => {
-                            e.currentTarget.style.visibility = 'hidden'
-                          }}
-                        />
+                        <MaterialIcon icon={getMaterialIconName(diff.file, 'file')} size={16} className="shrink-0" />
                         <span className={`flex-1 min-w-0 font-mono truncate ${FILE_STATUS_COLOR[fileStatus]}`}>
                           {diff.file}
                         </span>
@@ -1237,18 +1227,7 @@ const ChangesTreeItem = memo(function ChangesTreeItem({
           style={{ paddingLeft }}
         >
           <ChevronRightIcon size={12} className={`shrink-0 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
-          <img
-            src={getMaterialIconUrl(node.path, 'directory', isExpanded)}
-            alt=""
-            width={16}
-            height={16}
-            className="shrink-0"
-            loading="lazy"
-            decoding="async"
-            onError={e => {
-              e.currentTarget.style.visibility = 'hidden'
-            }}
-          />
+          <MaterialIcon icon={getMaterialIconName(node.path, 'directory', isExpanded)} size={16} className="shrink-0" />
           <span className={`flex-1 min-w-0 truncate text-left ${node.status ? statusColor : ''}`}>{node.name}</span>
           <div className="flex items-center gap-1.5 text-[length:var(--fs-xxs)] font-mono pr-3 shrink-0">
             {node.additions > 0 && <span className="text-success-100">+{node.additions}</span>}
@@ -1287,18 +1266,7 @@ const ChangesTreeItem = memo(function ChangesTreeItem({
        `}
       style={{ paddingLeft: paddingLeft + 16 }}
     >
-      <img
-        src={getMaterialIconUrl(node.name, 'file')}
-        alt=""
-        width={16}
-        height={16}
-        className="shrink-0"
-        loading="lazy"
-        decoding="async"
-        onError={e => {
-          e.currentTarget.style.visibility = 'hidden'
-        }}
-      />
+      <MaterialIcon icon={getMaterialIconName(node.name, 'file')} size={16} className="shrink-0" />
       <span
         className={`flex-1 min-w-0 font-mono truncate text-left ${node.status ? FILE_STATUS_COLOR[node.status] : ''}`}
       >

@@ -1,7 +1,7 @@
 // ============================================
 // Material Icon Theme - Lean Icon Resolver
 // Hand-written mapping for ~80 common file types + folders
-// SVGs served from public/material-icons/ (copied at postinstall)
+// SVGs bundled into public/material-icons/sprite.svg (built at postinstall)
 // ============================================
 
 /** icon SVG filename (without .svg) */
@@ -424,8 +424,6 @@ const DEFAULT_FOLDER_OPEN: Icon = 'folder-open'
 
 // ---- helpers ----
 
-const _base = import.meta.env.BASE_URL
-
 function basename(path: string): string {
   return path.replace(/\\/g, '/').split('/').filter(Boolean).pop() ?? ''
 }
@@ -453,9 +451,8 @@ function resolveFolderIcon(path: string, expanded: boolean): Icon {
 }
 
 /**
- * Get the material icon SVG URL for a file or folder.
+ * Get the material icon name (sprite symbol id suffix) for a file or folder.
  */
-export function getMaterialIconUrl(path: string, type: 'file' | 'directory', expanded = false): string {
-  const icon = type === 'directory' ? resolveFolderIcon(path, expanded) : resolveFileIcon(path)
-  return `${_base}material-icons/${icon}.svg`
+export function getMaterialIconName(path: string, type: 'file' | 'directory', expanded = false): string {
+  return type === 'directory' ? resolveFolderIcon(path, expanded) : resolveFileIcon(path)
 }

@@ -3,7 +3,8 @@ import { useTranslation } from 'react-i18next'
 import { ContentBlock } from '../../../../components'
 import { AlertCircleIcon } from '../../../../components/Icons'
 import { detectLanguage } from '../../../../utils/languageUtils'
-import { getMaterialIconUrl } from '../../../../utils/materialIcons'
+import { getMaterialIconName } from '../../../../utils/materialIcons'
+import { MaterialIcon } from '../../../../components/MaterialIcon'
 import { themeStore } from '../../../../store/themeStore'
 import type { ToolRendererProps, ExtractedToolData } from '../types'
 
@@ -209,18 +210,7 @@ function OutputBlock({
 
 function FileResultIcon({ filePath }: { filePath: string }) {
   return (
-    <img
-      src={getMaterialIconUrl(filePath, 'file')}
-      alt=""
-      width={14}
-      height={14}
-      className="block h-3.5 w-3.5 shrink-0"
-      loading="lazy"
-      decoding="async"
-      onError={event => {
-        event.currentTarget.style.visibility = 'hidden'
-      }}
-    />
+    <MaterialIcon icon={getMaterialIconName(filePath, 'file')} size={14} className="block h-3.5 w-3.5 shrink-0" />
   )
 }
 
