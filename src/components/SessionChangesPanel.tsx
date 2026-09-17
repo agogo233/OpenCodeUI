@@ -352,7 +352,7 @@ export const SessionChangesPanel = memo(function SessionChangesPanel({
         setProjectLoading(false)
       }
     }
-  }, [directory, sessionId, t])
+  }, [directory, sessionId, t, serverId])
 
   const loadDiffMode = useCallback(
     async (mode: ChangeMode, options?: { force?: boolean; project?: ApiProject | null }) => {
@@ -397,7 +397,7 @@ export const SessionChangesPanel = memo(function SessionChangesPanel({
         }
       }
     },
-    [directory, loadedModes, project, sessionId, t],
+    [directory, loadedModes, project, sessionId, t, serverId],
   )
 
   useEffect(() => {
@@ -484,7 +484,7 @@ export const SessionChangesPanel = memo(function SessionChangesPanel({
     } finally {
       setInitializingGit(false)
     }
-  }, [directory, loadProjectState, t])
+  }, [directory, loadProjectState, t, serverId])
 
   // 选中文件
   const handleSelectFile = useCallback((file: string) => {
