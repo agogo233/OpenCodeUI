@@ -4,12 +4,20 @@
 :3000 {
 	# API 反代（strip /api 前缀，SSE 需要 flush_interval -1）
 	handle_path /api/* {
+		# 后端 Basic 认证由前端容器代持：compose 把 OPENCODE_SERVER_PASSWORD
+		# 换算成 base64 写入 OPENCODE_AUTH_BASIC（见启动命令）。
+		# 浏览器不给终端 WebSocket 自动携带认证凭据，透传客户端头在终端
+		# 场景等于没有头，会 401 导致终端无法连接。
+		# 未设置 OPENCODE_AUTH_BASIC（即后端未启用密码）时不注入任何
+		# Authorization 头，与直接访问无认证后端完全一致。
+		@with_auth expression `{env.OPENCODE_AUTH_BASIC} != ""`
+		reverse_proxy @with_auth {$BACKEND_URL:host.docker.internal:4096} {
+			header_up Host {upstream_hostport}
+			header_up Authorization "Basic {env.OPENCODE_AUTH_BASIC}"
+			flush_interval -1
+		}
 		reverse_proxy {$BACKEND_URL:host.docker.internal:4096} {
 			header_up Host {upstream_hostport}
-			# 透传客户端 Authorization 头（后端开启 OPENCODE_SERVER_PASSWORD 认证时必需）
-			# 前端在服务器连接界面填入用户名/密码后会为每个请求携带该头；这里显式转发给后端，
-			# 未携带时 Caddy 会删除空头，不影响无认证场景。
-			header_up Authorization {http.request.header.Authorization}
 			flush_interval -1
 		}
 	}

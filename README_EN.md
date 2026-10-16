@@ -71,22 +71,29 @@ Visit `http://localhost:3000`.
 BACKEND_URL=your-server.com:4096 PORT=8080 docker compose -f docker-compose.standalone.yml up -d
 ```
 
-| Environment Variable | Default                     | Description                                      |
-| -------------------- | --------------------------- | ------------------------------------------------ |
-| `BACKEND_URL`        | `host.docker.internal:4096` | opencode serve address (without protocol prefix) |
-| `PORT`               | `3000`                      | Frontend listening port                          |
+| Environment Variable       | Default                     | Description                                                   |
+| -------------------------- | --------------------------- | ------------------------------------------------------------- |
+| `BACKEND_URL`              | `host.docker.internal:4096` | opencode serve address (without protocol prefix)              |
+| `PORT`                     | `3000`                      | Frontend listening port                                       |
+| `OPENCODE_SERVER_USERNAME` | `opencode`                  | Backend Basic auth username (keep in sync with backend)       |
+| `OPENCODE_SERVER_PASSWORD` | (empty)                     | Backend Basic auth password; empty means no auth, no proxying |
 
 **When the backend enables password auth (`OPENCODE_SERVER_PASSWORD`):**
 
-After you enter the username/password in the frontend's server connection dialog, the frontend automatically attaches an `Authorization: Basic <base64>` header to every request. The built-in Caddy config explicitly forwards this header, so no extra setup is needed.
+Browsers do not automatically attach credentials to terminal WebSocket connections, so the password is held by the frontend container: the `OPENCODE_SERVER_USERNAME`/`OPENCODE_SERVER_PASSWORD` values from `.env` are converted into a Basic header, injected uniformly by Caddy when proxying. No configuration is needed in the browser or the OpenCodeUI UI, and the terminal connects directly. When unset, the value is not exported, Caddy injects no `Authorization` header at all, and the passwordless scenario behaves exactly like accessing the backend directly.
 
-If you use a custom Caddyfile (or hit 401 auth failures), add this to the `reverse_proxy` block:
+If you use a custom Caddyfile, the same pattern is required in the `handle_path /api/*` block (`OPENCODE_AUTH_BASIC` is exported by the startup command, with value `base64(username:password)`; when not exported the expression does not match, and the branch without an auth header is used automatically):
 
 ```caddyfile
 handle_path /api/* {
+	@with_auth expression `{env.OPENCODE_AUTH_BASIC} != ""`
+	reverse_proxy @with_auth your-opencode-serve:4096 {
+		header_up Host {upstream_hostport}
+		header_up Authorization "Basic {env.OPENCODE_AUTH_BASIC}"
+		flush_interval -1
+	}
 	reverse_proxy your-opencode-serve:4096 {
 		header_up Host {upstream_hostport}
-		header_up Authorization {http.request.header.Authorization}
 		flush_interval -1
 	}
 }

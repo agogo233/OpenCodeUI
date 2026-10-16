@@ -71,22 +71,29 @@ docker compose -f docker-compose.standalone.yml up -d
 BACKEND_URL=your-server.com:4096 PORT=8080 docker compose -f docker-compose.standalone.yml up -d
 ```
 
-| 环境变量      | 默认值                      | 说明                                |
-| ------------- | --------------------------- | ----------------------------------- |
-| `BACKEND_URL` | `host.docker.internal:4096` | opencode serve 地址（不含协议前缀） |
-| `PORT`        | `3000`                      | 前端监听端口                        |
+| 环境变量                   | 默认值                      | 说明                                          |
+| -------------------------- | --------------------------- | --------------------------------------------- |
+| `BACKEND_URL`              | `host.docker.internal:4096` | opencode serve 地址（不含协议前缀）           |
+| `PORT`                     | `3000`                      | 前端监听端口                                  |
+| `OPENCODE_SERVER_USERNAME` | `opencode`                  | 后端 Basic 认证用户名（与后端容器保持一致）   |
+| `OPENCODE_SERVER_PASSWORD` | 空                          | 后端 Basic 认证密码；为空则后端免密、不做代持 |
 
 **后端开启密码认证时（`OPENCODE_SERVER_PASSWORD`）：**
 
-前端在服务器连接界面填入 用户名/密码 后会为每个请求自动携带 `Authorization: Basic <base64>` 头。镜像内置的 Caddy 已显式透传该头，无需额外配置。
+浏览器不会为终端 WebSocket 自动携带认证凭据，因此密码由前端容器代持：把 `.env` 里的 `OPENCODE_SERVER_USERNAME`/`OPENCODE_SERVER_PASSWORD` 换算成 Basic 头，由 Caddy 在反代时统一注入。浏览器和 OpenCodeUI 界面均无需任何配置，终端可直接连接。未设置密码时不导出该值，Caddy 不注入任何 `Authorization` 头，无密码场景与直接访问后端完全一致。
 
-若你使用自定义 Caddyfile（或遇到 401 认证失败），在 `reverse_proxy` 块中添加：
+若你使用自定义 Caddyfile，`handle_path /api/*` 块中需要相同写法（`OPENCODE_AUTH_BASIC` 由启动命令导出，值为 `base64(用户名:密码)`；未导出时表达式不匹配，自动走不带认证头的分支）：
 
 ```caddyfile
 handle_path /api/* {
+	@with_auth expression `{env.OPENCODE_AUTH_BASIC} != ""`
+	reverse_proxy @with_auth your-opencode-serve:4096 {
+		header_up Host {upstream_hostport}
+		header_up Authorization "Basic {env.OPENCODE_AUTH_BASIC}"
+		flush_interval -1
+	}
 	reverse_proxy your-opencode-serve:4096 {
 		header_up Host {upstream_hostport}
-		header_up Authorization {http.request.header.Authorization}
 		flush_interval -1
 	}
 }
