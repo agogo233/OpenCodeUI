@@ -10,7 +10,7 @@ import { SerializeAddon } from '@xterm/addon-serialize'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import { WebglAddon } from '@xterm/addon-webgl'
 import '@xterm/xterm/css/xterm.css'
-import { getPtyConnectUrl, updatePtySession } from '../api/pty'
+import { getPtyConnectTicket, getPtyConnectUrl, maskUrlSecrets, updatePtySession } from '../api/pty'
 import { useTheme } from '../hooks'
 import { layoutStore, useLayoutStore } from '../store/layoutStore'
 import { useInputCapabilities } from '../hooks/useInputCapabilities'
@@ -449,6 +449,9 @@ export const Terminal = memo(function Terminal({ ptyId, directory, serverId, isA
     const restoreSize = effectBuffer && effectCols && effectRows ? { cols: effectCols, rows: effectRows } : undefined
 
     mountedRef.current = true
+    // 本 effect 运行专属的失效标记：mountedRef 是组件级 ref，
+    // effect 重跑（如切换服务器）时会被新运行重新置 true，无法用来拦住旧运行的异步回调
+    let disposed = false
     cursorRef.current = effectCursor
     let ws: WebSocket | null = null
     let wsConnectTimeout: number | null = null
@@ -655,6 +658,56 @@ export const Terminal = memo(function Terminal({ ptyId, directory, serverId, isA
       }, delay)
     }
 
+    const openBrowserWebSocket = async (cursor: number) => {
+      if (disposed) return
+
+      // 浏览器原生 WebSocket 不能设置 header，把账号密码塞进 URL 又会被拒绝：
+      // 先换一次性 ticket 再建连；换不到 ticket 时回退旧的 URL 认证方式
+      const ticket = await getPtyConnectTicket(ptyId, terminalDirectory, serverId)
+
+      if (disposed) return
+
+      const wsUrl = getPtyConnectUrl(ptyId, terminalDirectory, { cursor, ticket }, serverId)
+      logger.log(
+        '[Terminal] Connecting to:',
+        maskUrlSecrets(wsUrl),
+        ticket ? '(via ticket)' : '(legacy URL auth)',
+        reconnectAttempt > 0 ? `(reconnect #${reconnectAttempt})` : '',
+      )
+
+      ws = new WebSocket(wsUrl)
+      ws.binaryType = 'arraybuffer'
+      transportSendRef.current = data => {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(data)
+        }
+      }
+      transportDisconnectRef.current = () => ws?.close()
+
+      ws.onopen = handleConnected
+
+      ws.onmessage = event => {
+        if (!mountedRef.current) return
+        const frame = parsePtyFrame(event.data as string | ArrayBuffer)
+        if (!frame) return
+        if (frame.kind === 'control') {
+          cursorRef.current = frame.cursor
+          return
+        }
+        terminal.write(frame.data)
+        cursorRef.current += frame.data.length
+      }
+
+      ws.onclose = e => {
+        handleDisconnected({ code: e.code, reason: e.reason })
+      }
+
+      ws.onerror = e => {
+        logger.log('[Terminal] WebSocket error:', ptyId, e)
+        // onclose 会在 onerror 之后触发，重连逻辑交给 onclose
+      }
+    }
+
     const connectTransport = () => {
       if (!mountedRef.current) return
 
@@ -694,7 +747,7 @@ export const Terminal = memo(function Terminal({ ptyId, directory, serverId, isA
           )
           .then(connection => {
             if (!connection) return
-            if (!mountedRef.current) {
+            if (disposed) {
               connection.close()
               return
             }
@@ -707,39 +760,11 @@ export const Terminal = memo(function Terminal({ ptyId, directory, serverId, isA
             handleDisconnected({ reason: message })
           })
       } else {
-        const wsUrl = getPtyConnectUrl(ptyId, terminalDirectory, { cursor }, serverId)
-        logger.log('[Terminal] Connecting to:', wsUrl, reconnectAttempt > 0 ? `(reconnect #${reconnectAttempt})` : '')
-        ws = new WebSocket(wsUrl)
-        ws.binaryType = 'arraybuffer'
-        transportSendRef.current = data => {
-          if (ws && ws.readyState === WebSocket.OPEN) {
-            ws.send(data)
-          }
-        }
-        transportDisconnectRef.current = () => ws?.close()
-
-        ws.onopen = handleConnected
-
-        ws.onmessage = event => {
-          if (!mountedRef.current) return
-          const frame = parsePtyFrame(event.data as string | ArrayBuffer)
-          if (!frame) return
-          if (frame.kind === 'control') {
-            cursorRef.current = frame.cursor
-            return
-          }
-          terminal.write(frame.data)
-          cursorRef.current += frame.data.length
-        }
-
-        ws.onclose = e => {
-          handleDisconnected({ code: e.code, reason: e.reason })
-        }
-
-        ws.onerror = e => {
-          logger.log('[Terminal] WebSocket error:', ptyId, e)
-          // onclose 会在 onerror 之后触发，重连逻辑交给 onclose
-        }
+        void openBrowserWebSocket(cursor).catch(error => {
+          const message = error instanceof Error ? error.message : String(error)
+          logger.log('[Terminal] Failed to open WebSocket:', ptyId, message)
+          handleDisconnected({ reason: message })
+        })
       }
 
       disposeData?.dispose()
@@ -770,6 +795,7 @@ export const Terminal = memo(function Terminal({ ptyId, directory, serverId, isA
     })
 
     return () => {
+      disposed = true
       mountedRef.current = false
       intentionalClose = true
       if (wsConnectTimeout) {
