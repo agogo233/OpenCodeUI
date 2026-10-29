@@ -41,10 +41,14 @@ FROM caddy:2-alpine
 # 前端静态文件
 COPY --from=builder /app/dist /srv
 
-# Caddy 配置（默认 + standalone）
+# Caddy 配置（默认 + standalone + 页面 Basic Auth）
 COPY docker/Caddyfile /etc/caddy/Caddyfile
 COPY docker/Caddyfile.standalone /etc/caddy/Caddyfile.standalone
+COPY docker/Caddyfile.auth /etc/caddy/Caddyfile.auth
+
+# 启动脚本：OPENCODE_SERVER_PASSWORD 非空时给页面加 Basic Auth（见 Caddyfile.auth）
+COPY --chmod=755 docker/entrypoint-frontend.sh /usr/local/bin/entrypoint-frontend.sh
 
 EXPOSE 3000
 
-CMD ["caddy", "run", "--config", "/etc/caddy/Caddyfile"]
+CMD ["/usr/local/bin/entrypoint-frontend.sh"]

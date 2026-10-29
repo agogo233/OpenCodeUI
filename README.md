@@ -174,6 +174,16 @@ docker compose -f docker-compose.yml -f docker-compose.host.yml up -d
 
 只在明确需要这些能力时开启。公网部署时务必设置 `OPENCODE_SERVER_PASSWORD`。
 
+### 页面访问认证
+
+主部署方式下，`OPENCODE_SERVER_PASSWORD` 同时是页面访问口令：设置为非空后，打开 UI 会先弹出浏览器 Basic 认证窗口，通过后才进入界面（接口与终端复用同一套凭据自动带出，界面内无需再填密码）。因此请遵循：
+
+- **只在 HTTPS 反代之后使用**，明文 HTTP 下口令可被窃听；
+- **不要在 OpenCodeUI 设置里另填一个不同的服务器密码**，否则界面发出的请求会覆盖浏览器自动携带的凭据，导致接口 401；
+- 修改口令 = 改 `.env` 里同一项后 `docker compose up -d`；清空即同时关闭页面认证与后端认证；
+- 仅 `docker-compose.yml`（gateway 架构）生效；`docker-compose.standalone.yml` 与 simple/nginx 镜像没有此逻辑，设置该项不会给页面加认证；
+- 预览端口 `6659` 不带页面认证（靠 URL 中的随机 token 区分），公网暴露时请配合绑定 `127.0.0.1` 使用；`/routes`、`/preview/*` 由网关内置路由服务按同一套账号口令校验。
+
 ### 从源码本地构建（可选）
 
 只有需要修改镜像内容、调试 Dockerfile，或不想使用预构建镜像时，才需要 clone 完整项目。

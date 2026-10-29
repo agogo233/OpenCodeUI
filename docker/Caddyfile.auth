@@ -1,0 +1,26 @@
+# OpenCode WebUI - Caddy 配置（页面 Basic Auth）
+# 与 docker/Caddyfile 保持同步；仅在 OPENCODE_SERVER_PASSWORD 非空时由
+# docker/entrypoint-frontend.sh 选用，凭据与后端认证共用同一套：
+#   PAGE_AUTH_USERNAME - 账号（来自 OPENCODE_SERVER_USERNAME）
+#   PAGE_AUTH_HASH     - 密码的 bcrypt 摘要（由启动时口令现算）
+# 未启用时请继续使用默认 Caddyfile，不要手动改选本文件。
+
+:3000 {
+    @api path /api /api/*
+    handle @api {
+        respond "API is not served by the frontend-only image" 404
+    }
+
+    handle {
+        basic_auth bcrypt "OpenCodeUI" {
+            {$PAGE_AUTH_USERNAME} {$PAGE_AUTH_HASH}
+        }
+        root * /srv
+        file_server
+
+        # SPA 路由 - 所有非文件请求返回 index.html
+        try_files {path} /index.html
+    }
+
+    encode gzip
+}

@@ -172,6 +172,16 @@ docker compose exec backend python -V
 
 The `gateway` still retains a separate volume `opencode-router-data` for storing dynamic routing state.
 
+### Page Access Authentication
+
+In the main deployment (gateway architecture), `OPENCODE_SERVER_PASSWORD` doubles as the page access credential: when it is set, the UI prompts for Basic auth in the browser before entering, and the API/terminal reuse the same credentials automatically (no extra password entry in the UI). Therefore:
+
+- **Use it behind HTTPS only** — over plain HTTP the credentials can be sniffed;
+- **Do not configure a different server password in the OpenCodeUI settings**, otherwise requests from the UI will override the browser's automatic credentials and fail with 401;
+- To change the credential, update the same `.env` entry and run `docker compose up -d`; clearing it disables both page auth and backend auth;
+- This only applies to `docker-compose.yml` (gateway architecture); `docker-compose.standalone.yml` and the simple/nginx image have no such logic, so the setting will not add page auth there;
+- The preview port `6659` has no page auth (its URLs carry a random token); keep it bound to `127.0.0.1` for public deployments. `/routes` and `/preview/*` are guarded by the gateway's built-in router using the same credentials.
+
 ### Environment Variables
 
 Edit the `.env` file with the key configuration:
