@@ -564,6 +564,25 @@ export function useGlobalEvents(directories?: string[]) {
 
         onSessionIdle: data => {
           const scopedId = scope(data.sessionID)
+          const prevStatus = activeSessionStore.getSnapshot().statusMap[scopedId]
+          const wasBusy = prevStatus && (prevStatus.type === 'busy' || prevStatus.type === 'retry')
+
+          activeSessionStore.updateStatus(scopedId, { type: 'idle' })
+
+          // Toast — 与 onSessionStatus 一致的 completed 通知
+          // 防止 session.status idle 事件丢失时用户收不到完成提示
+          if (wasBusy && !belongsToCurrentSession(scopedId)) {
+            const meta = activeSessionStore.getSessionMeta(scopedId)
+            const sessionLabel = meta?.title || data.sessionID.slice(0, 8)
+            notificationStore.push('completed', sessionLabel, 'Session completed', scopedId, meta?.directory)
+          } else if (
+            wasBusy &&
+            isSessionDirectlyOpen(scopedId) &&
+            soundStore.getSnapshot().currentSessionEnabled
+          ) {
+            playNotificationSoundDeduped('completed')
+          }
+
           messageStore.handleSessionIdle(scopedId)
           childSessionStore.markIdle(scopedId)
           dispatchToConsumers(scopedId, cb => cb.onSessionIdle?.(scopedId))
@@ -578,6 +597,8 @@ export function useGlobalEvents(directories?: string[]) {
             return // Don't handle errors with no sessionID
           }
           const scopedId = scope(error.sessionID)
+          // error 不是 idle：用 handleSessionError / markError 保持状态语义，
+          // 不触发 onSessionIdle 消费者回调（与 onSessionIdle/onSessionStatus 不同）
           messageStore.handleSessionError(scopedId)
           childSessionStore.markError(scopedId)
           if (!isAbort) {
@@ -751,6 +772,14 @@ export function useGlobalEvents(directories?: string[]) {
           const wasBusy = prevStatus && (prevStatus.type === 'busy' || prevStatus.type === 'retry')
 
           activeSessionStore.updateStatus(scopedId, data.status)
+
+          // 确保 messageStore / childSessionStore 也收到 idle 信号
+          // 防止 session.idle 事件丢失时 messageStore 卡在 streaming
+          if (data.status.type === 'idle') {
+            messageStore.handleSessionIdle(scopedId)
+            childSessionStore.markIdle(scopedId)
+            dispatchToConsumers(scopedId, cb => cb.onSessionIdle?.(scopedId))
+          }
 
           // Toast — session 从 busy/retry 变成 idle 时弹 completed 通知
           if (wasBusy && data.status.type === 'idle' && !belongsToCurrentSession(scopedId)) {

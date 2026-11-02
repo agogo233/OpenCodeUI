@@ -38,6 +38,8 @@ const {
   autoApproveStoreMock,
   clearSessionRuntimeStateMock,
   clearPaneSessionMock,
+  messageStoreHandleSessionIdleMock,
+  childSessionStoreMarkIdleMock,
 } = vi.hoisted(() => {
   // onServerChange 是多播语义（effect 里注册多个监听器），mock 必须保存全部监听器；
   // 覆盖式单槽实现会静默丢掉先注册的监听器，让「只有最后注册者生效」的隐式依赖漏过测试
@@ -83,6 +85,8 @@ const {
   paneLeavesMock,
   clearSessionRuntimeStateMock: vi.fn(),
   clearPaneSessionMock: vi.fn(),
+  messageStoreHandleSessionIdleMock: vi.fn(),
+  childSessionStoreMarkIdleMock: vi.fn(),
   getSoundSnapshotMock: vi.fn(() => ({
     currentSessionEnabled: true,
   })),
@@ -104,10 +108,10 @@ const {
     approvePendingOnFullAuto: false,
     subscribe: vi.fn((_listener: () => void) => vi.fn()),
     getPaneFullAutoMode: vi.fn((_paneId: string) => 'off' as 'off' | 'session' | 'global'),
-    claimAutoReply: vi.fn((_requestId: string) => true),
+claimAutoReply: vi.fn((_requestId: string) => true),
     releaseAutoReply: vi.fn((_requestId: string) => undefined),
   },
-  }
+ }
 })
 
 vi.mock('../api', () => ({
@@ -143,7 +147,7 @@ vi.mock('../store', () => ({
     handlePartUpdated: vi.fn(),
     handlePartDelta: vi.fn(),
     handlePartRemoved: vi.fn(),
-    handleSessionIdle: vi.fn(),
+    handleSessionIdle: messageStoreHandleSessionIdleMock,
     handleSessionError: vi.fn(),
     getSessionState: vi.fn(() => null),
     updateSessionMetadata: vi.fn(),
@@ -151,7 +155,7 @@ vi.mock('../store', () => ({
   childSessionStore: {
     belongsToSession: childBelongsToSessionMock,
     getSessionAndDescendants: getSessionAndDescendantsMock,
-    markIdle: vi.fn(),
+    markIdle: childSessionStoreMarkIdleMock,
     markError: vi.fn(),
     registerChildSession: vi.fn(),
   },
@@ -232,6 +236,8 @@ describe('useGlobalEvents', () => {
     reconnectServerSSEMock.mockReset()
     clearSessionRuntimeStateMock.mockReset()
     clearPaneSessionMock.mockReset()
+    messageStoreHandleSessionIdleMock.mockReset()
+    childSessionStoreMarkIdleMock.mockReset()
     autoApproveStoreMock.fullAutoMode = 'off'
     autoApproveStoreMock.approvePendingOnFullAuto = false
     autoApproveStoreMock.subscribe.mockReset()
@@ -928,5 +934,172 @@ describe('useGlobalEvents', () => {
 
     await waitFor(() => expect(subscribeToEventsMock).toHaveBeenCalledTimes(1))
     expect(unsubscribes).toEqual(['local'])
+  })
+
+  it('updates activeSessionStore to idle when session.idle arrives', async () => {
+    let callbacks: Parameters<typeof subscribeToEventsMock>[0] | undefined
+    subscribeToEventsMock.mockImplementation(cb => {
+      callbacks = cb
+      return vi.fn()
+    })
+
+    renderHook(() => useGlobalEvents())
+
+    await waitFor(() => expect(callbacks).toBeDefined())
+
+    callbacks!.onSessionIdle?.({ sessionID: 'background-session' })
+
+    expect(activeSessionStoreMock.updateStatus).toHaveBeenCalledWith(
+      'local::background-session',
+      { type: 'idle' },
+    )
+    expect(messageStoreHandleSessionIdleMock).toHaveBeenCalledWith('local::background-session')
+    expect(childSessionStoreMarkIdleMock).toHaveBeenCalledWith('local::background-session')
+  })
+
+  it('pushes completed notification when session.idle arrives for a background busy session', async () => {
+    let callbacks: Parameters<typeof subscribeToEventsMock>[0] | undefined
+    subscribeToEventsMock.mockImplementation(cb => {
+      callbacks = cb
+      return vi.fn()
+    })
+    activeSessionStoreMock.getSnapshot.mockReturnValue({
+      statusMap: { 'local::background-session': { type: 'busy' } },
+    })
+    getFocusedSessionIdMock.mockReturnValue(null)
+
+    renderHook(() => useGlobalEvents())
+
+    await waitFor(() => expect(callbacks).toBeDefined())
+
+    callbacks!.onSessionIdle?.({ sessionID: 'background-session' })
+
+    expect(notificationPushMock).toHaveBeenCalledWith(
+      'completed',
+      'Child Session',
+      'Session completed',
+      'local::background-session',
+      '/workspace',
+    )
+  })
+
+  it('syncs messageStore and childSessionStore to idle when session.status idle arrives', async () => {
+    let callbacks: Parameters<typeof subscribeToEventsMock>[0] | undefined
+    subscribeToEventsMock.mockImplementation(cb => {
+      callbacks = cb
+      return vi.fn()
+    })
+    activeSessionStoreMock.getSnapshot.mockReturnValue({
+      statusMap: { 'local::background-session': { type: 'busy' } },
+    })
+
+    renderHook(() => useGlobalEvents())
+
+    await waitFor(() => expect(callbacks).toBeDefined())
+
+    callbacks!.onSessionStatus?.({
+      sessionID: 'background-session',
+      status: { type: 'idle' },
+    })
+
+    expect(activeSessionStoreMock.updateStatus).toHaveBeenCalledWith(
+      'local::background-session',
+      { type: 'idle' },
+    )
+    expect(messageStoreHandleSessionIdleMock).toHaveBeenCalledWith('local::background-session')
+    expect(childSessionStoreMarkIdleMock).toHaveBeenCalledWith('local::background-session')
+    expect(notificationPushMock).toHaveBeenCalledWith(
+      'completed',
+      'Child Session',
+      'Session completed',
+      'local::background-session',
+      '/workspace',
+    )
+  })
+
+  it('does not sync messageStore on session.status retry (only idle triggers handleSessionIdle)', async () => {
+    let callbacks: Parameters<typeof subscribeToEventsMock>[0] | undefined
+    subscribeToEventsMock.mockImplementation(cb => {
+      callbacks = cb
+      return vi.fn()
+    })
+    activeSessionStoreMock.getSnapshot.mockReturnValue({
+      statusMap: { 'local::background-session': { type: 'busy' } },
+    })
+
+    renderHook(() => useGlobalEvents())
+
+    await waitFor(() => expect(callbacks).toBeDefined())
+
+    callbacks!.onSessionStatus?.({
+      sessionID: 'background-session',
+      status: { type: 'retry', attempt: 1, message: 'retry', next: 5000 },
+    })
+
+    expect(activeSessionStoreMock.updateStatus).toHaveBeenCalledWith(
+      'local::background-session',
+      { type: 'retry', attempt: 1, message: 'retry', next: 5000 },
+    )
+    expect(messageStoreHandleSessionIdleMock).not.toHaveBeenCalled()
+    expect(childSessionStoreMarkIdleMock).not.toHaveBeenCalled()
+  })
+
+  it('triggers completed notification only once when both session.status idle and session.idle arrive', async () => {
+    let callbacks: Parameters<typeof subscribeToEventsMock>[0] | undefined
+    subscribeToEventsMock.mockImplementation(cb => {
+      callbacks = cb
+      return vi.fn()
+    })
+    // 使用可变状态对象，让 updateStatus 的 mock 能真正更新状态，模拟 wasBusy 去重
+    const mockState: { statusMap: Record<string, { type: string }> } = {
+      statusMap: { 'local::background-session': { type: 'busy' } },
+    }
+    activeSessionStoreMock.getSnapshot.mockImplementation(() => ({ ...mockState }))
+    activeSessionStoreMock.updateStatus.mockImplementation((_sessionId: string, status: { type: string }) => {
+      if (status.type === 'idle') delete mockState.statusMap['local::background-session']
+      else mockState.statusMap['local::background-session'] = status
+    })
+    getFocusedSessionIdMock.mockReturnValue(null)
+
+    renderHook(() => useGlobalEvents())
+
+    await waitFor(() => expect(callbacks).toBeDefined())
+
+    // 两个事件几乎同时到达：session.status idle 先到，session.idle 后到
+    callbacks!.onSessionStatus?.({
+      sessionID: 'background-session',
+      status: { type: 'idle' },
+    })
+    callbacks!.onSessionIdle?.({ sessionID: 'background-session' })
+
+    expect(notificationPushMock).toHaveBeenCalledTimes(1)
+    expect(notificationPushMock).toHaveBeenCalledWith(
+      'completed',
+      'Child Session',
+      'Session completed',
+      'local::background-session',
+      '/workspace',
+    )
+  })
+
+  it('plays completed sound when session.idle arrives for the directly focused session', async () => {
+    let callbacks: Parameters<typeof subscribeToEventsMock>[0] | undefined
+    subscribeToEventsMock.mockImplementation(cb => {
+      callbacks = cb
+      return vi.fn()
+    })
+    activeSessionStoreMock.getSnapshot.mockReturnValue({
+      statusMap: { 'local::focused-session': { type: 'busy' } },
+    })
+    getFocusedSessionIdMock.mockReturnValue('local::focused-session')
+
+    renderHook(() => useGlobalEvents())
+
+    await waitFor(() => expect(callbacks).toBeDefined())
+
+    callbacks!.onSessionIdle?.({ sessionID: 'focused-session' })
+
+    expect(notificationPushMock).not.toHaveBeenCalled()
+    expect(playNotificationSoundDedupedMock).toHaveBeenCalledWith('completed')
   })
 })
