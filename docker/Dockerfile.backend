@@ -44,7 +44,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     fonts-liberation \
     fonts-noto-color-emoji \
     fonts-wqy-microhei \
-    g++ \
     git \
     git-lfs \
     jq \
@@ -85,17 +84,11 @@ RUN case "${TARGETARCH}" in \
       | MISE_INSTALL_PATH=/usr/local/bin/mise MISE_INSTALL_FROM_GITHUB=1 MISE_INSTALL_ARCH="${MISE_ARCH}" sh \
     && mise --version
 
-# 安装 opencode。直接从 GitHub Releases 拉 tarball 解压，绕开 opencode.ai/install 脚本：
-# 该脚本为拼一个版本号字符串去调 api.github.com（未鉴权，60 次/小时/IP），
-# GitHub Actions 共享 runner IP 极易触发限流而 exit 1；而 releases/latest/download
-# 本身是 302 跳转，不需要版本号。tarball 内仅含单个 opencode 二进制。
-RUN case "${TARGETARCH}" in \
-      amd64) OC_ARCH=x64 ;; \
-      arm64) OC_ARCH=arm64 ;; \
-      *) echo "unsupported arch: ${TARGETARCH}" >&2; exit 1 ;; \
-    esac \
-    && curl -fsSL -o /tmp/opencode.tar.gz \
-      "https://github.com/anomalyco/opencode/releases/latest/download/opencode-linux-${OC_ARCH}.tar.gz" \
+# 安装 opencode。直接从 agogo233/opencode 的 latest release 拉 x64 tarball 解压，
+# 绕开 opencode.ai/install 脚本对 api.github.com 版本号的依赖（共享 IP 易限流）。
+# fork 的 release tag 即字面量 latest，资产命名与上游一致；本镜像仅支持 amd64(x64)。
+RUN curl -fsSL -o /tmp/opencode.tar.gz \
+      "https://github.com/agogo233/opencode/releases/download/latest/opencode-linux-x64.tar.gz" \
     && tar -xzf /tmp/opencode.tar.gz -C /usr/local/bin opencode \
     && rm -f /tmp/opencode.tar.gz \
     && chmod +x /usr/local/bin/opencode \

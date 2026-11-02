@@ -22,16 +22,10 @@ ensure_opencode() {
     return
   fi
 
-  # 直接从 GitHub Releases 拉 tarball，绕开 opencode.ai/install 脚本对
-  # api.github.com 的依赖（共享 IP 易触发限流）。
-  case "$(uname -m)" in
-    x86_64)  OC_ARCH=x64 ;;
-    aarch64|arm64) OC_ARCH=arm64 ;;
-    *) echo "unsupported arch: $(uname -m)" >&2; exit 1 ;;
-  esac
-
+  # 从 agogo233/opencode 的 latest release 拉 x64 tarball，绕开 opencode.ai/install
+  # 脚本对 api.github.com 的依赖（共享 IP 易触发限流）。仅 amd64(x64)。
   curl -fsSL -o /tmp/opencode.tar.gz \
-    "https://github.com/anomalyco/opencode/releases/latest/download/opencode-linux-${OC_ARCH}.tar.gz"
+    "https://github.com/agogo233/opencode/releases/download/latest/opencode-linux-x64.tar.gz"
   tar -xzf /tmp/opencode.tar.gz -C /usr/local/bin opencode
   rm -f /tmp/opencode.tar.gz
   chmod +x /usr/local/bin/opencode
