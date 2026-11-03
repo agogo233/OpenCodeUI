@@ -44,6 +44,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     fonts-liberation \
     fonts-noto-color-emoji \
     fonts-wqy-microhei \
+    g++ \
     git \
     git-lfs \
     jq \
