@@ -8,6 +8,22 @@
 # 为空时不启用页面认证，与原免密行为完全一致。
 
 :3000 {
+	# opencode-mobile 专用入口：只剥 /mobile，保留 /api 前缀原样直通后端
+	handle_path /mobile/* {
+		@with_auth expression `{env.OPENCODE_AUTH_BASIC} != ""`
+		reverse_proxy @with_auth {$BACKEND_URL:host.docker.internal:4096} {
+			header_up Host {upstream_hostport}
+			header_up Authorization "Basic {env.OPENCODE_AUTH_BASIC}"
+			header_up Origin "http://localhost:3000"
+			flush_interval -1
+		}
+		reverse_proxy {$BACKEND_URL:host.docker.internal:4096} {
+			header_up Host {upstream_hostport}
+			header_up Origin "http://localhost:3000"
+			flush_interval -1
+		}
+	}
+
 	# API 反代（strip /api 前缀，SSE 需要 flush_interval -1）
 	handle_path /api/* {
 		# 后端 Basic 认证由前端容器代持：compose 把 OPENCODE_SERVER_PASSWORD
