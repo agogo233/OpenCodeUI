@@ -85,15 +85,30 @@ RUN case "${TARGETARCH}" in \
       | MISE_INSTALL_PATH=/usr/local/bin/mise MISE_INSTALL_FROM_GITHUB=1 MISE_INSTALL_ARCH="${MISE_ARCH}" sh \
     && mise --version
 
-# 安装 opencode。直接从 agogo233/opencode 的 latest release 拉 x64 tarball 解压，
-# 绕开 opencode.ai/install 脚本对 api.github.com 版本号的依赖（共享 IP 易限流）。
-# fork 的 release tag 即字面量 latest，资产命名与上游一致；本镜像仅支持 amd64(x64)。
-RUN curl -fsSL -o /tmp/opencode.tar.gz \
-      "https://github.com/agogo233/opencode/releases/download/latest/opencode-linux-x64.tar.gz" \
+# 安装 opencode。直接从 GitHub Releases 拉 tarball 解压，绕开 opencode.ai/install 脚本：
+# 该脚本为拼一个版本号字符串去调 api.github.com（未鉴权，60 次/小时/IP），
+# GitHub Actions 共享 runner IP 极易触发限流而 exit 1；而 releases/latest/download
+# 本身是 302 跳转，不需要版本号。tarball 内仅含单个 opencode 二进制。
+RUN case "${TARGETARCH}" in \
+      amd64) OC_ARCH=x64 ;; \
+      arm64) OC_ARCH=arm64 ;; \
+      *) echo "unsupported arch: ${TARGETARCH}" >&2; exit 1 ;; \
+    esac \
+    && curl -fsSL -o /tmp/opencode.tar.gz \
+      "https://github.com/anomalyco/opencode/releases/latest/download/opencode-linux-${OC_ARCH}.tar.gz" \
     && tar -xzf /tmp/opencode.tar.gz -C /usr/local/bin opencode \
     && rm -f /tmp/opencode.tar.gz \
     && chmod +x /usr/local/bin/opencode \
     && opencode --version
+
+# 安装 opencode（备选：agogo233 fork）。fork 的 release tag 即字面量 latest，
+# 资产命名与上游一致；仅支持 amd64(x64)。与上方官方源二选一，注释掉另一个。
+# RUN curl -fsSL -o /tmp/opencode.tar.gz \
+#       "https://github.com/agogo233/opencode/releases/download/latest/opencode-linux-x64.tar.gz" \
+#     && tar -xzf /tmp/opencode.tar.gz -C /usr/local/bin opencode \
+#     && rm -f /tmp/opencode.tar.gz \
+#     && chmod +x /usr/local/bin/opencode \
+#     && opencode --version
 
 # 安装 rtk（token 节省命令包装器，opencode 插件依赖）。Release 仅提供 linux-amd64
 # 静态二进制，arm64 跳过（插件检测不到 rtk 会自动禁用）。放 /usr/local/bin，
