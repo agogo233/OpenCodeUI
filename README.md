@@ -181,7 +181,7 @@ docker compose -f docker-compose.yml -f docker-compose.host.yml up -d
 - **只在 HTTPS 反代之后使用**，明文 HTTP 下口令可被窃听；
 - **不要在 OpenCodeUI 设置里另填一个不同的服务器密码**，否则界面发出的请求会覆盖浏览器自动携带的凭据，导致接口 401；
 - 修改口令 = 改 `.env` 里同一项后 `docker compose up -d`；清空即同时关闭页面认证与后端认证；
-- 仅 `docker-compose.yml`（gateway 架构）生效；`docker-compose.standalone.yml` 与 simple/nginx 镜像没有此逻辑，设置该项不会给页面加认证；
+- `docker-compose.yml`（gateway 架构）与 `docker-compose.standalone.yml` 均生效：standalone 部署下设置该项同样会启用页面 Basic 认证，与后端共用同一套凭据；simple/nginx 镜像没有此逻辑，设置该项不会给页面加认证；
 - 预览端口 `6659` 不带页面认证（靠 URL 中的随机 token 区分），公网暴露时请配合绑定 `127.0.0.1` 使用；`/routes`、`/preview/*` 由网关内置路由服务按同一套账号口令校验。
 
 ### 从源码本地构建（可选）

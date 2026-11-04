@@ -1,5 +1,11 @@
 # OpenCode WebUI - 纯前端独立部署
 # 静态文件 + API 反代到外部 opencode serve
+#
+# 页面级 Basic Auth：仅在 PAGE_AUTH_HASH 非空时启用（由启动命令在
+# OPENCODE_SERVER_PASSWORD 非空时现算 bcrypt 摘要导出），凭据与后端认证共用同一套：
+#   PAGE_AUTH_USERNAME - 账号（来自 OPENCODE_SERVER_USERNAME）
+#   PAGE_AUTH_HASH     - 密码的 bcrypt 摘要
+# 为空时不启用页面认证，与原免密行为完全一致。
 
 :3000 {
 	# API 反代（strip /api 前缀，SSE 需要 flush_interval -1）
@@ -27,7 +33,18 @@
 		}
 	}
 
-	# 前端静态文件
+	# 前端静态文件（页面级 Basic Auth：PAGE_AUTH_HASH 非空时启用，
+	# 与后端认证共用同一套凭据；为空时不启用，保持向后兼容）
+	@page_auth expression `{env.PAGE_AUTH_HASH} != ""`
+	handle @page_auth {
+		basic_auth bcrypt "OpenCodeUI" {
+			{$PAGE_AUTH_USERNAME} {$PAGE_AUTH_HASH}
+		}
+		root * /srv
+		file_server
+		try_files {path} /index.html
+	}
+
 	handle {
 		root * /srv
 		file_server
