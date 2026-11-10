@@ -393,9 +393,11 @@ export function useSessionManager({ sessionId, directory, onLoadComplete, onErro
   // Clear Revert
   // ============================================
 
+  // 发送成功后撤回即被提交：截断撤回点之后的消息，重做历史随之失效。
+  // 仅在「发送成功」回调中调用，避免仅清理 UI 状态时误删消息。
   const clearRevert = useCallback(() => {
     if (!sessionId) return
-    messageStore.setRevertState(sessionId, null)
+    messageStore.truncateAfterRevert(sessionId)
   }, [sessionId])
 
   // ============================================

@@ -18,6 +18,7 @@ const {
     updateSessionMetadata: vi.fn(),
     prependMessages: vi.fn(),
     setRevertState: vi.fn(),
+    truncateAfterRevert: vi.fn(),
   },
   sessionErrorHandlerMock: vi.fn(),
 }))
@@ -49,6 +50,7 @@ describe('useSessionManager', () => {
     messageStoreMock.updateSessionMetadata.mockReset()
     messageStoreMock.prependMessages.mockReset()
     messageStoreMock.setRevertState.mockReset()
+    messageStoreMock.truncateAfterRevert.mockReset()
     sessionErrorHandlerMock.mockReset()
 
     messageStoreMock.getSessionState.mockReturnValue(null)
@@ -79,5 +81,23 @@ describe('useSessionManager', () => {
       'missing-session',
       expect.objectContaining({ name: 'APIError' }),
     )
+  })
+
+  it('commits revert by truncating reverted messages when clearing', () => {
+    const { result } = renderHook(() => useSessionManager({ sessionId: 'session-1' }))
+
+    result.current.clearRevert()
+
+    expect(messageStoreMock.truncateAfterRevert).toHaveBeenCalledWith('session-1')
+    expect(messageStoreMock.setRevertState).not.toHaveBeenCalled()
+  })
+
+  it('does not truncate when clearing without a session', () => {
+    const { result } = renderHook(() => useSessionManager({ sessionId: null }))
+
+    result.current.clearRevert()
+
+    expect(messageStoreMock.truncateAfterRevert).not.toHaveBeenCalled()
+    expect(messageStoreMock.setRevertState).not.toHaveBeenCalled()
   })
 })
