@@ -362,7 +362,7 @@ http://<IP>:3001/#token=<token>
 
 环境变量见 `.env.example` 的 `REASONIX_*` 段：默认 `127.0.0.1:8787` = 未启用（访问 `:3001` 得 502）；宿主机运行需 `reasonix serve --addr 0.0.0.0:8787`。
 
-容器化部署（本仓库 `docker/Dockerfile.reasonix`，CI 自动发布 `opencodeui-reasonix` 镜像）需**先**在 compose 中定义 reasonix 服务，再设 `REASONIX_URL=http://reasonix:8787`——顺序颠倒会导致 frontend 启动时解析不到上游而整体失败：
+容器化部署（本仓库 `docker/Dockerfile.reasonix`，CI 自动发布 `opencodeui-reasonix` 镜像）需**先**在 compose 中定义 reasonix 服务，再设 `REASONIX_URL=http://reasonix:8787`——顺序颠倒会导致 frontend 启动时解析不到上游而整体失败。token 在 `.env` 中设 `REASONIX_TOKEN=<长随机串>`（compose 渲染时注入下方 `command`）：
 
 ```yaml
   reasonix:
@@ -373,20 +373,20 @@ http://<IP>:3001/#token=<token>
       - ./reasonix-home:/reasonix-home
     environment:
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
-      - REASONIX_TOKEN=${REASONIX_TOKEN}
-    command:
-      - sh
-      - -c
-      - |
-        mkdir -p /reasonix-home
-        [ -f /reasonix-home/config.toml ] || cp /defaults/config.toml /reasonix-home/
-        printf "DEEPSEEK_API_KEY=%s\n" "$$DEEPSEEK_API_KEY" > /reasonix-home/.env
-        exec reasonix serve --addr 0.0.0.0:8787 --auth token --token "$$REASONIX_TOKEN" --behind-proxy
+    # command: 只替换 CMD（即 reasonix 的参数）；镜像 ENTRYPOINT 的
+    # entrypoint-reasonix.sh 先预置凭据，再 exec 以下参数
+    command: ["serve", "--addr", "0.0.0.0:8787", "--auth", "token", "--token", "${REASONIX_TOKEN}", "--behind-proxy"]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8787/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     networks:
       - opencode-net
 ```
 
-容器绑定非回环地址时 reasonix 的 Web 端 provider 配置页不可用，凭据须预置：`config.toml` 由上方启动命令从镜像内 `/defaults/config.toml` 复制，`DEEPSEEK_API_KEY` 写入 `/reasonix-home/.env`（见 `docker/reasonix-config.toml`）。
+容器绑定非回环地址时 reasonix 的 Web 端 provider 配置页不可用，凭据须预置：镜像 ENTRYPOINT（`entrypoint-reasonix.sh`）启动时把镜像内 `/defaults/config.toml` 复制到 `REASONIX_HOME`，并将 `DEEPSEEK_API_KEY` 写入 `/reasonix-home/.env`（见 `docker/reasonix-config.toml`）。
 
 ## 本地开发
 

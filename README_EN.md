@@ -311,7 +311,7 @@ http://<IP>:3001/#token=<token>
 
 See the `REASONIX_*` section in `.env.example`: the default `127.0.0.1:8787` means disabled (hitting `:3001` yields 502); when running on the host use `reasonix serve --addr 0.0.0.0:8787`.
 
-For containerized deployment (this repo's `docker/Dockerfile.reasonix`, with the `opencodeui-reasonix` image published by CI) you must define the reasonix service in compose **first**, then set `REASONIX_URL=http://reasonix:8787` — reversing the order makes the frontend fail to start because the upstream hostname cannot be resolved:
+For containerized deployment (this repo's `docker/Dockerfile.reasonix`, with the `opencodeui-reasonix` image published by CI) you must define the reasonix service in compose **first**, then set `REASONIX_URL=http://reasonix:8787` — reversing the order makes the frontend fail to start because the upstream hostname cannot be resolved. Set the token via `REASONIX_TOKEN=<long-random-string>` in `.env` (injected into the `command` below by compose interpolation):
 
 ```yaml
   reasonix:
@@ -322,20 +322,20 @@ For containerized deployment (this repo's `docker/Dockerfile.reasonix`, with the
       - ./reasonix-home:/reasonix-home
     environment:
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
-      - REASONIX_TOKEN=${REASONIX_TOKEN}
-    command:
-      - sh
-      - -c
-      - |
-        mkdir -p /reasonix-home
-        [ -f /reasonix-home/config.toml ] || cp /defaults/config.toml /reasonix-home/
-        printf "DEEPSEEK_API_KEY=%s\n" "$$DEEPSEEK_API_KEY" > /reasonix-home/.env
-        exec reasonix serve --addr 0.0.0.0:8787 --auth token --token "$$REASONIX_TOKEN" --behind-proxy
+    # command: replaces CMD only (i.e. the reasonix args); the image ENTRYPOINT
+    # (entrypoint-reasonix.sh) provisions credentials first, then execs these
+    command: ["serve", "--addr", "0.0.0.0:8787", "--auth", "token", "--token", "${REASONIX_TOKEN}", "--behind-proxy"]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8787/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     networks:
       - opencode-net
 ```
 
-When bound to a non-loopback address, Reasonix's web-based provider setup page is unavailable, so credentials must be pre-provisioned: `config.toml` is copied from the image's `/defaults/config.toml` by the startup command above, and `DEEPSEEK_API_KEY` is written to `/reasonix-home/.env` (see `docker/reasonix-config.toml`).
+When bound to a non-loopback address, Reasonix's web-based provider setup page is unavailable, so credentials must be pre-provisioned: the image ENTRYPOINT (`entrypoint-reasonix.sh`) copies the in-image `/defaults/config.toml` into `REASONIX_HOME` at startup and writes `DEEPSEEK_API_KEY` to `/reasonix-home/.env` (see `docker/reasonix-config.toml`).
 
 ## Local Development
 

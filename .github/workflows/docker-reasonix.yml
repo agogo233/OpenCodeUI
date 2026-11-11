@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'docker/Dockerfile.reasonix'
+      - 'docker/entrypoint-reasonix.sh'
       - 'docker/reasonix-config.toml'
   workflow_dispatch:
 

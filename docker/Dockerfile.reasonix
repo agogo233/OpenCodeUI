@@ -8,22 +8,27 @@
 # 如需临时 pin 具体版本，用 --build-arg REASONIX_URL=<...> 覆盖。
 #
 # reasonix 1.x 的 Web 端 provider 配置页仅对回环监听开放，容器绑定
-# 0.0.0.0 时不可用，因此凭据必须预置：
+# 0.0.0.0 时不可用，因此凭据必须预置（由镜像内 entrypoint-reasonix.sh
+# 在启动时完成，见 README「Reasonix Web UI 反代」/
+# "Reasonix Web UI Reverse Proxy" 的容器化示例）：
 #   1. /defaults/config.toml 由本镜像内置（docker/reasonix-config.toml）
-#   2. REASONIX_HOME/.env 由部署侧启动命令从 DEEPSEEK_API_KEY 环境变量
-#      换算写入（见 README「Reasonix Web UI 反代」的容器化示例）
+#   2. REASONIX_HOME/.env 由 entrypoint 从 DEEPSEEK_API_KEY 环境变量换算写入
 
-FROM alpine:3.20
+FROM debian:bookworm-slim
 
 ARG REASONIX_URL=https://github.com/agogo233/DeepSeek-Reasonix/releases/download/latest/reasonix-linux-amd64
 
+# curl 保留：compose healthcheck 与 reasonix 运行时 HTTPS（api.deepseek.com）
+# 都依赖它；bookworm-slim 无 busybox wget。ca-certificates 供 TLS 校验。
 RUN set -eux; \
-    apk add --no-cache curl; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends curl ca-certificates; \
+    rm -rf /var/lib/apt/lists/*; \
     curl -fsSL "$REASONIX_URL" -o /usr/local/bin/reasonix; \
-    chmod +x /usr/local/bin/reasonix; \
-    apk del curl
+    chmod +x /usr/local/bin/reasonix
 
 COPY docker/reasonix-config.toml /defaults/config.toml
+COPY --chmod=755 docker/entrypoint-reasonix.sh /usr/local/bin/entrypoint-reasonix.sh
 
 # REASONIX_HOME 使运行时完全自包含：配置、凭据、会话都在该目录树下
 ENV REASONIX_HOME=/reasonix-home
@@ -34,5 +39,7 @@ WORKDIR /workspace
 
 EXPOSE 8787
 
-ENTRYPOINT ["reasonix"]
+# ENTRYPOINT 负责凭据预置后 exec；compose 的 command: 只替换 CMD，
+# 即 reasonix 的参数（如 --auth token --token ...）
+ENTRYPOINT ["/usr/local/bin/entrypoint-reasonix.sh"]
 CMD ["serve", "--addr", "0.0.0.0:8787"]
