@@ -278,6 +278,65 @@ preview.example.com {
 
 > **Important**: SSE requires buffering to be disabled. Nginx needs `proxy_buffering off`, Caddy needs `flush_interval -1`.
 
+## Reasonix Web UI Reverse Proxy (Optional)
+
+The frontend image ships an isolated site block from `docker/Caddyfile.reasonix` (default `:3001`) that fully proxies the Web UI bundled with [DeepSeek-Reasonix](https://github.com/esengine/DeepSeek-Reasonix) `reasonix serve`.
+
+Reasonix's pages and API live on root-absolute paths, so it must be proxied on its **own port as a whole site** — it cannot be mounted under a `/reasonix/*` path suffix. Authentication is handled by reasonix serve itself (the proxy adds no lock and rewrites no Host/Origin; the token-for-cookie flow via URL fragment relies on pass-through).
+
+```yaml
+# docker-compose.standalone.yml (frontend service)
+ports:
+  - '${PORT:-3000}:3000'
+  - '${REASONIX_PORT:-3001}:3001'
+environment:
+  # When reasonix runs on the host, set REASONIX_URL=host.docker.internal:8787 in .env
+  # (compose default 127.0.0.1:8787 = disabled)
+  - REASONIX_URL=${REASONIX_URL:-127.0.0.1:8787}
+```
+
+```bash
+# Start reasonix on the host (token mode must be explicit; serve defaults to none)
+reasonix serve --addr 0.0.0.0:8787 --auth token --token <long-random-string> --behind-proxy
+
+# Open in a browser (the token is exchanged for an HttpOnly cookie via the #token=... URL fragment)
+http://<IP>:3001/#token=<token>
+```
+
+| Auth mode | Command | Access |
+| --- | --- | --- |
+| token | `--auth token` (random per launch unless fixed with `--token`) | `http://<IP>:3001/#token=<token>` |
+| password | `--auth password --password <secret>` | login page |
+| none (serve default) | reads are open, writes still need the launch token; avoid on untrusted networks | direct access |
+
+See the `REASONIX_*` section in `.env.example`: the default `127.0.0.1:8787` means disabled (hitting `:3001` yields 502); when running on the host use `reasonix serve --addr 0.0.0.0:8787`.
+
+For containerized deployment (this repo's `docker/Dockerfile.reasonix`, with the `opencodeui-reasonix` image published by CI) you must define the reasonix service in compose **first**, then set `REASONIX_URL=http://reasonix:8787` — reversing the order makes the frontend fail to start because the upstream hostname cannot be resolved:
+
+```yaml
+  reasonix:
+    image: ghcr.io/<owner>/opencodeui-reasonix:latest
+    restart: unless-stopped
+    volumes:
+      - ./workspace:/workspace        # project root (shares the real directory with backend)
+      - ./reasonix-home:/reasonix-home
+    environment:
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      - REASONIX_TOKEN=${REASONIX_TOKEN}
+    command:
+      - sh
+      - -c
+      - |
+        mkdir -p /reasonix-home
+        [ -f /reasonix-home/config.toml ] || cp /defaults/config.toml /reasonix-home/
+        printf "DEEPSEEK_API_KEY=%s\n" "$$DEEPSEEK_API_KEY" > /reasonix-home/.env
+        exec reasonix serve --addr 0.0.0.0:8787 --auth token --token "$$REASONIX_TOKEN" --behind-proxy
+    networks:
+      - opencode-net
+```
+
+When bound to a non-loopback address, Reasonix's web-based provider setup page is unavailable, so credentials must be pre-provisioned: `config.toml` is copied from the image's `/defaults/config.toml` by the startup command above, and `DEEPSEEK_API_KEY` is written to `/reasonix-home/.env` (see `docker/reasonix-config.toml`).
+
 ## Local Development
 
 Requires a running [OpenCode](https://github.com/anomalyco/opencode) backend.

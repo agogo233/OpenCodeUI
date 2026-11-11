@@ -329,6 +329,65 @@ preview.example.com {
 
 > **重要**：SSE 要求禁用缓冲。Nginx 需 `proxy_buffering off`，Caddy 需 `flush_interval -1`。
 
+## Reasonix Web UI 反代（可选）
+
+前端镜像内置 `docker/Caddyfile.reasonix` 独立站点块（默认 `:3001`），整站反代 [DeepSeek-Reasonix](https://github.com/esengine/DeepSeek-Reasonix) `reasonix serve` 自带的 Web UI。
+
+reasonix 的页面与 API 全部挂在根绝对路径，因此必须**独占端口整站反代**，不能挂 `/reasonix/*` 路径后缀；认证由 reasonix serve 自身负责（反代不加锁、不改写 Host/Origin，token 经 URL fragment 换 HttpOnly cookie 的流程依赖透传）。
+
+```yaml
+# docker-compose.standalone.yml（frontend 服务）
+ports:
+  - '${PORT:-3000}:3000'
+  - '${REASONIX_PORT:-3001}:3001'
+environment:
+  # 宿主机运行 reasonix 时在 .env 设 REASONIX_URL=host.docker.internal:8787
+  # （compose 默认 127.0.0.1:8787 = 未启用）
+  - REASONIX_URL=${REASONIX_URL:-127.0.0.1:8787}
+```
+
+```bash
+# 宿主机启动 reasonix（token 模式需显式指定；serve 默认 none）
+reasonix serve --addr 0.0.0.0:8787 --auth token --token <长随机串> --behind-proxy
+
+# 浏览器访问（token 经 URL fragment #token=... 自动换 HttpOnly cookie）
+http://<IP>:3001/#token=<token>
+```
+
+| 认证模式 | 命令要点 | 访问方式 |
+| --- | --- | --- |
+| token | `--auth token`（不带 `--token` 时每次启动随机生成，`--token` 固定则重启不变） | `http://<IP>:3001/#token=<token>` |
+| password | `--auth password --password <口令>` | 打开即登录页 |
+| none（serve 默认） | 仅读操作开放，写操作仍需 launch token，不可信网络勿用 | 直接访问 |
+
+环境变量见 `.env.example` 的 `REASONIX_*` 段：默认 `127.0.0.1:8787` = 未启用（访问 `:3001` 得 502）；宿主机运行需 `reasonix serve --addr 0.0.0.0:8787`。
+
+容器化部署（本仓库 `docker/Dockerfile.reasonix`，CI 自动发布 `opencodeui-reasonix` 镜像）需**先**在 compose 中定义 reasonix 服务，再设 `REASONIX_URL=http://reasonix:8787`——顺序颠倒会导致 frontend 启动时解析不到上游而整体失败：
+
+```yaml
+  reasonix:
+    image: ghcr.io/<owner>/opencodeui-reasonix:latest
+    restart: unless-stopped
+    volumes:
+      - ./workspace:/workspace        # 项目根（与 backend 共用真实目录）
+      - ./reasonix-home:/reasonix-home
+    environment:
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      - REASONIX_TOKEN=${REASONIX_TOKEN}
+    command:
+      - sh
+      - -c
+      - |
+        mkdir -p /reasonix-home
+        [ -f /reasonix-home/config.toml ] || cp /defaults/config.toml /reasonix-home/
+        printf "DEEPSEEK_API_KEY=%s\n" "$$DEEPSEEK_API_KEY" > /reasonix-home/.env
+        exec reasonix serve --addr 0.0.0.0:8787 --auth token --token "$$REASONIX_TOKEN" --behind-proxy
+    networks:
+      - opencode-net
+```
+
+容器绑定非回环地址时 reasonix 的 Web 端 provider 配置页不可用，凭据须预置：`config.toml` 由上方启动命令从镜像内 `/defaults/config.toml` 复制，`DEEPSEEK_API_KEY` 写入 `/reasonix-home/.env`（见 `docker/reasonix-config.toml`）。
+
 ## 本地开发
 
 需要一个运行中的 [OpenCode](https://github.com/anomalyco/opencode) 后端。

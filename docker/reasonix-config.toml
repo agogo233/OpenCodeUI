@@ -1,0 +1,20 @@
+# ============================================
+# Reasonix 全局配置（容器预置默认）
+# ============================================
+# 复制到 <Reasonix home>/config.toml 使用。挂载持久化后按需修改
+# reasonix-home/config.toml，再 docker compose restart reasonix 生效。
+#
+# 凭据不写在这里：reasonix 从 <Reasonix home>/.env 读取 api_key_env
+# 指向的变量，容器由启动脚本从 DEEPSEEK_API_KEY 环境变量换算写入。
+
+default_model = "deepseek"   # a provider name (→ its default model) or "provider/model"
+
+[[providers]]
+name        = "deepseek"
+kind        = "openai"
+base_url    = "https://api.deepseek.com"
+# 模型名按你的 DeepSeek 账户实际可用列表调整
+models      = ["deepseek-v4-flash", "deepseek-v4-pro"]
+default     = "deepseek-v4-flash"   # optional; defaults to the first of `models`
+api_key_env = "DEEPSEEK_API_KEY"
+context_window = 1000000

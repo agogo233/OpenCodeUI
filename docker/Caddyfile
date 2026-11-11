@@ -17,3 +17,6 @@
 
     encode gzip
 }
+
+# Reasonix Web UI 反代（独立站点 :3001，可选，见 Caddyfile.reasonix）
+import /etc/caddy/Caddyfile.reasonix

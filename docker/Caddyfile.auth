@@ -24,3 +24,7 @@
 
     encode gzip
 }
+
+# Reasonix Web UI 反代（独立站点 :3001，可选，见 Caddyfile.reasonix）
+# 注意：不继承上方页面 Basic Auth，认证由 reasonix serve 自身负责
+import /etc/caddy/Caddyfile.reasonix

@@ -11,6 +11,11 @@
 #   PORT                        - 前端监听端口（默认 3000）
 #   OPENCODE_SERVER_USERNAME    - 后端 Basic 认证用户名（默认 opencode）
 #   OPENCODE_SERVER_PASSWORD    - 后端 Basic 认证密码；为空则后端免密、不做代持
+#   REASONIX_URL                - reasonix serve 上游（默认 127.0.0.1:8787 = 未启用；
+#                                宿主机运行 reasonix 时设 host.docker.internal:8787，
+#                                需 reasonix serve --addr 0.0.0.0:8787，见 docker/Caddyfile.reasonix）
+#   REASONIX_LISTEN             - 前端容器内监听地址（默认 :3001，改动需同步端口映射）
+#   REASONIX_PORT               - Reasonix Web UI 端口（默认 3001，需取消下方注释）
 
 services:
   frontend:
@@ -19,6 +24,8 @@ services:
     restart: unless-stopped
     ports:
       - '${PORT:-3000}:3000'
+      # Reasonix Web UI 反代：取消注释后经 http://<IP>:3001 访问 reasonix serve
+      # - '${REASONIX_PORT:-3001}:3001'
     command:
       - sh
       - -c
@@ -32,6 +39,8 @@ services:
       - BACKEND_URL=${BACKEND_URL:-host.docker.internal:4096}
       - OPENCODE_SERVER_USERNAME=${OPENCODE_SERVER_USERNAME:-opencode}
       - OPENCODE_SERVER_PASSWORD=${OPENCODE_SERVER_PASSWORD:-}
+      - REASONIX_URL=${REASONIX_URL:-127.0.0.1:8787}
+      - REASONIX_LISTEN=${REASONIX_LISTEN:-:3001}
     # Linux 需要 host.docker.internal 支持
     extra_hosts:
       - 'host.docker.internal:host-gateway'

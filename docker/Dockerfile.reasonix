@@ -1,0 +1,38 @@
+# ============================================
+# OpenCode WebUI - Reasonix serve 第三服务镜像
+# ============================================
+# reasonix serve 自带 Web UI（go:embed 内嵌），单二进制自包含。
+#
+# 二进制固定取自自管 fork 的 latest release（跟随更新；仅 linux/amd64）：
+#   https://github.com/agogo233/DeepSeek-Reasonix/releases/download/latest/reasonix-linux-amd64
+# 如需临时 pin 具体版本，用 --build-arg REASONIX_URL=<...> 覆盖。
+#
+# reasonix 1.x 的 Web 端 provider 配置页仅对回环监听开放，容器绑定
+# 0.0.0.0 时不可用，因此凭据必须预置：
+#   1. /defaults/config.toml 由本镜像内置（docker/reasonix-config.toml）
+#   2. REASONIX_HOME/.env 由部署侧启动命令从 DEEPSEEK_API_KEY 环境变量
+#      换算写入（见 README「Reasonix Web UI 反代」的容器化示例）
+
+FROM alpine:3.20
+
+ARG REASONIX_URL=https://github.com/agogo233/DeepSeek-Reasonix/releases/download/latest/reasonix-linux-amd64
+
+RUN set -eux; \
+    apk add --no-cache curl; \
+    curl -fsSL "$REASONIX_URL" -o /usr/local/bin/reasonix; \
+    chmod +x /usr/local/bin/reasonix; \
+    apk del curl
+
+COPY docker/reasonix-config.toml /defaults/config.toml
+
+# REASONIX_HOME 使运行时完全自包含：配置、凭据、会话都在该目录树下
+ENV REASONIX_HOME=/reasonix-home
+VOLUME /reasonix-home
+
+# 1.x 无 --dir flag，serve 以 cwd 为项目根
+WORKDIR /workspace
+
+EXPOSE 8787
+
+ENTRYPOINT ["reasonix"]
+CMD ["serve", "--addr", "0.0.0.0:8787"]

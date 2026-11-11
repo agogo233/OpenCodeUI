@@ -15,7 +15,9 @@ on:
       - 'docker/Caddyfile'
       - 'docker/Caddyfile.standalone'
       - 'docker/Caddyfile.auth'
+      - 'docker/Caddyfile.reasonix'
       - 'docker/entrypoint-frontend.sh'
+      - 'scripts/**'
   workflow_dispatch:
 
 concurrency:
