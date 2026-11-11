@@ -5,6 +5,10 @@
 #   PAGE_AUTH_HASH     - 密码的 bcrypt 摘要（由启动时口令现算）
 # 未启用时请继续使用默认 Caddyfile，不要手动改选本文件。
 
+{
+    grace_period 3s
+}
+
 :3000 {
     @api path /api /api/*
     handle @api {

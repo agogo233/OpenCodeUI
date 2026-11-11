@@ -7,6 +7,10 @@
 #   PAGE_AUTH_HASH     - 密码的 bcrypt 摘要
 # 为空时不启用页面认证，与原免密行为完全一致。
 
+{
+	grace_period 3s
+}
+
 :3000 {
 	# opencode-mobile 专用入口：只剥 /mobile，保留 /api 前缀原样直通后端
 	handle_path /mobile/* {
