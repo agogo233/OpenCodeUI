@@ -7,6 +7,11 @@
 #   https://github.com/agogo233/DeepSeek-Reasonix/releases/download/latest/reasonix-linux-amd64
 # 如需临时 pin 具体版本，用 --build-arg REASONIX_URL=<...> 覆盖。
 #
+# reasonix 会在 /workspace 真实执行命令/改文件（agent 工具调用），故预装
+# agent 工具链：git/openssh-client、ripgrep/fd/jq/less/file/patch、
+# unzip/zip/xz-utils、python3(+venv)/g++/make。tini 作为 PID 1 负责信号
+# 转发与孤儿/僵尸子进程回收（与 Dockerfile.backend 同模式）。
+#
 # reasonix 1.x 的 Web 端 provider 配置页仅对回环监听开放，容器绑定
 # 0.0.0.0 时不可用，因此凭据必须预置（由镜像内 entrypoint-reasonix.sh
 # 在启动时完成，见 README「Reasonix Web UI 反代」/
@@ -16,22 +21,54 @@
 
 FROM debian:bookworm-slim
 
-ARG REASONIX_URL=https://github.com/agogo233/DeepSeek-Reasonix/releases/download/latest/reasonix-linux-amd64
+ENV DEBIAN_FRONTEND=noninteractive
 
 # curl 保留：compose healthcheck 与 reasonix 运行时 HTTPS（api.deepseek.com）
 # 都依赖它；bookworm-slim 无 busybox wget。ca-certificates 供 TLS 校验。
+# fd 在 Debian 里的二进制叫 fdfind，顺带软链为常见命令名 fd。
 RUN set -eux; \
     apt-get update; \
-    apt-get install -y --no-install-recommends curl ca-certificates; \
-    rm -rf /var/lib/apt/lists/*; \
+    apt-get install -y --no-install-recommends \
+        ca-certificates \
+        curl \
+        tini \
+        procps \
+        tzdata \
+        git \
+        openssh-client \
+        ripgrep \
+        fd-find \
+        jq \
+        less \
+        file \
+        patch \
+        unzip \
+        zip \
+        xz-utils \
+        python3 \
+        python3-venv \
+        g++ \
+        make; \
+    ln -sf /usr/bin/fdfind /usr/local/bin/fd; \
+    rm -rf /var/lib/apt/lists/*
+
+ARG REASONIX_URL=https://github.com/agogo233/DeepSeek-Reasonix/releases/download/latest/reasonix-linux-amd64
+
+# 单独一层：REASONIX_URL 变化或二进制更新时不击穿上方 apt 层缓存
+RUN set -eux; \
     curl -fsSL "$REASONIX_URL" -o /usr/local/bin/reasonix; \
     chmod +x /usr/local/bin/reasonix
 
 COPY docker/reasonix-config.toml /defaults/config.toml
 COPY --chmod=755 docker/entrypoint-reasonix.sh /usr/local/bin/entrypoint-reasonix.sh
 
-# REASONIX_HOME 使运行时完全自包含：配置、凭据、会话都在该目录树下
-ENV REASONIX_HOME=/reasonix-home
+# REASONIX_HOME 使运行时完全自包含：配置、凭据、会话都在该目录树下。
+# LANG/LC_ALL=C.UTF-8 为 glibc 内置 locale，避免 agent 子进程输出中文时编码报错；
+# TZ 仅为默认值，可被运行时 -e TZ=... 覆盖。
+ENV REASONIX_HOME=/reasonix-home \
+    LANG=C.UTF-8 \
+    LC_ALL=C.UTF-8 \
+    TZ=Asia/Shanghai
 VOLUME /reasonix-home
 
 # 1.x 无 --dir flag，serve 以 cwd 为项目根
@@ -39,7 +76,8 @@ WORKDIR /workspace
 
 EXPOSE 8787
 
-# ENTRYPOINT 负责凭据预置后 exec；compose 的 command: 只替换 CMD，
+# tini 为 PID 1：转发信号并回收 reasonix spawn 的孤儿/僵尸子进程；
+# entrypoint 负责凭据预置后 exec。compose 的 command: 只替换 CMD，
 # 即 reasonix 的参数（如 --auth token --token ...）
-ENTRYPOINT ["/usr/local/bin/entrypoint-reasonix.sh"]
+ENTRYPOINT ["tini", "--", "/usr/local/bin/entrypoint-reasonix.sh"]
 CMD ["serve", "--addr", "0.0.0.0:8787"]
