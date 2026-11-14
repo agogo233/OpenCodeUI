@@ -292,7 +292,7 @@ class ActiveSessionStore {
       if (!inScope(directory)) continue
       if (reportedSessionsByDir.get(directory)?.has(sessionId)) continue
       if (hasPendingIn(nextPending, sessionId)) continue
-      nextMap.delete(sessionId)
+      delete nextMap[sessionId]
       nextDeferred.delete(sessionId)
       this.sessionScopeIndex.delete(sessionId)
       changed = true
@@ -303,7 +303,7 @@ class ActiveSessionStore {
       for (const [sessionId, status] of Object.entries(group.statusMap)) {
         if (status.type === 'idle') {
           if (nextMap[sessionId]) changed = true
-          nextMap.delete(sessionId)
+          delete nextMap[sessionId]
           nextDeferred.delete(sessionId)
           this.sessionScopeIndex.delete(sessionId)
           continue
