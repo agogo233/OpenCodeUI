@@ -11,6 +11,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { messageStore, childSessionStore, paneLayoutStore, serverStore } from '../store'
 import { activeSessionStore } from '../store/activeSessionStore'
+import type { ScopeStatusGroup } from '../store/activeSessionStore'
 import { notificationStore } from '../store/notificationStore'
 import { soundStore } from '../store/soundStore'
 import { playNotificationSoundDeduped } from '../utils/notificationSoundBridge'
@@ -205,44 +206,37 @@ async function fetchActiveScopeData(directories: string[] | undefined, serverId:
     }),
   )
 
-  const mergedStatusMap: SessionStatusMap = {}
-  const permissionMap = new Map<string, ApiPermissionRequest>()
-  const questionMap = new Map<string, ApiQuestionRequest>()
+  // 按 directory 分组返回（复合 key），供 applyScopeSnapshot 做「本目录名下」的精确对账
+  const groups: ScopeStatusGroup[] = results.map(({ directory, statusMap, permissions, questions }) => ({
+    directory,
+    statusMap: Object.fromEntries(
+      Object.entries(statusMap).map(([sid, status]) => [makeSessionKey(serverId, sid), status]),
+    ),
+    permissions: permissions.map(permission => ({
+      ...permission,
+      sessionID: makeSessionKey(serverId, permission.sessionID),
+    })),
+    questions: questions.map(question => ({
+      ...question,
+      sessionID: makeSessionKey(serverId, question.sessionID),
+    })),
+  }))
+
   const sessionMetaEntries: Array<{ sessionId: string; directory?: string }> = []
-
-  results.forEach(({ directory, statusMap, permissions, questions }) => {
-    // statusMap 的 key 复合化（事件/store 内部统一用 serverId::sessionId）
-    for (const [sid, status] of Object.entries(statusMap)) {
-      mergedStatusMap[makeSessionKey(serverId, sid)] = status
+  for (const { directory, statusMap, permissions, questions } of results) {
+    if (!directory) continue
+    for (const sid of Object.keys(statusMap)) {
+      sessionMetaEntries.push({ sessionId: makeSessionKey(serverId, sid), directory })
     }
-
-    if (directory) {
-      Object.keys(statusMap).forEach(sid => {
-        sessionMetaEntries.push({ sessionId: makeSessionKey(serverId, sid), directory })
-      })
+    for (const permission of permissions) {
+      sessionMetaEntries.push({ sessionId: makeSessionKey(serverId, permission.sessionID), directory })
     }
-
-    permissions.forEach(permission => {
-      if (directory) {
-        sessionMetaEntries.push({ sessionId: makeSessionKey(serverId, permission.sessionID), directory })
-      }
-      permissionMap.set(permission.id, { ...permission, sessionID: makeSessionKey(serverId, permission.sessionID) })
-    })
-
-    questions.forEach(question => {
-      if (directory) {
-        sessionMetaEntries.push({ sessionId: makeSessionKey(serverId, question.sessionID), directory })
-      }
-      questionMap.set(question.id, { ...question, sessionID: makeSessionKey(serverId, question.sessionID) })
-    })
-  })
-
-  return {
-    statusMap: mergedStatusMap,
-    permissions: Array.from(permissionMap.values()),
-    questions: Array.from(questionMap.values()),
-    sessionMetaEntries,
+    for (const question of questions) {
+      sessionMetaEntries.push({ sessionId: makeSessionKey(serverId, question.sessionID), directory })
+    }
   }
+
+  return { groups, sessionMetaEntries }
 }
 
 /**
@@ -318,7 +312,7 @@ function collectActiveServerIds(): string[] {
 
 export function useGlobalEvents(directories?: string[]) {
   const directoriesRef = useRef<string[] | undefined>(directories)
-  const refreshRef = useRef<((strategy?: 'replace' | 'merge') => void) | null>(null)
+  const refreshRef = useRef<(() => void) | null>(null)
   const initializedDirectoriesRef = useRef(false)
 
   // 活跃服务器集合：所有 pane 打开的 session 所属 server + active server
@@ -399,21 +393,15 @@ export function useGlobalEvents(directories?: string[]) {
     // 拉取 session 状态 + pending requests（初始化 & 重连共用，按 server）
     // ============================================
 
-    const fetchAndInitialize = (serverId: string, strategy?: 'replace' | 'merge') => {
-      const effectiveStrategy = strategy ?? (multiServerStore.isEnabled() ? 'merge' : 'replace')
+    const fetchAndInitialize = (serverId: string) => {
       const currentVersion = (fetchVersions.get(serverId) ?? 0) + 1
       fetchVersions.set(serverId, currentVersion)
       activeFetchVersions.set(serverId, currentVersion)
       void fetchActiveScopeData(directoriesRef.current, serverId)
-        .then(({ statusMap, permissions, questions, sessionMetaEntries }) => {
+        .then(({ groups, sessionMetaEntries }) => {
           if (disposed || currentVersion !== fetchVersions.get(serverId)) return
-          if (effectiveStrategy === 'merge') {
-            activeSessionStore.mergeStatusRefresh(statusMap)
-            activeSessionStore.mergePendingRequests(permissions, questions)
-          } else {
-            activeSessionStore.initialize(statusMap)
-            activeSessionStore.initializePendingRequests(permissions, questions)
-          }
+          // 按目录范围对账：只替换本目录名下的活跃条目，清除已完成/已重启的残留
+          activeSessionStore.applyScopeSnapshot(serverId, groups)
           const currentDirectories = directoriesRef.current
           const currentScopeKey = getScopeKey(directoriesRef.current)
           for (const pending of latePendingRequests.values()) {
@@ -423,7 +411,13 @@ export function useGlobalEvents(directories?: string[]) {
               ? !currentDirectories || currentDirectories.length === 0 || currentDirectories.includes(pending.directory)
               : pending.scopeKey === currentScopeKey
             if (!matchesScope) continue
-            activeSessionStore.addPendingRequest(pending.requestId, pending.sessionId, pending.type, pending.description)
+            activeSessionStore.addPendingRequest(
+              pending.requestId,
+              pending.sessionId,
+              pending.type,
+              pending.description,
+              pending.directory,
+            )
           }
           activeSessionStore.setSessionMetaBulk(sessionMetaEntries)
         })
@@ -454,9 +448,9 @@ export function useGlobalEvents(directories?: string[]) {
       }
     }
 
-    refreshRef.current = (strategy?: 'replace' | 'merge') => {
+    refreshRef.current = () => {
       for (const serverId of activeServerIdsRef.current) {
-        fetchAndInitialize(serverId, strategy)
+        fetchAndInitialize(serverId)
       }
     }
 
@@ -668,7 +662,7 @@ export function useGlobalEvents(directories?: string[]) {
           const desc = request.patterns?.length ? `${request.permission}: ${request.patterns[0]}` : request.permission
 
           // Active 列表：注册 pending request
-          activeSessionStore.addPendingRequest(request.id, scopedId, 'permission', desc)
+          activeSessionStore.addPendingRequest(request.id, scopedId, 'permission', desc, meta?.directory)
           if (activeFetchVersions.get(serverId) !== 0) {
             latePendingRequests.set(request.id, {
               requestId: request.id,
@@ -714,7 +708,7 @@ export function useGlobalEvents(directories?: string[]) {
           const desc = request.questions?.[0]?.header || 'AI is waiting for your input'
 
           // Active 列表：注册 pending request
-          activeSessionStore.addPendingRequest(request.id, scopedId, 'question', desc)
+          activeSessionStore.addPendingRequest(request.id, scopedId, 'question', desc, meta?.directory)
           if (activeFetchVersions.get(serverId) !== 0) {
             latePendingRequests.set(request.id, {
               requestId: request.id,
@@ -873,7 +867,7 @@ export function useGlobalEvents(directories?: string[]) {
   useLayoutEffect(() => {
     directoriesRef.current = directories
     if (initializedDirectoriesRef.current) {
-      refreshRef.current?.('merge')
+      refreshRef.current?.()
       return
     }
     initializedDirectoriesRef.current = true

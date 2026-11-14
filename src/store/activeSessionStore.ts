@@ -5,9 +5,14 @@
 // 职责单一：只管 session 是否活跃、在等什么
 //
 // 数据来源：
-// 1. GET /session/status → 全量 session 状态
-// 2. GET /permission + GET /question → 补充等待中的 session
-// 3. SSE session.status / permission.asked / question.asked 事件
+// 1. GET /session/status → 按 directory 分组的全量 session 状态（applyScopeSnapshot 对账）
+// 2. SSE session.status / session.idle / permission / question 事件（实时更新）
+//
+// 对账语义（applyScopeSnapshot）：
+// - 服务端状态接口只返回仍 busy/retry 的会话，已完成的会话不会出现在返回里
+// - 因此每次拉取按 directory 分组后，只替换「本目录名下」的活跃条目；
+//   目录外的条目保持不动，避免误删仍在运行的其他目录会话
+// - 无 directory 的全局拉取只对账无归属条目
 //
 // 与 notificationStore 完全独立，不互相依赖
 
@@ -48,6 +53,15 @@ interface ActiveSessionState {
   initialized: boolean
 }
 
+/** 单个目录范围的拉取结果（sessionId / sessionID 均为 serverId::原始id 复合 key） */
+export interface ScopeStatusGroup {
+  /** 该组数据对应的拉取目录；undefined 表示全局范围 */
+  directory?: string
+  statusMap: SessionStatusMap
+  permissions: Array<{ id: string; sessionID: string; permission: string; patterns?: string[] }>
+  questions: Array<{ id: string; sessionID: string; questions?: Array<{ header?: string }> }>
+}
+
 type Subscriber = () => void
 
 function isSameBusySessions(a: ActiveSessionEntry[], b: ActiveSessionEntry[]): boolean {
@@ -74,6 +88,45 @@ function isSameBusySessions(a: ActiveSessionEntry[], b: ActiveSessionEntry[]): b
   return true
 }
 
+function hasPendingIn(pending: Map<string, PendingRequest>, sessionId: string): boolean {
+  for (const req of pending.values()) {
+    if (req.sessionId === sessionId) return true
+  }
+  return false
+}
+
+function isDifferentStatus(prev: SessionStatus | undefined, next: SessionStatus): boolean {
+  if (!prev) return true
+  if (prev.type !== next.type) return true
+  if (next.type === 'retry' && prev.type === 'retry') {
+    return (
+      prev.attempt !== next.attempt ||
+      prev.message !== next.message ||
+      prev.next !== next.next ||
+      prev.action !== next.action
+    )
+  }
+  return false
+}
+
+/** 有 pending 但服务端未报 busy 的会话：置 busy 并标记 deferred，等 pending 解决后再移出。返回是否新增了条目 */
+function ensurePendingBusy(
+  statusMap: SessionStatusMap,
+  deferred: Set<string>,
+  sessionIndex: Map<string, string | undefined>,
+  sessionId: string,
+  directory: string | undefined,
+): boolean {
+  const existing = statusMap[sessionId]
+  if (!existing || existing.type === 'idle') {
+    statusMap[sessionId] = { type: 'busy' }
+    deferred.add(sessionId)
+    sessionIndex.set(sessionId, directory)
+    return true
+  }
+  return false
+}
+
 // ============================================
 // Store
 // ============================================
@@ -93,6 +146,13 @@ class ActiveSessionStore {
 
   // 服务端已报告 idle，但因有未回复请求而暂缓移出的 session
   private deferredIdleSessions = new Set<string>()
+
+  // 拉取范围归属索引：复合 sessionId → 该条目上次被哪个 directory 的拉取接管
+  // （undefined 表示全局拉取建立，无目录归属）
+  private sessionScopeIndex = new Map<string, string | undefined>()
+
+  // pending 归属索引：requestId → directory
+  private pendingScopeIndex = new Map<string, string | undefined>()
 
   // 派生数据缓存
   private cachedBusySessions: ActiveSessionEntry[] = []
@@ -140,10 +200,7 @@ class ActiveSessionStore {
   }
 
   private hasPendingForSession(sessionId: string): boolean {
-    for (const req of this.pendingRequests.values()) {
-      if (req.sessionId === sessionId) return true
-    }
-    return false
+    return hasPendingIn(this.pendingRequests, sessionId)
   }
 
   getSnapshot = (): ActiveSessionState => this.state
@@ -166,7 +223,7 @@ class ActiveSessionStore {
   }
 
   // ============================================
-  // 初始化：从 API 拉取全量状态
+  // 初始化：全量替换状态（仅测试与特殊场景使用）
   // ============================================
 
   initialize(statusMap: SessionStatusMap) {
@@ -174,101 +231,152 @@ class ActiveSessionStore {
       statusMap: this.applyStatusSnapshot(statusMap, {}),
       initialized: true,
     }
-    this.notify()
-  }
-
-  // ============================================
-  // 范围刷新：返回值不是全量状态，只更新这次明确返回的 session
-  // ============================================
-
-  mergeStatusRefresh(statusMap: SessionStatusMap) {
-    this.state = {
-      statusMap: this.applyStatusSnapshot(statusMap, this.state.statusMap),
-      initialized: true,
+    this.pendingRequests.clear()
+    this.deferredIdleSessions.clear()
+    this.sessionScopeIndex.clear()
+    this.pendingScopeIndex.clear()
+    for (const sessionId of Object.keys(this.state.statusMap)) {
+      this.sessionScopeIndex.set(sessionId, undefined)
     }
     this.notify()
   }
 
   // ============================================
-  // 初始化：从 /permission + /question API 补充
+  // 按拉取范围对账：各组只替换「本目录名下」的条目
   // ============================================
 
-  initializePendingRequests(
-    permissions: Array<{ id: string; sessionID: string; permission: string; patterns?: string[] }>,
-    questions: Array<{ id: string; sessionID: string; questions?: Array<{ header?: string }> }>,
-  ) {
-    this.applyPendingSnapshot(permissions, questions, new Map<string, PendingRequest>(), new Set<string>())
-  }
+  applyScopeSnapshot(serverId: string, groups: ScopeStatusGroup[]) {
+    const prefix = `${serverId}::`
+    const groupDirs = groups.map(group => group.directory)
+    const hasGlobalGroup = groupDirs.some(directory => directory === undefined)
 
-  // ============================================
-  // 范围刷新：保留这次范围外已知的 pending request
-  // ============================================
+    const reportedSessionsByDir = new Map<string | undefined, Set<string>>()
+    const reportedPendingByDir = new Map<string | undefined, Set<string>>()
+    for (const group of groups) {
+      reportedSessionsByDir.set(
+        group.directory,
+        new Set(Object.keys(group.statusMap)),
+      )
+      reportedPendingByDir.set(
+        group.directory,
+        new Set([...group.permissions.map(p => p.id), ...group.questions.map(q => q.id)]),
+      )
+    }
 
-  mergePendingRequests(
-    permissions: Array<{ id: string; sessionID: string; permission: string; patterns?: string[] }>,
-    questions: Array<{ id: string; sessionID: string; questions?: Array<{ header?: string }> }>,
-  ) {
-    this.applyPendingSnapshot(permissions, questions, new Map(this.pendingRequests), new Set(this.deferredIdleSessions))
-  }
+    // 范围判定：有归属的条目只由对应目录的拉取对账；无归属条目仅在全局拉取时对账
+    const inScope = (directory: string | undefined) =>
+      directory === undefined ? hasGlobalGroup : groupDirs.includes(directory)
 
-  private applyPendingSnapshot(
-    permissions: Array<{ id: string; sessionID: string; permission: string; patterns?: string[] }>,
-    questions: Array<{ id: string; sessionID: string; questions?: Array<{ header?: string }> }>,
-    pendingRequests: Map<string, PendingRequest>,
-    deferredIdleSessions: Set<string>,
-  ) {
+    const nextMap = { ...this.state.statusMap }
+    const nextPending = new Map(this.pendingRequests)
+    const nextDeferred = new Set(this.deferredIdleSessions)
     let changed = false
-    const newMap = { ...this.state.statusMap }
 
-    for (const p of permissions) {
-      const desc = p.patterns?.length ? `${p.permission}: ${p.patterns[0]}` : p.permission
-      pendingRequests.set(p.id, {
-        requestId: p.id,
-        sessionId: p.sessionID,
-        type: 'permission',
-        description: desc,
-      })
-      if (!newMap[p.sessionID] || newMap[p.sessionID].type === 'idle') {
-        newMap[p.sessionID] = { type: 'busy' }
-        deferredIdleSessions.add(p.sessionID)
-        changed = true
+    // 1) 修剪 pending：本服务器范围内、本次未返回的请求视为已失效
+    for (const [requestId, directory] of this.pendingScopeIndex) {
+      const req = this.pendingRequests.get(requestId)
+      if (!req || !req.sessionId.startsWith(prefix)) continue
+      if (!inScope(directory)) continue
+      if (reportedPendingByDir.get(directory)?.has(requestId)) continue
+      nextPending.delete(requestId)
+      this.pendingScopeIndex.delete(requestId)
+      changed = true
+    }
+
+    // 2) 修剪 session 状态：本服务器范围内、本次未报告且已无 pending 的会话移出活跃
+    for (const [sessionId, directory] of this.sessionScopeIndex) {
+      if (!sessionId.startsWith(prefix)) continue
+      if (!nextMap[sessionId]) {
+        this.sessionScopeIndex.delete(sessionId)
+        continue
+      }
+      if (!inScope(directory)) continue
+      if (reportedSessionsByDir.get(directory)?.has(sessionId)) continue
+      if (hasPendingIn(nextPending, sessionId)) continue
+      nextMap.delete(sessionId)
+      nextDeferred.delete(sessionId)
+      this.sessionScopeIndex.delete(sessionId)
+      changed = true
+    }
+
+    // 3) 合入本次快照
+    for (const group of groups) {
+      for (const [sessionId, status] of Object.entries(group.statusMap)) {
+        if (status.type === 'idle') {
+          if (nextMap[sessionId]) changed = true
+          nextMap.delete(sessionId)
+          nextDeferred.delete(sessionId)
+          this.sessionScopeIndex.delete(sessionId)
+          continue
+        }
+        const next: SessionStatus = status.type === 'retry' ? { ...status } : { type: 'busy' }
+        if (isDifferentStatus(nextMap[sessionId], next)) {
+          nextMap[sessionId] = next
+          changed = true
+        }
+        // 已有目录归属的条目保留原归属（全局合入不改写，避免失去目录对账能力）
+        if (this.sessionScopeIndex.get(sessionId) === undefined) {
+          this.sessionScopeIndex.set(sessionId, group.directory)
+        }
+      }
+      for (const p of group.permissions) {
+        const desc = p.patterns?.length ? `${p.permission}: ${p.patterns[0]}` : p.permission
+        const prevReq = nextPending.get(p.id)
+        if (!prevReq || prevReq.type !== 'permission' || prevReq.description !== desc) changed = true
+        nextPending.set(p.id, {
+          requestId: p.id,
+          sessionId: p.sessionID,
+          type: 'permission',
+          description: desc,
+        })
+        this.pendingScopeIndex.set(p.id, group.directory)
+        if (ensurePendingBusy(nextMap, nextDeferred, this.sessionScopeIndex, p.sessionID, group.directory)) {
+          changed = true
+        }
+      }
+      for (const q of group.questions) {
+        const desc = q.questions?.[0]?.header || 'Waiting for input'
+        const prevReq = nextPending.get(q.id)
+        if (!prevReq || prevReq.type !== 'question' || prevReq.description !== desc) changed = true
+        nextPending.set(q.id, {
+          requestId: q.id,
+          sessionId: q.sessionID,
+          type: 'question',
+          description: desc,
+        })
+        this.pendingScopeIndex.set(q.id, group.directory)
+        if (ensurePendingBusy(nextMap, nextDeferred, this.sessionScopeIndex, q.sessionID, group.directory)) {
+          changed = true
+        }
       }
     }
 
-    for (const q of questions) {
-      const desc = q.questions?.[0]?.header || 'Waiting for input'
-      pendingRequests.set(q.id, {
-        requestId: q.id,
-        sessionId: q.sessionID,
-        type: 'question',
-        description: desc,
-      })
-      if (!newMap[q.sessionID] || newMap[q.sessionID].type === 'idle') {
-        newMap[q.sessionID] = { type: 'busy' }
-        deferredIdleSessions.add(q.sessionID)
-        changed = true
-      }
-    }
-
-    this.pendingRequests = pendingRequests
-    this.deferredIdleSessions = deferredIdleSessions
-
+    this.pendingRequests = nextPending
+    this.deferredIdleSessions = nextDeferred
     if (changed) {
-      this.state = { ...this.state, statusMap: newMap }
+      this.state = { ...this.state, statusMap: nextMap }
+      this.notify()
     }
-    this.notify()
   }
 
   // ============================================
   // SSE 事件：permission/question asked → 注册 pending
   // ============================================
 
-  addPendingRequest(requestId: string, sessionId: string, type: 'permission' | 'question', description?: string) {
+  addPendingRequest(
+    requestId: string,
+    sessionId: string,
+    type: 'permission' | 'question',
+    description?: string,
+    directory?: string,
+  ) {
     this.pendingRequests.set(requestId, { requestId, sessionId, type, description })
+    this.pendingScopeIndex.set(requestId, directory)
     // 确保 session 在 busy 列表
     if (!this.state.statusMap[sessionId] || this.state.statusMap[sessionId].type === 'idle') {
       const newMap = { ...this.state.statusMap, [sessionId]: { type: 'busy' as const } }
       this.deferredIdleSessions.add(sessionId)
+      this.sessionScopeIndex.set(sessionId, directory)
       this.state = { ...this.state, statusMap: newMap }
     }
     this.notify()
@@ -282,12 +390,14 @@ class ActiveSessionStore {
     const req = this.pendingRequests.get(requestId)
     if (!req) return
     this.pendingRequests.delete(requestId)
+    this.pendingScopeIndex.delete(requestId)
 
     // 检查该 session 是否还有其他 pending，没有且 deferred 就移出 busy
     if (this.deferredIdleSessions.has(req.sessionId) && !this.hasPendingForSession(req.sessionId)) {
       this.deferredIdleSessions.delete(req.sessionId)
       const newMap = { ...this.state.statusMap }
       delete newMap[req.sessionId]
+      this.sessionScopeIndex.delete(req.sessionId)
       this.state = { ...this.state, statusMap: newMap }
     }
     this.notify()
@@ -306,13 +416,16 @@ class ActiveSessionStore {
       } else {
         this.deferredIdleSessions.delete(sessionId)
         delete newMap[sessionId]
+        this.sessionScopeIndex.delete(sessionId)
       }
     } else if (status.type === 'retry') {
       this.deferredIdleSessions.delete(sessionId)
       newMap[sessionId] = { ...status }
+      if (!this.sessionScopeIndex.has(sessionId)) this.sessionScopeIndex.set(sessionId, undefined)
     } else {
       this.deferredIdleSessions.delete(sessionId)
       newMap[sessionId] = { type: 'busy' }
+      if (!this.sessionScopeIndex.has(sessionId)) this.sessionScopeIndex.set(sessionId, undefined)
     }
 
     this.state = { ...this.state, statusMap: newMap }
@@ -326,12 +439,14 @@ class ActiveSessionStore {
     if (nextMap[sessionId]) {
       nextMap = { ...nextMap }
       delete nextMap[sessionId]
+      this.sessionScopeIndex.delete(sessionId)
       changed = true
     }
 
     for (const [requestId, request] of this.pendingRequests) {
       if (request.sessionId !== sessionId) continue
       this.pendingRequests.delete(requestId)
+      this.pendingScopeIndex.delete(requestId)
       changed = true
     }
 

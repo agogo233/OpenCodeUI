@@ -92,9 +92,7 @@ const {
   })),
   activeSessionStoreMock: {
     initialize: vi.fn(),
-    initializePendingRequests: vi.fn(),
-    mergeStatusRefresh: vi.fn(),
-    mergePendingRequests: vi.fn(),
+    applyScopeSnapshot: vi.fn(),
     setSessionMetaBulk: vi.fn(),
     setSessionMeta: vi.fn(),
     getSessionMeta: vi.fn((sessionId?: string) => ({ title: sessionId || 'Child Session', directory: '/workspace' })),
@@ -393,16 +391,22 @@ describe('useGlobalEvents', () => {
     statusDeferreds.get('/two')?.resolve({ 'new-session': { type: 'busy' } })
 
     await waitFor(() => {
-      expect(activeSessionStoreMock.mergeStatusRefresh).toHaveBeenCalledTimes(1)
-      expect(activeSessionStoreMock.mergeStatusRefresh).toHaveBeenCalledWith({ 'local::new-session': { type: 'busy' } })
+      expect(activeSessionStoreMock.applyScopeSnapshot).toHaveBeenCalledTimes(1)
+      expect(activeSessionStoreMock.applyScopeSnapshot).toHaveBeenCalledWith('local', [
+        {
+          directory: '/two',
+          statusMap: { 'local::new-session': { type: 'busy' } },
+          permissions: [],
+          questions: [],
+        },
+      ])
     })
 
     statusDeferreds.get('/one')?.resolve({ 'old-session': { type: 'idle' } })
     await Promise.resolve()
     await Promise.resolve()
 
-    expect(activeSessionStoreMock.mergeStatusRefresh).toHaveBeenCalledTimes(1)
-    expect(activeSessionStoreMock.mergeStatusRefresh).not.toHaveBeenCalledWith({ 'local::old-session': { type: 'idle' } })
+    expect(activeSessionStoreMock.applyScopeSnapshot).toHaveBeenCalledTimes(1)
   })
 
   it('replays pending requests that arrive while initialization is in flight', async () => {
@@ -431,7 +435,7 @@ describe('useGlobalEvents', () => {
 
     statusDeferred.resolve({})
 
-    await waitFor(() => expect(activeSessionStoreMock.initializePendingRequests).toHaveBeenCalled())
+    await waitFor(() => expect(activeSessionStoreMock.applyScopeSnapshot).toHaveBeenCalled())
 
     expect(activeSessionStoreMock.addPendingRequest).toHaveBeenNthCalledWith(
       1,
@@ -439,6 +443,7 @@ describe('useGlobalEvents', () => {
       'local::child-session',
       'permission',
       'edit: src/app.tsx',
+      '/workspace',
     )
     expect(activeSessionStoreMock.addPendingRequest).toHaveBeenNthCalledWith(
       2,
@@ -446,6 +451,7 @@ describe('useGlobalEvents', () => {
       'local::child-session',
       'permission',
       'edit: src/app.tsx',
+      '/workspace',
     )
   })
 
@@ -497,7 +503,7 @@ describe('useGlobalEvents', () => {
 
     statusDeferreds.get('/two')?.resolve({})
 
-    await waitFor(() => expect(activeSessionStoreMock.mergePendingRequests).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(activeSessionStoreMock.applyScopeSnapshot).toHaveBeenCalledTimes(1))
 
     expect(activeSessionStoreMock.addPendingRequest.mock.calls.filter(call => call[0] === 'perm-1')).toHaveLength(1)
     expect(activeSessionStoreMock.addPendingRequest.mock.calls.filter(call => call[0] === 'question-1')).toHaveLength(2)
