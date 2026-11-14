@@ -102,8 +102,7 @@ function isDifferentStatus(prev: SessionStatus | undefined, next: SessionStatus)
     return (
       prev.attempt !== next.attempt ||
       prev.message !== next.message ||
-      prev.next !== next.next ||
-      prev.action !== next.action
+      prev.next !== next.next
     )
   }
   return false
