@@ -822,10 +822,11 @@ describe('useChatSession agent restoration', () => {
     expect(warnCountAfterFirstRun).toBeGreaterThan(0)
 
     // 消息数量变化触发重试：不重复 warn，也不覆盖当前选择
-    const retriedState = sessionStateWithLastUserMessage({ agent: 'ghost' })
+    const ghostInfo: Record<string, unknown> = { agent: 'ghost' }
+    const retriedState = sessionStateWithLastUserMessage(ghostInfo)
     retriedState.messages = [
-      { info: { id: 'u0', role: 'user', agent: 'ghost' } },
-      { info: { id: 'u1', role: 'user', agent: 'ghost' } },
+      { info: { id: 'u0', role: 'user', ...ghostInfo } },
+      { info: { id: 'u1', role: 'user', ...ghostInfo } },
     ]
     useSessionStateMock.mockReturnValue(retriedState)
     rerender({ sessionId: 'session-1' })
