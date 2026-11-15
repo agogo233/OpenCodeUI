@@ -76,11 +76,15 @@ BACKEND_URL=your-server.com:4096 PORT=8080 docker compose -f docker-compose.stan
 | `BACKEND_URL`              | `host.docker.internal:4096` | opencode serve 地址（不含协议前缀）           |
 | `PORT`                     | `3000`                      | 前端监听端口                                  |
 | `OPENCODE_SERVER_USERNAME` | `opencode`                  | 后端 Basic 认证用户名（与后端容器保持一致）   |
-| `OPENCODE_SERVER_PASSWORD` | 空                          | 后端 Basic 认证密码；为空则后端免密、不做代持 |
+| `OPENCODE_SERVER_PASSWORD` | 空                          | 后端 Basic 认证密码；非空时接口与页面均要求登录，为空则全站免密 |
 
 **后端开启密码认证时（`OPENCODE_SERVER_PASSWORD`）：**
 
 浏览器不会为终端 WebSocket 自动携带认证凭据，因此密码由前端容器代持：把 `.env` 里的 `OPENCODE_SERVER_USERNAME`/`OPENCODE_SERVER_PASSWORD` 换算成 Basic 头，由 Caddy 在反代时统一注入。浏览器和 OpenCodeUI 界面均无需任何配置，终端可直接连接。未设置密码时不导出该值，Caddy 不注入任何 `Authorization` 头，无密码场景与直接访问后端完全一致。
+
+**手机端（opencode-mobile）专用入口 `/mobile/*` 不做凭据代持：**
+
+App 在连接配置中自带 `Authorization: Basic`（用户名/密码与 `OPENCODE_SERVER_USERNAME`/`OPENCODE_SERVER_PASSWORD` 一致），由后端统一校验；未填写凭据的请求会被后端 401 拒绝。这样可以避免 `/mobile` 入口绕过页面级 Basic Auth。若你的前端经局域网 IP 访问，终端 WebSocket 的来源改写（`header_up Origin`）在该入口同样保留。
 
 若你使用自定义 Caddyfile，`handle_path /api/*` 块中需要相同写法（`OPENCODE_AUTH_BASIC` 由启动命令导出，值为 `base64(用户名:密码)`；未导出时表达式不匹配，自动走不带认证头的分支）：
 

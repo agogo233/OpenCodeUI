@@ -12,15 +12,11 @@
 }
 
 :3000 {
-	# opencode-mobile 专用入口：只剥 /mobile，保留 /api 前缀原样直通后端
+	# opencode-mobile 专用入口：只剥 /mobile，保留 /api 前缀原样直通后端。
+	# 不代持后端凭据：App 在连接配置中自带 Authorization: Basic（与
+	# OPENCODE_SERVER_USERNAME/PASSWORD 一致），由后端统一校验；无凭据
+	# 请求被后端 401 拒绝，避免此入口绕过页面级 Basic Auth。
 	handle_path /mobile/* {
-		@with_auth expression `{env.OPENCODE_AUTH_BASIC} != ""`
-		reverse_proxy @with_auth {$BACKEND_URL:host.docker.internal:4096} {
-			header_up Host {upstream_hostport}
-			header_up Authorization "Basic {env.OPENCODE_AUTH_BASIC}"
-			header_up Origin "http://localhost:3000"
-			flush_interval -1
-		}
 		reverse_proxy {$BACKEND_URL:host.docker.internal:4096} {
 			header_up Host {upstream_hostport}
 			header_up Origin "http://localhost:3000"

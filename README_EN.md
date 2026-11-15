@@ -76,11 +76,15 @@ BACKEND_URL=your-server.com:4096 PORT=8080 docker compose -f docker-compose.stan
 | `BACKEND_URL`              | `host.docker.internal:4096` | opencode serve address (without protocol prefix)              |
 | `PORT`                     | `3000`                      | Frontend listening port                                       |
 | `OPENCODE_SERVER_USERNAME` | `opencode`                  | Backend Basic auth username (keep in sync with backend)       |
-| `OPENCODE_SERVER_PASSWORD` | (empty)                     | Backend Basic auth password; empty means no auth, no proxying |
+| `OPENCODE_SERVER_PASSWORD` | (empty)                     | Backend Basic auth password; when set, both API and UI require login; empty means no auth anywhere |
 
 **When the backend enables password auth (`OPENCODE_SERVER_PASSWORD`):**
 
 Browsers do not automatically attach credentials to terminal WebSocket connections, so the password is held by the frontend container: the `OPENCODE_SERVER_USERNAME`/`OPENCODE_SERVER_PASSWORD` values from `.env` are converted into a Basic header, injected uniformly by Caddy when proxying. No configuration is needed in the browser or the OpenCodeUI UI, and the terminal connects directly. When unset, the value is not exported, Caddy injects no `Authorization` header at all, and the passwordless scenario behaves exactly like accessing the backend directly.
+
+**The mobile-only entry `/mobile/*` (for opencode-mobile) does not proxy-hold credentials:**
+
+The app sends its own `Authorization: Basic` header from the connection settings (username/password matching `OPENCODE_SERVER_USERNAME`/`OPENCODE_SERVER_PASSWORD`), and the backend validates it uniformly. Requests without credentials are rejected with 401 by the backend. This prevents the `/mobile` entry from bypassing the page-level Basic Auth. When the frontend is accessed via a LAN IP, the Origin rewrite (`header_up Origin`) for terminal WebSockets is still applied on this entry.
 
 If you use a custom Caddyfile, the same pattern is required in the `handle_path /api/*` block (`OPENCODE_AUTH_BASIC` is exported by the startup command, with value `base64(username:password)`; when not exported the expression does not match, and the branch without an auth header is used automatically):
 
