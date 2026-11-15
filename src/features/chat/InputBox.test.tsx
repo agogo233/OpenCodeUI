@@ -122,8 +122,23 @@ describe('InputBox slash command selection', () => {
     fireEvent.click(screen.getByRole('button', { name: 'compact' }))
 
     await waitFor(() => {
-      expect(onCommand).toHaveBeenCalledWith('/compact')
+      expect(onCommand).toHaveBeenCalledWith('/compact', undefined)
       expect(textarea.value).toBe('')
+    })
+  })
+
+  it('forwards the selected agent when executing frontend commands', async () => {
+    slashCommands = [{ name: 'compact', description: 'Compact session', source: 'frontend' }]
+    const onCommand = vi.fn()
+
+    render(<InputBox paneId="pane-test" onSend={vi.fn()} onCommand={onCommand} selectedAgent="plan" />)
+
+    const textarea = screen.getByRole('textbox') as HTMLTextAreaElement
+    fireEvent.change(textarea, { target: { value: '/', selectionStart: 1 } })
+    fireEvent.click(screen.getByRole('button', { name: 'compact' }))
+
+    await waitFor(() => {
+      expect(onCommand).toHaveBeenCalledWith('/compact', 'plan')
     })
   })
 
@@ -207,7 +222,7 @@ describe('InputBox slash command selection', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'send' }))
 
-    expect(onCommand).toHaveBeenCalledWith('/review')
+    expect(onCommand).toHaveBeenCalledWith('/review', undefined)
     expect(textarea.value).toBe('')
     expect(textarea).not.toBeDisabled()
 

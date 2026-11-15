@@ -293,9 +293,47 @@ describe('useChatSession handleCommand', () => {
       await Promise.resolve()
     })
 
-    expect(executeCommandMock).toHaveBeenCalledWith('session-1', 'review', 'src/App.tsx', '/workspace/demo', 'local', 'provider-1/model-1')
+    expect(executeCommandMock).toHaveBeenCalledWith(
+      'session-1',
+      'review',
+      'src/App.tsx',
+      '/workspace/demo',
+      'local',
+      'provider-1/model-1',
+      undefined,
+    )
     expect(settled).toBe(true)
     expect(commandResult).toBe(true)
+  })
+
+  it('forwards the selected agent to api command execution', async () => {
+    executeCommandMock.mockReturnValue(new Promise(() => {}))
+
+    const { result } = renderHook(() =>
+      useChatSession({
+        paneId: 'pane-1',
+        chatAreaRef: { current: null },
+        currentModel: { id: 'model-1', providerId: 'provider-1', variants: [] } as never,
+        refetchModels: vi.fn(async () => {}),
+        sessionId: 'session-1',
+        navigateToSession: vi.fn(),
+        navigateHome: vi.fn(),
+      }),
+    )
+
+    await act(async () => {
+      await result.current.handleCommand('/review src/App.tsx', 'plan')
+    })
+
+    expect(executeCommandMock).toHaveBeenCalledWith(
+      'session-1',
+      'review',
+      'src/App.tsx',
+      '/workspace/demo',
+      'local',
+      'provider-1/model-1',
+      'plan',
+    )
   })
 
   it('refreshes pending permissions when session full auto pending sweep is enabled', async () => {
@@ -764,5 +802,37 @@ describe('useChatSession agent restoration', () => {
     await act(async () => {})
 
     expect(result.current.selectedAgent).toBe('build')
+  })
+
+  it('keeps current selection and warns once when message agent is not selectable', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    getSelectableAgentsMock.mockResolvedValue(AGENTS)
+    useSessionStateMock.mockReturnValue(sessionStateWithLastUserMessage({ agent: 'ghost' }))
+
+    const { result, rerender } = render()
+
+    await act(async () => {})
+
+    await waitFor(() => {
+      expect(getSelectableAgentsMock).toHaveBeenCalled()
+    })
+    expect(result.current.selectedAgent).toBe('build')
+
+    const warnCountAfterFirstRun = warnSpy.mock.calls.length
+    expect(warnCountAfterFirstRun).toBeGreaterThan(0)
+
+    // 消息数量变化触发重试：不重复 warn，也不覆盖当前选择
+    const retriedState = sessionStateWithLastUserMessage({ agent: 'ghost' })
+    retriedState.messages = [
+      { info: { id: 'u0', role: 'user', agent: 'ghost' } },
+      { info: { id: 'u1', role: 'user', agent: 'ghost' } },
+    ]
+    useSessionStateMock.mockReturnValue(retriedState)
+    rerender({ sessionId: 'session-1' })
+
+    await act(async () => {})
+
+    expect(result.current.selectedAgent).toBe('build')
+    expect(warnSpy.mock.calls.length).toBe(warnCountAfterFirstRun)
   })
 })

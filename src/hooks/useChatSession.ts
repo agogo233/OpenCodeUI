@@ -991,7 +991,7 @@ export function useChatSession({
 
   // Command handler (slash commands)
   const handleCommand = useCallback(
-    async (commandStr: string) => {
+    async (commandStr: string, agent?: string) => {
       // 解析命令："/help arg1 arg2" => command="help", args="arg1 arg2"
       const trimmed = commandStr.trim()
       const withoutSlash = trimmed.startsWith('/') ? trimmed.slice(1) : trimmed
@@ -1054,6 +1054,7 @@ export function useChatSession({
           effectiveDirectory,
           paneServerId,
           currentModel ? `${currentModel.providerId}/${currentModel.id}` : undefined,
+          agent,
         ).catch(err => {
           handleError('execute command', err)
         })
@@ -1155,35 +1156,48 @@ export function useChatSession({
     setSelectedAgent(primaryAgents[nextIndex].name)
   }, [agents, selectedAgent, setSelectedAgent])
 
-  // 从消息中恢复 agent 选择（用于切换 session 时）
+  // 从消息中恢复 agent 选择（用于切换 session 时）。返回是否成功应用恢复。
   const restoreAgentFromMessage = useCallback(
-    (agentName: string | null | undefined) => {
-      if (!agentName) return
+    (agentName: string | null | undefined): boolean => {
+      if (!agentName) return false
       // 只有当 agent 存在于列表中时才恢复
       const exists = agents.some(a => a.name === agentName && a.mode !== 'subagent' && !a.hidden)
       if (exists) {
         setSelectedAgent(agentName)
+        return true
       }
+      return false
     },
     [agents, setSelectedAgent],
   )
 
   // 会话级 agent 恢复：从最后一条用户消息恢复选中 agent。
-  // agents 未就绪时不标记完成，待加载后由依赖变化触发重试，
-  // 避免恢复被静默跳过后被兜底逻辑误设为第一个 primary agent（如 build）。
+  // 仅在成功应用恢复后标记完成；消息缺 agent 字段（如 slash command 产生的消息）
+  // 或 agent 不在可选列表时保持当前选择、不标记完成，待 messages/agents 变化后重试，
+  // 避免一次失败被永久跳过后被兜底逻辑误设为第一个 primary agent（如 build）。
   const restoredAgentSessionRef = useRef<string | null>(null)
+  const agentRestoreWarnedRef = useRef('')
 
   useEffect(() => {
     if (!routeSessionId || restoredAgentSessionRef.current === routeSessionId) return
     if (messages.length === 0) return
     const lastUserMsg = [...messages].reverse().find(m => m.info.role === 'user')
-    if (!lastUserMsg || !('agent' in lastUserMsg.info)) {
+    if (!lastUserMsg) {
       restoredAgentSessionRef.current = routeSessionId
       return
     }
     if (agents.length === 0) return
+    const msgAgent = (lastUserMsg.info as { agent?: string }).agent
+    if (!msgAgent) return
+    if (!restoreAgentFromMessage(msgAgent)) {
+      const warnKey = `${routeSessionId}:${msgAgent}`
+      if (agentRestoreWarnedRef.current !== warnKey) {
+        agentRestoreWarnedRef.current = warnKey
+        console.warn(`[agent-restore] agent "${msgAgent}" not in selectable agents; keeping current selection`)
+      }
+      return
+    }
     restoredAgentSessionRef.current = routeSessionId
-    restoreAgentFromMessage((lastUserMsg.info as { agent?: string }).agent)
     // Streaming only changes message content; agent restoration follows session/load boundaries.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [routeSessionId, messages.length, agents.length, restoreAgentFromMessage])

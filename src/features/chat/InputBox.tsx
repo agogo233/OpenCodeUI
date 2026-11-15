@@ -123,7 +123,7 @@ export interface InputBoxProps {
     options?: { agent?: string; variant?: string },
   ) => Promise<boolean> | boolean
   onAbort?: () => void
-  onCommand?: (command: string) => Promise<boolean> | boolean // 斜杠命令回调，接收完整命令字符串如 "/help"
+  onCommand?: (command: string, agent?: string) => Promise<boolean> | boolean // 斜杠命令回调，接收完整命令字符串如 "/help"，附带当前选中的 agent
   onNewChat?: () => void // 新建对话回调
   disabled?: boolean
   isStreaming?: boolean
@@ -444,7 +444,7 @@ function InputBoxComponent({
   )
 
   const submitCommandOptimistically = useCallback(
-    (commandStr: string) => {
+    (commandStr: string, agent?: string) => {
       if (!onCommand) return
 
       const draftSnapshot: HistoryEntry = {
@@ -462,7 +462,7 @@ function InputBoxComponent({
       void (async () => {
         let result: boolean | void
         try {
-          result = await onCommand(commandStr)
+          result = await onCommand(commandStr, agent)
         } catch {
           result = false
         }
@@ -505,6 +505,16 @@ function InputBoxComponent({
   const handleSend = useCallback(() => {
     if (!canSend || isSubmitting) return
 
+    // agent 来源：@ mention 优先，其次当前选中的 agent
+    const agentAttachment = attachments.find(a => a.type === 'agent')
+    const mentionedAgent = agentAttachment?.agentName
+    const effectiveAgent = mentionedAgent || selectedAgent
+
+    if (!effectiveAgent) {
+      // 未选中 agent 时后端会使用默认 agent（通常为 build），留痕便于排查"选了 plan 却按 build 执行"类问题
+      console.warn('[InputBox] no agent selected; backend will use its default agent')
+    }
+
     // 检测 command attachment
     const commandAttachment = attachments.find(a => a.type === 'command')
     if (commandAttachment && commandAttachment.commandName) {
@@ -514,18 +524,14 @@ function InputBoxComponent({
       const textRange = commandAttachment.textRange
       const afterCommand = textRange ? text.slice(textRange.end).trim() : ''
       const commandStr = `/${commandAttachment.commandName}${afterCommand ? ' ' + afterCommand : ''}`
-      submitCommandOptimistically(commandStr)
+      submitCommandOptimistically(commandStr, effectiveAgent)
       return
     }
-
-    // 从 attachments 中找 agent mention
-    const agentAttachment = attachments.find(a => a.type === 'agent')
-    const mentionedAgent = agentAttachment?.agentName
 
     void runSubmit(
       () =>
         onSend(text, attachments, {
-          agent: mentionedAgent || selectedAgent,
+          agent: effectiveAgent,
           variant: selectedVariant,
         }),
       () => {
@@ -823,7 +829,7 @@ function InputBoxComponent({
         if (!onCommand) return
 
         setSlashOpen(false)
-        submitCommandOptimistically(`/${command.name}`)
+        submitCommandOptimistically(`/${command.name}`, selectedAgent)
         requestAnimationFrame(() => textareaRef.current?.focus())
         return
       }
@@ -863,7 +869,7 @@ function InputBoxComponent({
         textareaRef.current.focus()
       })
     },
-    [text, slashStartIndex, slashQuery, onCommand, submitCommandOptimistically],
+    [text, slashStartIndex, slashQuery, onCommand, submitCommandOptimistically, selectedAgent],
   )
 
   const handleSlashClose = useCallback(() => {

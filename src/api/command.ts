@@ -86,6 +86,7 @@ export async function executeCommand(
   directory?: string,
   serverId?: string,
   model?: string,
+  agent?: string,
 ): Promise<unknown> {
   const target = resolveSessionTarget(sessionId, serverId)
   const sdk = getSDKClient(target.serverId)
@@ -96,6 +97,7 @@ export async function executeCommand(
       command,
       arguments: args,
       ...(model ? { model } : {}),
+      ...(agent ? { agent } : {}),
     }),
   )
 }

@@ -1,12 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { getCommands } from './command'
+import { executeCommand, getCommands } from './command'
 
 const listMock = vi.fn()
+const sessionCommandMock = vi.fn()
 
 vi.mock('./sdk', () => ({
   getSDKClient: () => ({
     command: {
       list: (...args: unknown[]) => listMock(...args),
+    },
+    session: {
+      command: (...args: unknown[]) => sessionCommandMock(...args),
     },
   }),
   unwrap: (result: { data?: unknown }) => result.data,
@@ -17,6 +21,39 @@ vi.mock('../store/serverStore', () => ({
     getActiveServerId: () => 'test-server',
   },
 }))
+
+describe('executeCommand', () => {
+  beforeEach(() => {
+    sessionCommandMock.mockReset()
+  })
+
+  it('forwards agent to the session command request when provided', async () => {
+    sessionCommandMock.mockResolvedValue({ data: { ok: true } })
+
+    await executeCommand('session-1', 'review', 'src/App.tsx', '/workspace/demo', 'srv-1', 'prov-1/model-1', 'plan')
+
+    expect(sessionCommandMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionID: 'session-1',
+        command: 'review',
+        arguments: 'src/App.tsx',
+        model: 'prov-1/model-1',
+        agent: 'plan',
+      }),
+    )
+  })
+
+  it('omits agent field when not provided', async () => {
+    sessionCommandMock.mockResolvedValue({ data: { ok: true } })
+
+    await executeCommand('session-1', 'review', 'src/App.tsx', '/workspace/demo', 'srv-1')
+
+    const params = sessionCommandMock.mock.calls[0][0] as Record<string, unknown>
+    expect(params.command).toBe('review')
+    expect('agent' in params).toBe(false)
+    expect('model' in params).toBe(false)
+  })
+})
 
 describe('getCommands', () => {
   beforeEach(() => {
