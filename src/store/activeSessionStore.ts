@@ -212,6 +212,15 @@ class ActiveSessionStore {
   getBusySessionsSnapshot = (): ActiveSessionEntry[] => this.cachedBusySessions
   getBusyCountSnapshot = (): number => this.cachedBusyCount
 
+  // 按 requestId 反查 pending 登记信息（session 复合 key + 登记时目录）。
+  // 用于回复失败后的补偿查询：入参 directory 可能已因切目录而指向错误实例，
+  // 登记时的归属才是该请求真实所在。
+  getPendingRequest = (requestId: string): { sessionId: string; directory?: string } | undefined => {
+    const req = this.pendingRequests.get(requestId)
+    if (!req) return undefined
+    return { sessionId: req.sessionId, directory: this.pendingScopeIndex.get(requestId) }
+  }
+
   private applyStatusSnapshot(statusMap: SessionStatusMap, baseMap: SessionStatusMap): SessionStatusMap {
     const nextMap = { ...baseMap }
 

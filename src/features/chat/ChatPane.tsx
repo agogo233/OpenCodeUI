@@ -796,8 +796,14 @@ export const ChatPane = memo(function ChatPane({
         const request = pendingPermissionRequests.find(r => r.id === requestId)
         return handlePermissionReply(requestId, reply, effectiveDirectory, request?.sessionID)
       },
-      onQuestionReply: (requestId, answers) => handleQuestionReply(requestId, answers, effectiveDirectory),
-      onQuestionReject: requestId => handleQuestionReject(requestId, effectiveDirectory),
+      onQuestionReply: (requestId, answers) => {
+        const request = pendingQuestionRequests.find(r => r.id === requestId)
+        return handleQuestionReply(requestId, answers, effectiveDirectory, request?.sessionID)
+      },
+      onQuestionReject: requestId => {
+        const request = pendingQuestionRequests.find(r => r.id === requestId)
+        return handleQuestionReject(requestId, effectiveDirectory, request?.sessionID)
+      },
       isReplying,
     }),
     [
@@ -1008,8 +1014,21 @@ export const ChatPane = memo(function ChatPane({
       {!inlineToolRequests && pendingPermissionRequests.length === 0 && pendingQuestionRequests.length > 0 && (
         <QuestionDialog
           request={pendingQuestionRequests[0]}
-          onReply={answers => handleQuestionReply(pendingQuestionRequests[0].id, answers, effectiveDirectory)}
-          onReject={() => handleQuestionReject(pendingQuestionRequests[0].id, effectiveDirectory)}
+          onReply={answers =>
+            handleQuestionReply(
+              pendingQuestionRequests[0].id,
+              answers,
+              effectiveDirectory,
+              pendingQuestionRequests[0].sessionID,
+            )
+          }
+          onReject={() =>
+            handleQuestionReject(
+              pendingQuestionRequests[0].id,
+              effectiveDirectory,
+              pendingQuestionRequests[0].sessionID,
+            )
+          }
           queueLength={pendingQuestionRequests.length}
           isReplying={isReplying}
           collapsed={questionCollapsed}

@@ -115,6 +115,15 @@ describe('activeSessionStore scope reconciliation', () => {
     expect(activeSessionStore.getBusySessions()).toEqual([])
   })
 
+  it('exposes the recorded pending request for compensation lookups', () => {
+    activeSessionStore.addPendingRequest('req-1', 'local::child', 'question', 'Need input', '/one')
+    expect(activeSessionStore.getPendingRequest('req-1')).toEqual({ sessionId: 'local::child', directory: '/one' })
+
+    activeSessionStore.resolvePendingRequest('req-1')
+    expect(activeSessionStore.getPendingRequest('req-1')).toBeUndefined()
+    expect(activeSessionStore.getPendingRequest('missing')).toBeUndefined()
+  })
+
   it('keeps busy sessions when updateStatus reports idle with pending requests', () => {
     activeSessionStore.addPendingRequest('req-1', 'local::child', 'question', 'Need approval', '/one')
 

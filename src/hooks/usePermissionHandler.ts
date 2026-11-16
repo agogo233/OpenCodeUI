@@ -14,7 +14,7 @@ import {
   type PermissionReply,
   type QuestionAnswer,
 } from '../api'
-import { activeSessionStore } from '../store'
+import { activeSessionStore, notificationStore } from '../store'
 import { makeSessionKey } from '../utils/sessionKey'
 import { permissionErrorHandler } from '../utils'
 
@@ -32,8 +32,13 @@ export interface UsePermissionHandlerResult {
     directory?: string,
     sessionId?: string,
   ) => Promise<boolean>
-  handleQuestionReply: (requestId: string, answers: QuestionAnswer[], directory?: string) => Promise<boolean>
-  handleQuestionReject: (requestId: string, directory?: string) => Promise<boolean>
+  handleQuestionReply: (
+    requestId: string,
+    answers: QuestionAnswer[],
+    directory?: string,
+    sessionId?: string,
+  ) => Promise<boolean>
+  handleQuestionReject: (requestId: string, directory?: string, sessionId?: string) => Promise<boolean>
   // Refresh (fallback sync for pending requests) - 支持单个或多个 session IDs
   refreshPendingRequests: (sessionIds?: string | string[], directory?: string) => Promise<void>
   // Reset
@@ -56,6 +61,31 @@ async function isPermissionStillPending(
     return pending.some(request => request.id === requestId)
   } catch {
     return undefined
+  }
+}
+
+async function isQuestionStillPending(
+  requestId: string,
+  directory?: string,
+  sessionId?: string,
+  serverId?: string,
+): Promise<boolean | undefined> {
+  try {
+    const pending = await getPendingQuestions(sessionId, directory, serverId)
+    return pending.some(request => request.id === requestId)
+  } catch {
+    return undefined
+  }
+}
+
+// 回复失败后的补偿查询上下文：入参 directory 可能已因切目录指向错误实例，
+// 优先用 store 登记的请求归属（ask 事件时的会话/目录）反查真实位置。
+function resolvePendingLookupContext(requestId: string, directory?: string) {
+  const recorded = activeSessionStore.getPendingRequest(requestId)
+  const meta = recorded ? activeSessionStore.getSessionMeta(recorded.sessionId) : undefined
+  return {
+    sessionId: recorded?.sessionId,
+    directory: recorded?.directory ?? meta?.directory ?? directory,
   }
 }
 
@@ -101,15 +131,25 @@ export function usePermissionHandler(serverId: string): UsePermissionHandlerResu
       replyingIdsRef.current.add(requestId)
       setIsReplying(true)
 
+      // reply 本体也按登记归属路由：切目录后入参 directory 可能指向错误实例，
+      // 用登记目录才能让重试直接命中真实实例（无登记时回落入参，行为不变）
+      const lookup = resolvePendingLookupContext(requestId, directory)
       try {
-        await withRetry(() => replyPermission(requestId, reply, undefined, directory, sessionId, serverId))
+        await withRetry(() =>
+          replyPermission(requestId, reply, undefined, lookup.directory, lookup.sessionId ?? sessionId, serverId),
+        )
         setPendingPermissionRequests(prev =>
           prev.some(r => r.id === requestId) ? prev.filter(r => r.id !== requestId) : prev,
         )
         activeSessionStore.resolvePendingRequest(requestId)
         return true
       } catch (error) {
-        const stillPending = await isPermissionStillPending(requestId, directory, sessionId, serverId)
+        const stillPending = await isPermissionStillPending(
+          requestId,
+          lookup.directory,
+          lookup.sessionId ?? sessionId,
+          serverId,
+        )
         if (stillPending === false) {
           setPendingPermissionRequests(prev =>
             prev.some(r => r.id === requestId) ? prev.filter(r => r.id !== requestId) : prev,
@@ -119,7 +159,13 @@ export function usePermissionHandler(serverId: string): UsePermissionHandlerResu
         }
 
         permissionErrorHandler('reply after retries', error)
-
+        notificationStore.push(
+          'error',
+          'Permission reply failed',
+          'The reply did not reach the server. Please retry.',
+          lookup.sessionId ?? sessionId ?? '',
+          lookup.directory,
+        )
         return false
       } finally {
         replyingIdsRef.current.delete(requestId)
@@ -130,7 +176,7 @@ export function usePermissionHandler(serverId: string): UsePermissionHandlerResu
   )
 
   const handleQuestionReply = useCallback(
-    async (requestId: string, answers: QuestionAnswer[], directory?: string): Promise<boolean> => {
+    async (requestId: string, answers: QuestionAnswer[], directory?: string, sessionId?: string): Promise<boolean> => {
       if (replyingIdsRef.current.has(requestId)) {
         console.warn(`[Question] Already replying to ${requestId}`)
         return false
@@ -139,15 +185,35 @@ export function usePermissionHandler(serverId: string): UsePermissionHandlerResu
       replyingIdsRef.current.add(requestId)
       setIsReplying(true)
 
+      // 与 permission 同理：reply 本体按登记归属路由，切目录后重试也能命中真实实例
+      const lookup = resolvePendingLookupContext(requestId, directory)
       try {
-        await withRetry(() => replyQuestion(requestId, answers, directory, serverId))
+        await withRetry(() => replyQuestion(requestId, answers, lookup.directory, serverId))
         setPendingQuestionRequests(prev => prev.filter(r => r.id !== requestId))
         activeSessionStore.resolvePendingRequest(requestId)
         return true
       } catch (error) {
+        // 回复失败 ≠ 服务端已解：用登记归属确认服务端状态再决定。
+        // 仍等待时必须保留 pending（对话框保持打开可重试），静默清除会让用户误以为回答成功。
+        const stillPending = await isQuestionStillPending(
+          requestId,
+          lookup.directory,
+          lookup.sessionId ?? sessionId,
+          serverId,
+        )
+        if (stillPending === false) {
+          setPendingQuestionRequests(prev => prev.filter(r => r.id !== requestId))
+          activeSessionStore.resolvePendingRequest(requestId)
+          return true
+        }
         permissionErrorHandler('question reply after retries', error)
-        setPendingQuestionRequests(prev => prev.filter(r => r.id !== requestId))
-        activeSessionStore.resolvePendingRequest(requestId)
+        notificationStore.push(
+          'error',
+          'Question reply failed',
+          'The reply did not reach the server. Please retry.',
+          lookup.sessionId ?? sessionId ?? '',
+          lookup.directory,
+        )
         return false
       } finally {
         replyingIdsRef.current.delete(requestId)
@@ -157,29 +223,51 @@ export function usePermissionHandler(serverId: string): UsePermissionHandlerResu
     [serverId],
   )
 
-  const handleQuestionReject = useCallback(async (requestId: string, directory?: string): Promise<boolean> => {
-    if (replyingIdsRef.current.has(requestId)) {
-      return false
-    }
+  const handleQuestionReject = useCallback(
+    async (requestId: string, directory?: string, sessionId?: string): Promise<boolean> => {
+      if (replyingIdsRef.current.has(requestId)) {
+        return false
+      }
 
-    replyingIdsRef.current.add(requestId)
-    setIsReplying(true)
+      replyingIdsRef.current.add(requestId)
+      setIsReplying(true)
 
-    try {
-      await withRetry(() => rejectQuestion(requestId, directory, serverId))
-      setPendingQuestionRequests(prev => prev.filter(r => r.id !== requestId))
-      activeSessionStore.resolvePendingRequest(requestId)
-      return true
-    } catch (error) {
-      permissionErrorHandler('question reject after retries', error)
-      setPendingQuestionRequests(prev => prev.filter(r => r.id !== requestId))
-      activeSessionStore.resolvePendingRequest(requestId)
-      return false
-    } finally {
-      replyingIdsRef.current.delete(requestId)
-      setIsReplying(false)
-    }
-  }, [serverId])
+      // 与 reply 同理：reject 本体按登记归属路由
+      const lookup = resolvePendingLookupContext(requestId, directory)
+      try {
+        await withRetry(() => rejectQuestion(requestId, lookup.directory, serverId))
+        setPendingQuestionRequests(prev => prev.filter(r => r.id !== requestId))
+        activeSessionStore.resolvePendingRequest(requestId)
+        return true
+      } catch (error) {
+        // 与 handleQuestionReply 同理：拒绝失败时先确认服务端状态，避免静默丢请求
+        const stillPending = await isQuestionStillPending(
+          requestId,
+          lookup.directory,
+          lookup.sessionId ?? sessionId,
+          serverId,
+        )
+        if (stillPending === false) {
+          setPendingQuestionRequests(prev => prev.filter(r => r.id !== requestId))
+          activeSessionStore.resolvePendingRequest(requestId)
+          return true
+        }
+        permissionErrorHandler('question reject after retries', error)
+        notificationStore.push(
+          'error',
+          'Question dismiss failed',
+          'The request was not dismissed on the server. Please retry.',
+          lookup.sessionId ?? sessionId ?? '',
+          lookup.directory,
+        )
+        return false
+      } finally {
+        replyingIdsRef.current.delete(requestId)
+        setIsReplying(false)
+      }
+    },
+    [serverId],
+  )
 
   // 主动轮询获取 pending 请求（用于 SSE 可能丢失事件的情况）
   // 一次拉取全量数据，用 sessionFamily 过滤后直接替换本地状态
