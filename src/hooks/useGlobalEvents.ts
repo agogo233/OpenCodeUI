@@ -172,8 +172,16 @@ function drainPending<T>(map: Map<string, PendingRequest<T>[]>, sessionID: strin
 }
 
 function getScopeKey(directories?: string[]) {
+  // 注意：此 key 不排序，用于 latePendingRequests 的 scope 匹配（保持登记时的顺序语义）；
+  // 刷新去重请用 getSortedScopeKey（内容级、与顺序无关）
   if (!directories || directories.length === 0) return '__global__'
   return directories.join('|')
+}
+
+// 刷新去重专用：排序后的内容 key，目录集合内容相同（与顺序无关）即视为未变化；
+// undefined 与空数组同义，均视为全局范围
+function getSortedScopeKey(directories?: string[]) {
+  return directories?.length ? [...directories].sort().join('|') : '__global__'
 }
 
 function removePendingByRequestId<T extends { id: string }>(
@@ -334,6 +342,8 @@ export function useGlobalEvents(directories?: string[]) {
   const directoriesRef = useRef<string[] | undefined>(directories)
   const refreshRef = useRef<(() => void) | null>(null)
   const initializedDirectoriesRef = useRef(false)
+  // 上次触发刷新的目录集合内容 key（排序后拼接），用于内容级去重
+  const lastRefreshedScopeKeyRef = useRef<string | null>(null)
 
   // 活跃服务器集合：所有 pane 打开的 session 所属 server + active server
   const [activeServerIds, setActiveServerIds] = useState<string[]>(() => collectActiveServerIds())
@@ -886,6 +896,12 @@ export function useGlobalEvents(directories?: string[]) {
 
   useLayoutEffect(() => {
     directoriesRef.current = directories
+    // App 侧 activeDirectories 会因 pane 状态变化（isStreaming 等）返回
+    // 内容相同、引用不同的新数组；按引用比较会触发无效的全量拉取与对账，
+    // 造成活跃列表不必要的刷新。改为按目录集合内容去重。
+    const scopeKey = getSortedScopeKey(directories)
+    if (scopeKey === lastRefreshedScopeKeyRef.current) return
+    lastRefreshedScopeKeyRef.current = scopeKey
     if (initializedDirectoriesRef.current) {
       refreshRef.current?.()
       return

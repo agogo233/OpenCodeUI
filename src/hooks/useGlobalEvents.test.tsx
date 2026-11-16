@@ -411,6 +411,34 @@ describe('useGlobalEvents', () => {
     expect(activeSessionStoreMock.applyScopeSnapshot).toHaveBeenCalledTimes(1)
   })
 
+  it('does not refetch when directories content is unchanged across rerenders', async () => {
+    getPendingPermissionsMock.mockResolvedValue([])
+    getPendingQuestionsMock.mockResolvedValue([])
+    getSessionStatusMock.mockResolvedValue({})
+
+    const { rerender } = renderHook(({ directories }) => useGlobalEvents(directories), {
+      initialProps: { directories: ['/one', '/two'] as string[] | undefined },
+    })
+
+    await waitFor(() => {
+      expect(getSessionStatusMock).toHaveBeenCalledWith('/one', 'local')
+      expect(getSessionStatusMock).toHaveBeenCalledWith('/two', 'local')
+    })
+    const statusCallsAfterMount = getSessionStatusMock.mock.calls.length
+    const snapshotCallsAfterMount = activeSessionStoreMock.applyScopeSnapshot.mock.calls.length
+
+    // 同内容、新引用（且顺序不同）→ 不触发再次拉取
+    rerender({ directories: ['/two', '/one'] })
+    await act(async () => {})
+    expect(getSessionStatusMock.mock.calls.length).toBe(statusCallsAfterMount)
+    expect(activeSessionStoreMock.applyScopeSnapshot.mock.calls.length).toBe(snapshotCallsAfterMount)
+
+    // 目录集合真变 → 恢复刷新
+    rerender({ directories: ['/two', '/one', '/three'] })
+    await waitFor(() => expect(getSessionStatusMock).toHaveBeenCalledWith('/three', 'local'))
+    expect(activeSessionStoreMock.applyScopeSnapshot.mock.calls.length).toBeGreaterThan(snapshotCallsAfterMount)
+  })
+
   it('replays pending requests that arrive while initialization is in flight', async () => {
     let callbacks: Parameters<typeof subscribeToEventsMock>[0] | undefined
     const statusDeferred = createDeferred<Record<string, { type: string }>>()
