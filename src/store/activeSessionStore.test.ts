@@ -5,15 +5,19 @@ import type { SessionStatus, SessionStatusMap } from '../types/api/session'
 
 interface GroupOptions {
   statusMap?: SessionStatusMap
+  statusKnown?: boolean
   permissions?: Array<{ id: string; sessionID: string; permission: string; patterns?: string[] }>
   questions?: Array<{ id: string; sessionID: string; questions?: Array<{ header?: string }> }>
+  pendingKnown?: boolean
 }
 
 const group = (directory: string | undefined, options: GroupOptions = {}): ScopeStatusGroup => ({
   directory,
   statusMap: options.statusMap ?? {},
+  statusKnown: options.statusKnown ?? true,
   permissions: options.permissions ?? [],
   questions: options.questions ?? [],
+  pendingKnown: options.pendingKnown ?? true,
 })
 
 const busy: SessionStatus = { type: 'busy' }
@@ -182,6 +186,49 @@ describe('activeSessionStore scope reconciliation', () => {
     expect(activeSessionStore.getBusySessions().map(entry => entry.sessionId)).toEqual(['local::late'])
 
     activeSessionStore.applyScopeSnapshot('local', [group(undefined)])
+    expect(activeSessionStore.getBusySessions()).toEqual([])
+  })
+
+  it('keeps sessions when the scope status fetch failed and clears only after a successful refresh', () => {
+    activeSessionStore.applyScopeSnapshot('local', [group('/one', { statusMap: { 'local::root': busy } })])
+
+    // status 拉取失败：不能当作服务端确认完成，不修剪
+    activeSessionStore.applyScopeSnapshot('local', [group('/one', { statusKnown: false })])
+    expect(activeSessionStore.getBusySessions().map(entry => entry.sessionId)).toEqual(['local::root'])
+
+    // 拉取成功且未报告 → 才清除
+    activeSessionStore.applyScopeSnapshot('local', [group('/one')])
+    expect(activeSessionStore.getBusySessions()).toEqual([])
+  })
+
+  it('keeps pending requests when the scope pending fetch failed', () => {
+    const permissions = [{ id: 'perm-1', sessionID: 'local::child', permission: 'edit', patterns: ['a'] }]
+    activeSessionStore.applyScopeSnapshot('local', [group('/one', { permissions })])
+
+    // pending 拉取失败：不清 pending，会话保持等待中
+    activeSessionStore.applyScopeSnapshot('local', [group('/one', { pendingKnown: false })])
+    expect(activeSessionStore.getBusySessions().map(entry => entry.sessionId)).toEqual(['local::child'])
+    expect(activeSessionStore.getBusySessions()[0]?.pendingAction).toEqual({
+      type: 'permission',
+      description: 'edit: a',
+    })
+
+    // pending 拉取恢复且未返回该请求 → pending 清除，会话无 pending 且未报 busy → 移出
+    activeSessionStore.applyScopeSnapshot('local', [group('/one')])
+    expect(activeSessionStore.getBusySessions()).toEqual([])
+  })
+
+  it('reconciles unattributed sessions against their known meta directory instead of the global snapshot', () => {
+    // SSE 先报 busy（无归属），meta 中已登记目录
+    activeSessionStore.updateStatus('local::late', { type: 'busy' })
+    activeSessionStore.setSessionMeta('local::late', 'Late', '/one')
+
+    // 全局拉取只覆盖其他实例（不含 /one）→ 不能确认 /one 会话完成，保留
+    activeSessionStore.applyScopeSnapshot('local', [group(undefined)])
+    expect(activeSessionStore.getBusySessions().map(entry => entry.sessionId)).toEqual(['local::late'])
+
+    // /one 拉取成功且未报告 → 清除
+    activeSessionStore.applyScopeSnapshot('local', [group('/one')])
     expect(activeSessionStore.getBusySessions()).toEqual([])
   })
 

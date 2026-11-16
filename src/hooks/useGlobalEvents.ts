@@ -196,19 +196,38 @@ async function fetchActiveScopeData(directories: string[] | undefined, serverId:
   const scopes = directories && directories.length > 0 ? directories : [undefined]
   const results = await Promise.all(
     scopes.map(async directory => {
-      const [statusMap, permissions, questions] = await Promise.all([
-        getSessionStatus(directory, serverId).catch(() => ({}) as SessionStatusMap),
-        getPendingPermissions(undefined, directory, serverId).catch(() => []),
-        getPendingQuestions(undefined, directory, serverId).catch(() => []),
+      // 拉取失败 ≠ 服务端确认完成/失效：失败时置空数据并标记 known=false，
+      // 供 applyScopeSnapshot 跳过该范围的修剪，避免误删仍在运行的会话
+      const [statusResult, permissionResult, questionResult] = await Promise.all([
+        getSessionStatus(directory, serverId).then(
+          statusMap => ({ statusMap, known: true }),
+          () => ({ statusMap: {} as SessionStatusMap, known: false }),
+        ),
+        getPendingPermissions(undefined, directory, serverId).then(
+          permissions => ({ permissions, known: true }),
+          () => ({ permissions: [] as ApiPermissionRequest[], known: false }),
+        ),
+        getPendingQuestions(undefined, directory, serverId).then(
+          questions => ({ questions, known: true }),
+          () => ({ questions: [] as ApiQuestionRequest[], known: false }),
+        ),
       ])
 
-      return { directory, statusMap, permissions, questions }
+      return {
+        directory,
+        statusMap: statusResult.statusMap,
+        statusKnown: statusResult.known,
+        permissions: permissionResult.permissions,
+        questions: questionResult.questions,
+        pendingKnown: permissionResult.known && questionResult.known,
+      }
     }),
   )
 
   // 按 directory 分组返回（复合 key），供 applyScopeSnapshot 做「本目录名下」的精确对账
-  const groups: ScopeStatusGroup[] = results.map(({ directory, statusMap, permissions, questions }) => ({
+  const groups: ScopeStatusGroup[] = results.map(({ directory, statusMap, statusKnown, permissions, questions, pendingKnown }) => ({
     directory,
+    statusKnown,
     statusMap: Object.fromEntries(
       Object.entries(statusMap).map(([sid, status]) => [makeSessionKey(serverId, sid), status]),
     ),
@@ -220,6 +239,7 @@ async function fetchActiveScopeData(directories: string[] | undefined, serverId:
       ...question,
       sessionID: makeSessionKey(serverId, question.sessionID),
     })),
+    pendingKnown,
   }))
 
   const sessionMetaEntries: Array<{ sessionId: string; directory?: string }> = []

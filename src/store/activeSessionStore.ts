@@ -12,7 +12,9 @@
 // - 服务端状态接口只返回仍 busy/retry 的会话，已完成的会话不会出现在返回里
 // - 因此每次拉取按 directory 分组后，只替换「本目录名下」的活跃条目；
 //   目录外的条目保持不动，避免误删仍在运行的其他目录会话
-// - 无 directory 的全局拉取只对账无归属条目
+// - 拉取失败 ≠ 服务端确认完成：失败组（statusKnown/pendingKnown=false）跳过修剪，
+//   只在拉取成功且未报告时才移除条目
+// - 无归属条目按 meta 中已知的目录对账（无 directory 的全局拉取只覆盖单个实例）
 //
 // 与 notificationStore 完全独立，不互相依赖
 
@@ -58,8 +60,12 @@ export interface ScopeStatusGroup {
   /** 该组数据对应的拉取目录；undefined 表示全局范围 */
   directory?: string
   statusMap: SessionStatusMap
+  /** status 拉取是否成功：失败时 statusMap 不可信，对账时跳过该组的会话修剪 */
+  statusKnown: boolean
   permissions: Array<{ id: string; sessionID: string; permission: string; patterns?: string[] }>
   questions: Array<{ id: string; sessionID: string; questions?: Array<{ header?: string }> }>
+  /** pending 拉取是否成功：失败时 permissions/questions 不可信，对账时跳过该组的 pending 修剪 */
+  pendingKnown: boolean
 }
 
 type Subscriber = () => void
@@ -246,8 +252,9 @@ class ActiveSessionStore {
 
   applyScopeSnapshot(serverId: string, groups: ScopeStatusGroup[]) {
     const prefix = `${serverId}::`
-    const groupDirs = groups.map(group => group.directory)
-    const hasGlobalGroup = groupDirs.some(directory => directory === undefined)
+    const groupsByDir = new Map<string | undefined, ScopeStatusGroup>(
+      groups.map(group => [group.directory, group]),
+    )
 
     const reportedSessionsByDir = new Map<string | undefined, Set<string>>()
     const reportedPendingByDir = new Map<string | undefined, Set<string>>()
@@ -262,35 +269,38 @@ class ActiveSessionStore {
       )
     }
 
-    // 范围判定：有归属的条目只由对应目录的拉取对账；无归属条目仅在全局拉取时对账
-    const inScope = (directory: string | undefined) =>
-      directory === undefined ? hasGlobalGroup : groupDirs.includes(directory)
-
     const nextMap = { ...this.state.statusMap }
     const nextPending = new Map(this.pendingRequests)
     const nextDeferred = new Set(this.deferredIdleSessions)
     let changed = false
 
-    // 1) 修剪 pending：本服务器范围内、本次未返回的请求视为已失效
+    // 1) 修剪 pending：本服务器范围内、本次未返回的请求视为已失效。
+    //    拉取失败（pendingKnown=false）≠ 服务端确认失效，跳过修剪避免误清等待中的请求
     for (const [requestId, directory] of this.pendingScopeIndex) {
       const req = this.pendingRequests.get(requestId)
       if (!req || !req.sessionId.startsWith(prefix)) continue
-      if (!inScope(directory)) continue
+      const group = groupsByDir.get(directory)
+      if (!group || !group.pendingKnown) continue
       if (reportedPendingByDir.get(directory)?.has(requestId)) continue
       nextPending.delete(requestId)
       this.pendingScopeIndex.delete(requestId)
       changed = true
     }
 
-    // 2) 修剪 session 状态：本服务器范围内、本次未报告且已无 pending 的会话移出活跃
+    // 2) 修剪 session 状态：本服务器范围内、本次未报告且已无 pending 的会话移出活跃。
+    //    拉取失败（statusKnown=false）≠ 服务端确认完成，跳过修剪避免误删仍在运行的会话；
+    //    SSE 先报 busy 的无归属会话按 meta 中已知的目录对账（无 directory 的全局拉取
+    //    在服务端只转发到单个 workspace 实例，不能当作对其他目录的确认）
     for (const [sessionId, directory] of this.sessionScopeIndex) {
       if (!sessionId.startsWith(prefix)) continue
       if (!nextMap[sessionId]) {
         this.sessionScopeIndex.delete(sessionId)
         continue
       }
-      if (!inScope(directory)) continue
-      if (reportedSessionsByDir.get(directory)?.has(sessionId)) continue
+      const effectiveDirectory = directory ?? this.sessionMeta.get(sessionId)?.directory
+      const group = groupsByDir.get(effectiveDirectory)
+      if (!group || !group.statusKnown) continue
+      if (reportedSessionsByDir.get(effectiveDirectory)?.has(sessionId)) continue
       if (hasPendingIn(nextPending, sessionId)) continue
       delete nextMap[sessionId]
       nextDeferred.delete(sessionId)
@@ -298,9 +308,10 @@ class ActiveSessionStore {
       changed = true
     }
 
-    // 3) 合入本次快照
+    // 3) 合入本次快照（known=false 的组数据不可信，即使非空也不采信）
     for (const group of groups) {
-      for (const [sessionId, status] of Object.entries(group.statusMap)) {
+      const statusEntries = group.statusKnown ? Object.entries(group.statusMap) : []
+      for (const [sessionId, status] of statusEntries) {
         if (status.type === 'idle') {
           if (nextMap[sessionId]) changed = true
           delete nextMap[sessionId]
@@ -318,7 +329,8 @@ class ActiveSessionStore {
           this.sessionScopeIndex.set(sessionId, group.directory)
         }
       }
-      for (const p of group.permissions) {
+      const pendingPermissions = group.pendingKnown ? group.permissions : []
+      for (const p of pendingPermissions) {
         const desc = p.patterns?.length ? `${p.permission}: ${p.patterns[0]}` : p.permission
         const prevReq = nextPending.get(p.id)
         if (!prevReq || prevReq.type !== 'permission' || prevReq.description !== desc) changed = true
@@ -333,7 +345,8 @@ class ActiveSessionStore {
           changed = true
         }
       }
-      for (const q of group.questions) {
+      const pendingQuestions = group.pendingKnown ? group.questions : []
+      for (const q of pendingQuestions) {
         const desc = q.questions?.[0]?.header || 'Waiting for input'
         const prevReq = nextPending.get(q.id)
         if (!prevReq || prevReq.type !== 'question' || prevReq.description !== desc) changed = true

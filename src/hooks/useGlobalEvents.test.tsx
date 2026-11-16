@@ -396,8 +396,10 @@ describe('useGlobalEvents', () => {
         {
           directory: '/two',
           statusMap: { 'local::new-session': { type: 'busy' } },
+          statusKnown: true,
           permissions: [],
           questions: [],
+          pendingKnown: true,
         },
       ])
     })
