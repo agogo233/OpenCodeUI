@@ -74,10 +74,25 @@ vi.mock('../slash-command', () => ({
 }))
 
 vi.mock('./input/InputToolbar', () => ({
-  InputToolbar: ({ onSend, canSend }: { onSend: () => void; canSend: boolean }) => (
-    <button type="button" onClick={onSend} disabled={!canSend}>
-      send
-    </button>
+  InputToolbar: ({
+    onSend,
+    canSend,
+    onCompact,
+  }: {
+    onSend: () => void
+    canSend: boolean
+    onCompact?: () => void
+  }) => (
+    <>
+      <button type="button" onClick={onSend} disabled={!canSend}>
+        send
+      </button>
+      {onCompact && (
+        <button type="button" onClick={onCompact}>
+          compact
+        </button>
+      )}
+    </>
   ),
 }))
 
@@ -373,5 +388,39 @@ describe('InputBox slash command selection', () => {
       expect(textarea.selectionStart).toBe('newer line\nentry'.length)
       expect(textarea.selectionEnd).toBe('newer line\nentry'.length)
     })
+  })
+})
+
+describe('InputBox compact shortcut button', () => {
+  beforeEach(() => {
+    messagesMock = []
+  })
+
+  it('triggers /compact with the selected agent when the compact button is clicked', async () => {
+    const onCommand = vi.fn()
+
+    render(
+      <InputBox
+        paneId="pane-test"
+        onSend={vi.fn()}
+        onCommand={onCommand}
+        sessionId="session-1"
+        selectedAgent="plan"
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'compact' }))
+
+    await waitFor(() => {
+      expect(onCommand).toHaveBeenCalledWith('/compact', 'plan')
+    })
+  })
+
+  it('does not render the compact button without a session', () => {
+    const onCommand = vi.fn()
+
+    render(<InputBox paneId="pane-test" onSend={vi.fn()} onCommand={onCommand} />)
+
+    expect(screen.queryByRole('button', { name: 'compact' })).not.toBeInTheDocument()
   })
 })

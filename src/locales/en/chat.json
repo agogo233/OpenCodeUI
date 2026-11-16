@@ -92,6 +92,7 @@
   "inputToolbar": {
     "default": "Default",
     "attachFile": "Attach file",
+    "compact": "Compact session",
     "stopGeneration": "Stop generation",
     "sendingMessage": "Sending message",
     "sendMessage": "Send message"

@@ -1412,6 +1412,11 @@ function InputBoxComponent({
                       onAbort={onAbort}
                       canSend={canSend || false}
                       onSend={handleSend}
+                      onCompact={
+                        sessionId && onCommand
+                          ? () => submitCommandOptimistically('/compact', selectedAgent)
+                          : undefined
+                      }
                       models={models}
                       selectedModelKey={selectedModelKey}
                       onModelChange={onModelChange}

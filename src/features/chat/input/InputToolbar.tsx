@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ChevronDownIcon, SendIcon, StopIcon, PaperclipIcon, AgentIcon, ThinkingIcon } from '../../../components/Icons'
+import { ChevronDownIcon, SendIcon, StopIcon, PaperclipIcon, AgentIcon, ThinkingIcon, ShrinkIcon } from '../../../components/Icons'
 import { DropdownMenu, MenuItem, IconButton, AnimatedPresence } from '../../../components/ui'
 import { ModelSelector, type ModelSelectorHandle } from '../ModelSelector'
 import { useChatViewport } from '../chatViewport'
@@ -27,6 +27,9 @@ interface InputToolbarProps {
   canSend: boolean
   onSend: () => void
 
+  // 压缩会话（/compact）快捷按钮；不传则不渲染
+  onCompact?: () => void
+
   // Model selection（移动端显示在工具栏）
   models?: ModelInfo[]
   selectedModelKey?: string | null
@@ -51,6 +54,7 @@ export function InputToolbar({
   onAbort,
   canSend,
   onSend,
+  onCompact,
   models = [],
   selectedModelKey = null,
   onModelChange,
@@ -496,6 +500,11 @@ export function InputToolbar({
 
       {/* Action Buttons */}
       <div className="flex items-center gap-1">
+        {onCompact && (
+          <IconButton aria-label={t('inputToolbar.compact')} disabled={controlsDisabled || isStreaming} onClick={onCompact}>
+            <ShrinkIcon />
+          </IconButton>
+        )}
         <AnimatedPresence show={supportsAnyFile}>
           <>
             {/* 浏览器模式下的隐藏文件输入 */}

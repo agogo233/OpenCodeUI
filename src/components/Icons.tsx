@@ -92,6 +92,7 @@ import {
   AppWindow,
   ZoomIn,
   ZoomOut,
+  Shrink,
 } from 'lucide-react'
 
 export interface IconProps extends SVGProps<SVGSVGElement> {
@@ -180,6 +181,7 @@ export const WifiOffIcon = wrap(WifiOff)
 export const BellIcon = wrap(Bell)
 export const DownloadIcon = wrap(Download)
 export const PinIcon = wrap(Pin)
+export const ShrinkIcon = wrap(Shrink)
 
 // Aliases
 export const ComposeIcon = wrap(SquarePen)
