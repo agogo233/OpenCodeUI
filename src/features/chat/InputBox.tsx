@@ -872,9 +872,12 @@ function InputBoxComponent({
     [text, slashStartIndex, slashQuery, onCommand, submitCommandOptimistically, selectedAgent],
   )
 
-  const handleSlashClose = useCallback(() => {
+  const handleSlashClose = useCallback((reason?: 'escape' | 'outside') => {
     setSlashOpen(false)
-    textareaRef.current?.focus()
+    // 点击外部关闭时不抢焦点：焦点应留给用户正在点击的目标（如侧边栏标签）
+    if (reason !== 'outside') {
+      textareaRef.current?.focus()
+    }
   }, [])
 
   // 通用文件上传 — 根据模型能力判断是否接受
