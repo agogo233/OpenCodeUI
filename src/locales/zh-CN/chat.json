@@ -131,6 +131,7 @@
     "recents": "最近",
     "active": "活跃",
     "noActiveSessions": "没有活跃会话",
+    "activeStatusStale": "连接中断，活跃状态可能不准确",
     "notifications": "通知",
     "readAll": "全部已读",
     "removeProject": "移除项目",

@@ -131,6 +131,7 @@
     "recents": "Recents",
     "active": "Active",
     "noActiveSessions": "No active sessions",
+    "activeStatusStale": "Connection interrupted — active statuses may be stale",
     "notifications": "Notifications",
     "readAll": "Read all",
     "removeProject": "Remove Project",
