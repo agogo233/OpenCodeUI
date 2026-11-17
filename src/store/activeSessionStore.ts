@@ -429,9 +429,12 @@ class ActiveSessionStore {
   // ============================================
 
   updateStatus(sessionId: string, status: SessionStatus) {
-    const newMap = { ...this.state.statusMap }
+    const prev = this.state.statusMap[sessionId]
 
     if (status.type === 'idle') {
+      // 无条目且无 deferred 记录时 idle 不产生任何变化，跳过通知避免无谓重渲染
+      if (!prev && !this.deferredIdleSessions.has(sessionId)) return
+      const newMap = { ...this.state.statusMap }
       if (this.hasPendingForSession(sessionId)) {
         this.deferredIdleSessions.add(sessionId)
       } else {
@@ -439,16 +442,21 @@ class ActiveSessionStore {
         delete newMap[sessionId]
         this.sessionScopeIndex.delete(sessionId)
       }
-    } else if (status.type === 'retry') {
-      this.deferredIdleSessions.delete(sessionId)
-      newMap[sessionId] = { ...status }
-      if (!this.sessionScopeIndex.has(sessionId)) this.sessionScopeIndex.set(sessionId, undefined)
-    } else {
-      this.deferredIdleSessions.delete(sessionId)
-      newMap[sessionId] = { type: 'busy' }
-      if (!this.sessionScopeIndex.has(sessionId)) this.sessionScopeIndex.set(sessionId, undefined)
+      this.state = { ...this.state, statusMap: newMap }
+      this.notify()
+      return
     }
 
+    const next: SessionStatus = status.type === 'retry' ? { ...status } : { type: 'busy' }
+    // 先清 deferred 再去重：pending 先到、busy 后到时，若早退跳过清理，
+    // resolvePendingRequest 会把服务端已确认 busy 的会话错误移出活跃列表。
+    // Set.delete 不触发通知，不影响去重收益；scope 索引缺失时仍走写入路径补记
+    this.deferredIdleSessions.delete(sessionId)
+    if (!isDifferentStatus(prev, next) && this.sessionScopeIndex.has(sessionId)) return
+
+    const newMap = { ...this.state.statusMap }
+    newMap[sessionId] = next
+    if (!this.sessionScopeIndex.has(sessionId)) this.sessionScopeIndex.set(sessionId, undefined)
     this.state = { ...this.state, statusMap: newMap }
     this.notify()
   }

@@ -175,6 +175,24 @@ describe('activeSessionStore scope reconciliation', () => {
     })
   })
 
+  it('does not notify subscribers when updateStatus reports an unchanged status', () => {
+    activeSessionStore.updateStatus('local::root', { type: 'busy' })
+    let notifications = 0
+    const unsubscribe = activeSessionStore.subscribe(() => {
+      notifications += 1
+    })
+
+    activeSessionStore.updateStatus('local::root', { type: 'busy' })
+    expect(notifications).toBe(0)
+
+    activeSessionStore.updateStatus('unknown', { type: 'idle' })
+    expect(notifications).toBe(0)
+
+    activeSessionStore.updateStatus('local::root', { type: 'idle' })
+    expect(notifications).toBe(1)
+    unsubscribe()
+  })
+
   it('keeps retry status reported by a scope snapshot', () => {
     activeSessionStore.applyScopeSnapshot('local', [
       group('/one', {
