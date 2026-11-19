@@ -76,7 +76,9 @@ export const ToolPartView = memo(function ToolPartView({
   const { t } = useTranslation('message')
   const { state, name: toolName } = part
   const metadata = currentToolMetadata(part)
-  const title = (metadata.title as string) || getInputDescription(part) || ''
+  // Memoize once — shared by the title, descriptive header (diffStats) and ToolBody.
+  const toolData = useMemo(() => extractToolData(part), [part])
+  const title = (metadata.title as string) || getInputDescription(part) || toolData.filePath || ''
 
   const isActive = state.status === 'running' || state.status === 'streaming'
   // 失败判定含「completed 但进程失败」（shell 非零退出 / 超时）
@@ -139,7 +141,7 @@ export const ToolPartView = memo(function ToolPartView({
   const permissionResolved = !permissionRequest && !!cachedPermissionRequest && isFilePermission && !toolDone
 
   const hasPendingInteraction = !!permissionRequest || !!questionRequest
-  // 精简模式：非 edit/write 权限时不隐藏 ToolBody（ToolBody 已经渲染了命令内容）
+  // edit/write 权限（含授权后工具运行中的保留期）
   const isEditWritePermission =
     permissionRequest?.action === 'edit' || permissionRequest?.action === 'write' || permissionResolved
   // metadata 里有 diff → 交给 InlinePermission 显示（藏 ToolBody，避免重复渲染）；
@@ -266,9 +268,6 @@ export const ToolPartView = memo(function ToolPartView({
 
   // 需要渲染权限组件的请求对象：优先用活跃的，否则用缓存的（resolved 态）
   const displayPermission = permissionRequest || (permissionResolved ? cachedPermissionRequest : undefined)
-
-  // Memoize once — shared by both the descriptive header (diffStats) and ToolBody.
-  const toolData = useMemo(() => extractToolData(part), [part])
 
   // 还没量过的展开卡给一个估计高度：大多数工具输出都会被 maxHeight 截住，
   // 用 0 会让列表先塌成 header、IO 一次命中一大片，反而一锅端挂载。

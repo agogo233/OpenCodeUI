@@ -226,6 +226,16 @@ function applyMarkdownHtml(root: HTMLElement, html: string) {
   })
 }
 
+/** 当前选区是否覆盖此节点（用户正在拖选此块内容） */
+function isSelectionActiveOverNode(node: HTMLElement): boolean {
+  const selection = window.getSelection()
+  if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return false
+  for (let i = 0; i < selection.rangeCount; i++) {
+    if (selection.getRangeAt(i).intersectsNode(node)) return true
+  }
+  return false
+}
+
 function decodeLocalFileHref(href?: string): string | null {
   if (!href?.startsWith(LOCAL_FILE_LINK_PREFIX)) return null
   try {
@@ -1093,6 +1103,9 @@ const MarkdownDomBlock = memo(function MarkdownDomBlock({
         }
       }
     }
+
+    // 拖选期间暂停全量渲染：morphdom 全树 diff 与浏览器选区重算竞争主线程
+    if (isLive && isSelectionActiveOverNode(root)) return
 
     // live 中间态不进 htmlCache（避免 64 槽被流式碎片挤爆）；稳定块才缓存
     const html = isLive

@@ -49,8 +49,8 @@ export const Sidebar = memo(function Sidebar({
   const [projectDialogKey, setProjectDialogKey] = useState(0)
   const { addDirectory, pathInfo, currentDirectory } = useDirectory()
   // 已在项目里时，从当前项目路径起步，方便加相邻目录；否则回落服务器工作目录
-  // （v2 的 LocationPublicInfo 没有 home 字段）
-  const projectDialogInitialPath = currentDirectory || pathInfo?.directory
+  // （v2 的 LocationPublicInfo 没有 home 字段；VITE_DEFAULT_PROJECT_DIR 可指定默认起步目录）
+  const projectDialogInitialPath = import.meta.env.VITE_DEFAULT_PROJECT_DIR || currentDirectory || pathInfo?.directory
   const { interaction, layout, actions } = useChatViewport()
   const isOverlay = interaction.sidebarBehavior === 'overlay'
   const touchCapable = interaction.touchCapable

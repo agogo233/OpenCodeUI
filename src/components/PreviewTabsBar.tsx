@@ -1,6 +1,7 @@
 import { memo, useCallback, useEffect, useState, useRef, type ReactNode, type WheelEvent as ReactWheelEvent } from 'react'
 import { CloseIcon } from './Icons'
-import { getMaterialIconUrl } from '../utils/materialIcons'
+import { getMaterialIconName } from '../utils/materialIcons'
+import { MaterialIcon } from './MaterialIcon'
 import { getInternalDragSnapshot, startInternalDrag, subscribeInternalDrag, subscribeInternalDrop } from '../lib/internalDragCore'
 import { useDragEdgeAutoScroll } from '../hooks/useDragEdgeAutoScroll'
 
@@ -123,17 +124,7 @@ export const PreviewTabsBar = memo(function PreviewTabsBar({
                   className="flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 overflow-hidden pl-2.5 pr-1 text-left"
                 >
                   {item.iconPath && (
-                    <img
-                      src={getMaterialIconUrl(item.iconPath, 'file')}
-                      alt=""
-                      width={13}
-                      height={13}
-                      draggable={false}
-                      className="shrink-0"
-                      onError={e => {
-                        e.currentTarget.style.visibility = 'hidden'
-                      }}
-                    />
+                    <MaterialIcon icon={getMaterialIconName(item.iconPath, 'file')} size={13} className="shrink-0" />
                   )}
                   {item.label}
                 </button>

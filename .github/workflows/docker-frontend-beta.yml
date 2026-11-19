@@ -1,0 +1,83 @@
+name: Build & Push Frontend Docker Image (beta)
+
+# 仅供 upstream 同步分支（sync/upstream-0.7.30）使用：该分支的镜像统一打 beta 标签，
+# 与 main 的 latest / dev 的 dev 区分，便于并行验证而不影响正式标签。
+
+on:
+  push:
+    branches: [sync/upstream-0.7.30]
+    paths:
+      - 'src/**'
+      - 'public/**'
+      - 'index.html'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'vite.config.ts'
+      - 'tsconfig*.json'
+      - 'docker/Dockerfile.frontend'
+      - 'docker/Caddyfile'
+      - 'docker/Caddyfile.standalone'
+      - '.github/workflows/docker-frontend-beta.yml'
+      - 'scripts/**'
+  workflow_dispatch:
+
+concurrency:
+  group: docker-frontend-beta-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository_owner }}/opencodeui-frontend
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=beta
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile.frontend
+          build-args: |
+            NPM_REGISTRY=https://registry.npmjs.org/
+            NPM_REGISTRY_FALLBACK=https://registry.npmmirror.com/
+            VITE_DEFAULT_PROJECT_DIR=/home/git/working/
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: 删除旧package
+        uses: actions/delete-package-versions@v5
+        with:
+          package-name: opencodeui-frontend
+          package-type: 'container'
+          min-versions-to-keep: 2
+          delete-only-untagged-versions: 'true'

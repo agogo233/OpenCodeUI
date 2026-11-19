@@ -4,7 +4,8 @@ import { ContentBlock } from '../../../../components'
 import { AlertCircleIcon } from '../../../../components/Icons'
 import { AttachmentItem } from '../../../attachment'
 import { detectLanguage } from '../../../../utils/languageUtils'
-import { getMaterialIconUrl } from '../../../../utils/materialIcons'
+import { getMaterialIconName } from '../../../../utils/materialIcons'
+import { MaterialIcon } from '../../../../components/MaterialIcon'
 import { themeStore } from '../../../../store/themeStore'
 import type { ToolRendererProps, ExtractedToolData } from '../types'
 
@@ -23,7 +24,7 @@ export function DefaultRenderer({ part, data, onFullscreenChange }: ToolRenderer
 
   const hasInput = !!data.input?.trim()
   const hasToolFiles = !!data.toolFiles?.length
-  const hasOutput = !!(data.files || data.diff || data.output?.trim() || data.exitCode !== undefined || hasToolFiles)
+  const hasOutput = !!(data.files || data.diff || data.output?.trim() || hasToolFiles || (!isActive && data.exitCode !== undefined))
   const hasDiagnostics = !!data.diagnostics?.length
 
   const showOutput = hasOutput || hasError || (isActive && !hasOutput)
@@ -123,8 +124,8 @@ function OutputBlock({
     )
   }
 
-  // 2. 工具活跃时（running/streaming）统一显示 loading — compact 模式下不显示
-  if (isActive) {
+  // 2. 工具活跃时（running/pending）：已有输出数据时直接渲染，否则 loading — compact 模式下 loading 不显示
+  if (isActive && !hasOutput) {
     if (compact) return null
     return (
       <ContentBlock
@@ -244,18 +245,7 @@ function OutputBlock({
 
 function FileResultIcon({ filePath }: { filePath: string }) {
   return (
-    <img
-      src={getMaterialIconUrl(filePath, 'file')}
-      alt=""
-      width={14}
-      height={14}
-      className="block h-3.5 w-3.5 shrink-0"
-      loading="lazy"
-      decoding="async"
-      onError={event => {
-        event.currentTarget.style.visibility = 'hidden'
-      }}
-    />
+    <MaterialIcon icon={getMaterialIconName(filePath, 'file')} size={14} className="block h-3.5 w-3.5 shrink-0" />
   )
 }
 

@@ -16,6 +16,10 @@ on:
       - 'docker/Caddyfile'
       - 'docker/Caddyfile.standalone'
       - '.github/workflows/docker-frontend.yml'
+      - 'docker/Caddyfile.auth'
+      - 'docker/Caddyfile.reasonix'
+      - 'docker/entrypoint-frontend.sh'
+      - 'scripts/**'
   workflow_dispatch:
 
 concurrency:
@@ -54,8 +58,6 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
-            type=sha,prefix=
-            type=ref,event=branch
 
       - name: Build and push
         uses: docker/build-push-action@v6
@@ -65,9 +67,18 @@ jobs:
           build-args: |
             NPM_REGISTRY=https://registry.npmjs.org/
             NPM_REGISTRY_FALLBACK=https://registry.npmmirror.com/
-          platforms: linux/amd64,linux/arm64
+            VITE_DEFAULT_PROJECT_DIR=/home/git/working/
+          platforms: linux/amd64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: 删除旧package
+        uses: actions/delete-package-versions@v5
+        with:
+          package-name: opencodeui-frontend
+          package-type: 'container'
+          min-versions-to-keep: 2
+          delete-only-untagged-versions: 'true'

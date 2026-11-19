@@ -33,34 +33,12 @@ ensure_opencode() {
     return
   fi
 
-  # 走 opencode.ai 的 CLI 分发清单（v2 发布线）。GitHub 的 releases/latest
-  # 仍指向 v1.19.x，装下来和 v2 SDK 前端对不上。
-  case "$(uname -m)" in
-    x86_64)  OC_ARCH=x64 ;;
-    aarch64|arm64) OC_ARCH=arm64 ;;
-    *) echo "unsupported arch: $(uname -m)" >&2; exit 1 ;;
-  esac
-
-  local manifest=/tmp/opencode-release.json
-  curl -fsSL --retry 3 --retry-delay 2 --retry-connrefused -o "$manifest" "${OPENCODE_MANIFEST_URL:-https://opencode.ai/update/api/latest/cli/opencode}"
-
-  local file="opencode-linux-${OC_ARCH}.tar.gz"
-  local url sha
-  url="$(jq -r --arg f "$file" '.metadata.files[$f].url // empty' "$manifest")"
-  sha="$(jq -r --arg f "$file" '.metadata.files[$f].sha256 // empty' "$manifest")"
-  if [ -z "$url" ] || [ -z "$sha" ]; then
-    echo "no ${file} entry in opencode manifest" >&2
-    exit 1
-  fi
-  case "$url" in
-    http*) ;;
-    *) url="https://opencode.ai${url}" ;;
-  esac
-
-  curl -fsSL --retry 3 --retry-delay 2 --retry-connrefused -o /tmp/opencode.tar.gz "$url"
-  echo "${sha}  /tmp/opencode.tar.gz" | sha256sum -c -
+  # 从 agogo233/opencode 的 latest release 拉 x64 tarball，绕开 opencode.ai/install
+  # 脚本对 api.github.com 的依赖（共享 IP 易触发限流）。仅 amd64(x64)。
+  curl -fsSL -o /tmp/opencode.tar.gz \
+    "https://github.com/agogo233/opencode/releases/download/latest/opencode-linux-x64.tar.gz"
   tar -xzf /tmp/opencode.tar.gz -C /usr/local/bin opencode
-  rm -f /tmp/opencode.tar.gz "$manifest"
+  rm -f /tmp/opencode.tar.gz
   chmod +x /usr/local/bin/opencode
 }
 
@@ -85,9 +63,19 @@ EOF
   fi
 }
 
+ensure_rtk_plugin() {
+  # rtk 插件文件写入 /root/.config（opencode-home 卷），只能在运行时生成；
+  # 仅在插件缺失时初始化，不覆盖用户已有的 ~/.config/rtk/config.toml。
+  command -v rtk >/dev/null 2>&1 || return 0
+  if [ ! -f /root/.config/opencode/plugins/rtk.ts ]; then
+    rtk init -g --opencode </dev/null || echo "rtk init failed, continuing without rtk plugin" >&2
+  fi
+}
+
 ensure_mise
 ensure_opencode
 ensure_package_mirrors
+ensure_rtk_plugin
 
 if [ "$#" -eq 0 ]; then
   set -- opencode serve --port 4096 --hostname 0.0.0.0

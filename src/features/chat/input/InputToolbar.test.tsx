@@ -287,4 +287,86 @@ describe('InputToolbar file selection', () => {
 
     await waitFor(() => expect(screen.getByRole('textbox', { name: 'Chat input' })).toHaveFocus())
   })
+
+  it('falls back to the first selectable agent when none is selected', () => {
+    const reversedAgents: ApiAgent[] = [
+      { id: 'plan', name: 'plan', description: 'Plan work', mode: 'primary', permissions: [], request: { settings: {}, headers: {}, body: {} }, hidden: false },
+      { id: 'build', name: 'build', description: 'Build things', mode: 'primary', permissions: [], request: { settings: {}, headers: {}, body: {} }, hidden: false },
+    ]
+
+    render(
+      <InputToolbar
+        agents={reversedAgents}
+        selectedAgent=""
+        onAgentChange={vi.fn()}
+        fileCapabilities={{ image: false, pdf: false, audio: false, video: false }}
+        onFilesSelected={vi.fn()}
+        canSend={false}
+        onSend={vi.fn()}
+      />,
+    )
+
+    // 锁定"第一个可选项"语义，而非硬编码 'build' 字面量
+    expect(screen.getByTitle('plan')).toBeInTheDocument()
+  })
+
+  it('does not hardcode "build" when agents have not loaded yet', () => {
+    const { container } = render(
+      <InputToolbar
+        agents={[]}
+        selectedAgent=""
+        onAgentChange={vi.fn()}
+        fileCapabilities={{ image: false, pdf: false, audio: false, video: false }}
+        onFilesSelected={vi.fn()}
+        canSend={false}
+        onSend={vi.fn()}
+      />,
+    )
+
+    // agents 未加载时不渲染 agent 选择器，也不应出现硬编码的 "build" 标签
+    expect(container.textContent).not.toContain('build')
+  })
+})
+
+describe('InputToolbar compact button', () => {
+  beforeEach(() => {
+    useIsMobileMock.mockReturnValue(false)
+    isTauriMock.mockReturnValue(false)
+    isTauriMobileMock.mockReturnValue(false)
+  })
+
+  const baseProps = {
+    agents: [] as ApiAgent[],
+    fileCapabilities: { image: false, pdf: false, audio: false, video: false },
+    onFilesSelected: vi.fn(),
+    canSend: true,
+    onSend: vi.fn(),
+  }
+
+  it('renders the compact button and triggers onCompact when clicked', () => {
+    const onCompact = vi.fn()
+
+    render(<InputToolbar {...baseProps} onCompact={onCompact} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Compact session' }))
+    expect(onCompact).toHaveBeenCalledTimes(1)
+  })
+
+  it('disables the compact button while sending or streaming', () => {
+    const onCompact = vi.fn()
+
+    render(<InputToolbar {...baseProps} onCompact={onCompact} isStreaming isSending />)
+
+    const button = screen.getByRole('button', { name: 'Compact session' })
+    expect(button).toBeDisabled()
+
+    fireEvent.click(button)
+    expect(onCompact).not.toHaveBeenCalled()
+  })
+
+  it('does not render the compact button without onCompact', () => {
+    render(<InputToolbar {...baseProps} />)
+
+    expect(screen.queryByRole('button', { name: 'Compact session' })).not.toBeInTheDocument()
+  })
 })

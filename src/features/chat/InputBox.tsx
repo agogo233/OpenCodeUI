@@ -170,7 +170,7 @@ export interface InputBoxProps {
     options?: { agent?: string; variant?: string },
   ) => Promise<boolean> | boolean
   onAbort?: () => void
-  onCommand?: (command: string) => Promise<boolean> | boolean // 斜杠命令回调，接收完整命令字符串如 "/help"
+  onCommand?: (command: string, agent?: string) => Promise<boolean> | boolean // 斜杠命令回调，接收完整命令字符串如 "/help"，附带当前选中的 agent
   onShell?: (command: string) => Promise<boolean> | boolean // `!` shell 命令回调（官方 composer shell mode）
   onNewChat?: () => void // 新建对话回调
   disabled?: boolean
@@ -786,7 +786,7 @@ function InputBoxComponent({
   )
 
   const submitCommandOptimistically = useCallback(
-    (commandStr: string) => {
+    (commandStr: string, agent?: string) => {
       if (!onCommand) return
 
       const draftSnapshot: HistoryEntry = {
@@ -804,7 +804,8 @@ function InputBoxComponent({
       void (async () => {
         let result: boolean | void
         try {
-          result = await onCommand(commandStr)
+          // agent 为空时不带第二参，保持 onCommand(cmd) 的原语义
+          result = await (agent ? onCommand(commandStr, agent) : onCommand(commandStr))
         } catch {
           result = false
         }
@@ -872,6 +873,16 @@ function InputBoxComponent({
       return
     }
 
+    // agent 来源：@ mention 优先，其次当前选中的 agent
+    const agentAttachment = attachments.find(a => a.type === 'agent')
+    const mentionedAgent = agentAttachment?.agentName
+    const effectiveAgent = mentionedAgent || selectedAgent
+
+    if (!effectiveAgent) {
+      // 未选中 agent 时后端会使用默认 agent（通常为 build），留痕便于排查"选了 plan 却按 build 执行"类问题
+      console.warn('[InputBox] no agent selected; backend will use its default agent')
+    }
+
     // 检测 command attachment
     const commandAttachment = attachments.find(a => a.type === 'command')
     if (commandAttachment && commandAttachment.commandName) {
@@ -881,7 +892,7 @@ function InputBoxComponent({
       const textRange = commandAttachment.textRange
       const afterCommand = textRange ? text.slice(textRange.end).trim() : ''
       const commandStr = `/${commandAttachment.commandName}${afterCommand ? ' ' + afterCommand : ''}`
-      submitCommandOptimistically(commandStr)
+      submitCommandOptimistically(commandStr, effectiveAgent)
       return
     }
 
@@ -929,7 +940,8 @@ function InputBoxComponent({
         .catch(() => false)
         .then(isCommand => {
           if (isCommand) {
-            submitCommandOptimistically(trimmedText)
+            // 与命令附件路径一致：兜底发送也带上当前生效的 agent
+            submitCommandOptimistically(trimmedText, effectiveAgent)
           } else {
             // 不是已知命令 → 按普通消息发送
             sendCurrent()
@@ -1300,7 +1312,7 @@ function InputBoxComponent({
         const args = query.toLowerCase().startsWith(command.name.toLowerCase())
           ? query.slice(command.name.length).trim()
           : ''
-        submitCommandOptimistically(`/${command.name}${args ? ' ' + args : ''}`)
+        submitCommandOptimistically(`/${command.name}${args ? ' ' + args : ''}`, selectedAgent)
         requestAnimationFrame(() => textareaRef.current?.focus())
         return
       }
@@ -1340,12 +1352,15 @@ function InputBoxComponent({
         textareaRef.current.focus()
       })
     },
-    [text, slashStartIndex, slashQuery, onCommand, submitCommandOptimistically],
+    [text, slashStartIndex, slashQuery, onCommand, submitCommandOptimistically, selectedAgent],
   )
 
-  const handleSlashClose = useCallback(() => {
+  const handleSlashClose = useCallback((reason?: 'escape' | 'outside') => {
     setSlashOpen(false)
-    textareaRef.current?.focus()
+    // 点击外部关闭时不抢焦点：焦点应留给用户正在点击的目标（如侧边栏标签）
+    if (reason !== 'outside') {
+      textareaRef.current?.focus()
+    }
   }, [])
 
   // 通用文件分发 — 原生媒体内联；其余（白名单外 / 超限）上传到服务端临时目录
@@ -2119,6 +2134,11 @@ function InputBoxComponent({
                       onAbort={onAbort}
                       canSend={canSend || false}
                       onSend={handleSend}
+                      onCompact={
+                        sessionId && onCommand
+                          ? () => submitCommandOptimistically('/compact', selectedAgent)
+                          : undefined
+                      }
                       models={models}
                       providers={providers}
                       selectedModelKey={selectedModelKey}

@@ -17,6 +17,7 @@ import { reconnectSSE, reconnectServerSSE } from './api/events'
 import { getSDKClientAsync, invalidateSDKClient } from './api/sdk'
 import { resetPathModeCache } from './utils/directoryUtils'
 import { isTauri, isTauriMobile } from './utils/tauri'
+import { ensureIconSprite } from './utils/materialIconSprite'
 import { apiErrorHandler, globalErrorHandler } from './utils/errorHandling'
 import { applyLocalServiceUrl } from './utils/localServiceUrl'
 
@@ -40,6 +41,9 @@ function ensureRandomUUID() {
 }
 
 ensureRandomUUID()
+
+// 预热文件图标 sprite（单次 fetch 注入，失败时组件挂载仍会重试）
+void ensureIconSprite()
 
 // 禁用浏览器的 scroll restoration（刷新时不恢复旧 scrollTop），
 // 由 ChatArea 自行控制定位

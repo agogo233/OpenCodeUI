@@ -1,37 +1,32 @@
-name: Build & Push Gateway Docker Image
+name: Build & Push Reasonix Docker Image
 
 on:
   push:
-    branches: [main, dev]
+    branches: [main]
     paths:
-      - 'docker/Dockerfile.gateway'
-      - 'docker/Caddyfile.gateway'
-      - 'docker/entrypoint-gateway.sh'
-      - 'src-router/**'
-      - '.github/workflows/docker-gateway.yml'
+      - 'docker/Dockerfile.reasonix'
+      - 'docker/entrypoint-reasonix.sh'
+      - 'docker/reasonix-config.toml'
   workflow_dispatch:
 
 concurrency:
-  group: docker-gateway-${{ github.ref }}
+  group: docker-reasonix-${{ github.ref }}
   cancel-in-progress: true
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository_owner }}/opencodeui-gateway
+  IMAGE_NAME: ${{ github.repository_owner }}/opencodeui-reasonix
 
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 15
     permissions:
       contents: read
       packages: write
 
     steps:
       - uses: actions/checkout@v6
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -50,17 +45,24 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
-            type=sha,prefix=
-            type=ref,event=branch
 
+      # 二进制来自自管 fork 的 latest release，仅 linux/amd64
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: docker/Dockerfile.gateway
-          platforms: linux/amd64,linux/arm64
+          file: docker/Dockerfile.reasonix
+          platforms: linux/amd64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: 删除旧package
+        uses: actions/delete-package-versions@v5
+        with:
+          package-name: opencodeui-reasonix
+          package-type: 'container'
+          min-versions-to-keep: 2
+          delete-only-untagged-versions: 'true'

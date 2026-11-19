@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ChevronDownIcon, SendIcon, StopIcon, PaperclipIcon, AgentIcon, ThinkingIcon } from '../../../components/Icons'
+import { ChevronDownIcon, SendIcon, StopIcon, PaperclipIcon, AgentIcon, ThinkingIcon, ShrinkIcon } from '../../../components/Icons'
 import { DropdownMenu, MenuItem, IconButton, AnimatedPresence } from '../../../components/ui'
 import { ModelSelector, type ModelSelectorHandle } from '../ModelSelector'
 import { ComposerSeatMenu } from './ComposerSeatMenu'
@@ -43,6 +43,9 @@ interface InputToolbarProps {
   canSend: boolean
   onSend: () => void
 
+  // 压缩会话（/compact）快捷按钮；不传则不渲染
+  onCompact?: () => void
+
   // Model selection（移动端显示在工具栏）
   models?: Model[]
   providers?: Provider[]
@@ -71,6 +74,7 @@ export function InputToolbar({
   deliveryChipVisible = true,
   canSend,
   onSend,
+  onCompact,
   models = [],
   providers,
   selectedModelKey = null,
@@ -299,6 +303,8 @@ export function InputToolbar({
   const selectableAgents = agents.filter(a => a.mode !== 'subagent' && !a.hidden)
   // 选择值是 agent id（v2 的 API 用 id）；兼容历史存储的显示名
   const currentAgent = agents.find(a => a.id === selectedAgent || a.name === selectedAgent)
+  // 显示层兜底：selectedAgent 为空时（从未选择 / agents 未加载）显示第一个可选项，避免误导当前 agent
+  const displayAgentName = selectedAgent || selectableAgents[0]?.name || ''
   // 汇总菜单模式触发器需要当前模型名
   const selectedModel = useMemo(
     () => (selectedModelKey ? (models.find(m => getModelKey(m) === selectedModelKey) ?? null) : null),
@@ -386,7 +392,7 @@ export function InputToolbar({
               title={
                 currentAgent
                   ? `${currentAgent.name}${currentAgent.description ? ': ' + currentAgent.description : ''}`
-                  : selectedAgent || 'build'
+                  : displayAgentName
               }
             >
               {/* 紧凑信息流隐藏 AgentIcon 节省空间 */}
@@ -396,7 +402,7 @@ export function InputToolbar({
               >
                 <AgentIcon />
               </span>
-              <span className="text-[length:var(--fs-sm)] text-text-300 truncate">{currentAgent?.name ?? selectedAgent ?? 'build'}</span>
+              <span className="text-[length:var(--fs-sm)] text-text-300 truncate">{currentAgent?.name ?? displayAgentName}</span>
               <span className={`text-text-400 shrink-0 ${isCompact ? 'hidden' : ''}`}>
                 <ChevronDownIcon />
               </span>
@@ -549,6 +555,11 @@ export function InputToolbar({
             {busyDelivery === 'steer' ? t('inputToolbar.steer') : t('inputToolbar.followUp')}
           </button>
         </AnimatedPresence>
+        {onCompact && (
+          <IconButton aria-label={t('inputToolbar.compact')} disabled={controlsDisabled || isStreaming} onClick={onCompact}>
+            <ShrinkIcon />
+          </IconButton>
+        )}
         <AnimatedPresence show={true}>
           <>
             {/* 浏览器模式下的隐藏文件输入（不设 accept：任意文件都可上传，Issue #182） */}

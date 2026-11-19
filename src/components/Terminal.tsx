@@ -480,6 +480,9 @@ export const Terminal = memo(function Terminal({ ptyId, directory, serverId, isA
     const restoreSize = effectBuffer && effectCols && effectRows ? { cols: effectCols, rows: effectRows } : undefined
 
     mountedRef.current = true
+    // 本 effect 运行专属的失效标记：mountedRef 是组件级 ref，
+    // effect 重跑（如切换服务器）时会被新运行重新置 true，无法用来拦住旧运行的异步回调
+    let disposed = false
     cursorRef.current = effectCursor
     let ws: WebSocket | null = null
     let wsConnectTimeout: number | null = null
@@ -751,7 +754,7 @@ export const Terminal = memo(function Terminal({ ptyId, directory, serverId, isA
           )
           .then(connection => {
             if (!connection) return
-            if (!mountedRef.current) {
+            if (disposed) {
               connection.close()
               return
             }
@@ -836,6 +839,7 @@ export const Terminal = memo(function Terminal({ ptyId, directory, serverId, isA
     })
 
     return () => {
+      disposed = true
       mountedRef.current = false
       intentionalClose = true
       if (wsConnectTimeout) {

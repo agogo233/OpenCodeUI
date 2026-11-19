@@ -2,7 +2,7 @@ import { act, renderHook } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { usePermissionHandler } from './usePermissionHandler'
 
-const { replyPermissionMock, getPendingPermissionsMock, getPendingFormsMock, replyFormMock, cancelFormMock, activeSessionStoreMock } =
+const { replyPermissionMock, getPendingPermissionsMock, getPendingFormsMock, replyFormMock, cancelFormMock, activeSessionStoreMock, notificationStoreMock } =
   vi.hoisted(() => ({
     replyPermissionMock: vi.fn(() => Promise.resolve(true)),
     getPendingPermissionsMock: vi.fn(() => Promise.resolve([])),
@@ -11,6 +11,9 @@ const { replyPermissionMock, getPendingPermissionsMock, getPendingFormsMock, rep
     cancelFormMock: vi.fn((..._args: unknown[]) => Promise.resolve(true)),
     activeSessionStoreMock: {
       resolvePendingRequest: vi.fn(),
+    },
+    notificationStoreMock: {
+      push: vi.fn(),
     },
   }))
 
@@ -24,6 +27,7 @@ vi.mock('../api', () => ({
 
 vi.mock('../store', () => ({
   activeSessionStore: activeSessionStoreMock,
+  notificationStore: notificationStoreMock,
 }))
 
 vi.mock('../utils', () => ({

@@ -19,7 +19,8 @@ interface SlashCommandMenuProps {
   query: string // "/" 之后的文本
   rootPath?: string // 用于 API 调用
   onSelect: (command: Command) => void
-  onClose: () => void
+  /** reason: 'outside' = 点击外部关闭（不应抢回输入框焦点）；缺省 = 其他显式关闭路径 */
+  onClose: (reason?: 'escape' | 'outside') => void
 }
 
 // 暴露给父组件的方法
@@ -200,7 +201,7 @@ export const SlashCommandMenu = forwardRef<SlashCommandMenuHandle, SlashCommandM
   useEffect(() => {
     const handleClickOutside = (e: PointerEvent) => {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        onClose()
+        onClose('outside')
       }
     }
     if (isOpen) {

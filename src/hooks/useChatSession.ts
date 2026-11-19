@@ -1394,7 +1394,7 @@ export function useChatSession({
 
   // Command handler (slash commands)
   const handleCommand = useCallback(
-    async (commandStr: string) => {
+    async (commandStr: string, agent?: string) => {
       // 解析命令："/help arg1 arg2" => command="help", args="arg1 arg2"
       const trimmed = commandStr.trim()
       const withoutSlash = trimmed.startsWith('/') ? trimmed.slice(1) : trimmed
@@ -1499,7 +1499,11 @@ export function useChatSession({
 
         // Keep command submission semantics aligned with normal messages:
         // once the command is dispatched, clear the draft immediately.
-        void executeCommand(sessionId, command, args, effectiveDirectory, paneServerId).catch(err => {
+        // agent 为空时不带第 6 参，保持 executeCommand 的 5 参调用形态
+        void (agent
+          ? executeCommand(sessionId, command, args, effectiveDirectory, paneServerId, agent)
+          : executeCommand(sessionId, command, args, effectiveDirectory, paneServerId)
+        ).catch(err => {
           handleError('execute command', err)
         })
 
@@ -1592,20 +1596,35 @@ export function useChatSession({
     setSelectedAgent(primaryAgents[nextIndex].id)
   }, [agents, selectedAgent, setSelectedAgent])
 
-  // 从消息中恢复 agent 选择（用于切换 session 时）
+  // 从消息中恢复 agent 选择（用于切换 session 时）。返回是否成功应用恢复。
   const restoreAgentFromMessage = useCallback(
-    (agentName: string | null | undefined) => {
-      if (!agentName) return
+    (agentName: string | null | undefined): boolean => {
+      if (!agentName) return false
       // 消息里的 agent 可能是 id 也可能是显示名，归一化为 id 再恢复
       const matched = agents.find(
         a => (a.id === agentName || a.name === agentName) && a.mode !== 'subagent' && !a.hidden,
       )
       if (matched) {
         setSelectedAgent(matched.id)
+        return true
       }
+      return false
     },
     [agents, setSelectedAgent],
   )
+
+  // 会话级 agent 恢复：从最后一条用户消息恢复选中 agent。
+  // 仅在成功应用恢复后标记完成；消息缺 agent 字段（如 slash command 产生的消息）
+  // 或 agent 不在可选列表时保持当前选择、不标记完成，待 messages/agents 变化后重试，
+  // 避免一次失败被永久跳过后被兜底逻辑误设为第一个 primary agent（如 build）。
+  // v2 的 agent 是会话级状态（session.agent.selected），恢复由 ChatPane 的
+  // 会话级 effect 完成；这里只保留 ref 供 markAgentRestored 阻止恢复覆盖手选。
+  const restoredAgentSessionRef = useRef<string | null>(null)
+
+  /** 用户手动切换 agent 后调用，阻止本会话的自动恢复覆盖手选结果 */
+  const markAgentRestored = useCallback(() => {
+    restoredAgentSessionRef.current = routeSessionIdRef.current
+  }, [])
 
   // Copy last AI response to clipboard
   const handleCopyLastResponse = useCallback(async () => {
@@ -1708,5 +1727,6 @@ export function useChatSession({
     handleToggleAgent,
     handleCopyLastResponse,
     restoreAgentFromMessage,
+    markAgentRestored,
   }
 }

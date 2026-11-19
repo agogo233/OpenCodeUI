@@ -30,6 +30,7 @@ import { useCancelHint } from '../../hooks/useCancelHint'
 import { makeSessionKey, sessionKeyToServerId, splitSessionKey } from '../../utils/sessionKey'
 import { serverStore, subscribeServerStore } from '../../store/serverStore'
 import { InlineToolRequestContext, partitionUnclaimedRequests, type InlineToolRequestContextValue } from './InlineToolRequestContext'
+import type { RevertHistoryItem } from '../../store'
 import { ChatViewportProvider, canUseSplitPane, useChatViewportMaybe, type ChatViewportValue } from './chatViewport'
 import { useChatPageViewModel } from './useChatPageViewModel'
 import { findBlockingBackgroundTasks, mergeRunningShells, useRunningShells } from './backgroundTasks'
@@ -41,7 +42,6 @@ import { useDirectory } from '../../contexts/useDirectory'
 import { paneLayoutStore } from '../../store/paneLayoutStore'
 import { autoApproveStore } from '../../store/autoApproveStore'
 import { messageStore, paneControllerStore, useHiddenModelKeys, childSessionStore } from '../../store'
-import { restoreModelSelection } from '../../utils/sessionHelpers'
 import { uiErrorHandler } from '../../utils'
 import { findModelByKey, getModelKey } from '../../utils/modelUtils'
 import { useTheme } from '../../hooks/useTheme'
@@ -346,6 +346,7 @@ export const ChatPane = memo(function ChatPane({
     handleNextSession,
     handleCopyLastResponse,
     restoreAgentFromMessage,
+    markAgentRestored,
   } = useChatSession({
     paneId,
     chatAreaRef,
@@ -543,6 +544,9 @@ export const ChatPane = memo(function ChatPane({
   // ============================================
   // Agent Change with Model Sync
   // ============================================
+  // 用户手动切换 agent 时调用 markAgentRestored 标记"本会话 agent 已恢复"，
+  // 使会话加载完成后的自动恢复跳过，避免加载窗口内被历史消息覆盖。
+  // （恢复逻辑本体位于 useChatSession 内部）
   const syncModelForAgent = useCallback(
     (agentRef: string) => {
       // 选择值是 agent id；兼容显示名
@@ -562,8 +566,10 @@ export const ChatPane = memo(function ChatPane({
     (agentName: string) => {
       setSelectedAgent(agentName)
       syncModelForAgent(agentName)
+      // 用户手动选择优先：标记本会话已恢复，阻止加载完成后的自动恢复覆盖
+      markAgentRestored()
     },
-    [setSelectedAgent, syncModelForAgent],
+    [setSelectedAgent, syncModelForAgent, markAgentRestored],
   )
 
   const handleToggleAgentWithSync = useCallback(() => {
@@ -585,15 +591,8 @@ export const ChatPane = memo(function ChatPane({
   // revert/undo 恢复：inputRestoreContent 变化时立即恢复
   useEffect(() => {
     if (!inputRestoreContent?.model) return
-    const modelSelection = restoreModelSelection(
-      inputRestoreContent.model,
-      inputRestoreContent.variant ?? null,
-      visibleModels,
-    )
-    if (modelSelection) {
-      restoreFromMessage(inputRestoreContent.model, inputRestoreContent.variant)
-    }
-  }, [inputRestoreContent, visibleModels, restoreFromMessage])
+    restoreFromMessage(inputRestoreContent.model, inputRestoreContent.variant)
+  }, [inputRestoreContent, restoreFromMessage])
 
   // session 切换：只在 routeSessionId 变化时，恢复该会话当前的模型。
   // v2 的用户消息**不带** model / agent（那是会话级状态，由
@@ -613,10 +612,17 @@ export const ChatPane = memo(function ChatPane({
   // ============================================
   // Agent Restoration Effect
   // ============================================
+  // 记录已处理的恢复内容，避免 agents 重载（restoreAgentFromMessage 引用变化）重复强制恢复
+  const lastAgentRestoreContentRef = useRef<RevertHistoryItem | null>(null)
   useEffect(() => {
-    if (inputRestoreContent?.agent) {
-      restoreAgentFromMessage(inputRestoreContent.agent)
+    if (!inputRestoreContent?.agent) {
+      lastAgentRestoreContentRef.current = null
+      return
     }
+    // 仅在恢复内容引用变化时执行
+    if (lastAgentRestoreContentRef.current === inputRestoreContent) return
+    lastAgentRestoreContentRef.current = inputRestoreContent
+    restoreAgentFromMessage(inputRestoreContent.agent)
   }, [inputRestoreContent, restoreAgentFromMessage])
 
   const restoredAgentSessionRef = useRef<string | null>(null)
@@ -631,6 +637,7 @@ export const ChatPane = memo(function ChatPane({
     // Streaming only changes message content; agent restoration follows session/load boundaries.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [routeSessionId, messages.length, loadState, restoreAgentFromMessage])
+
 
   // ============================================
   // Focus handling

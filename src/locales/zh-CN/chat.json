@@ -187,6 +187,7 @@
   "inputToolbar": {
     "default": "Default",
     "attachFile": "附加文件",
+    "compact": "压缩会话",
     "stopGeneration": "停止生成",
     "sendingMessage": "发送消息中",
     "sendMessage": "发送消息",
@@ -237,6 +238,7 @@
     "recents": "最近",
     "active": "活跃",
     "noActiveSessions": "没有活跃会话",
+    "activeStatusStale": "连接中断，活跃状态可能不准确",
     "notifications": "通知",
     "readAll": "全部已读",
     "removeProject": "移除项目",

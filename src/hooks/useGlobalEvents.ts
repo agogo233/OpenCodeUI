@@ -246,6 +246,8 @@ export function flushPendingRequests(): number {
 }
 
 function getScopeKey(directories?: string[]) {
+  // 注意：此 key 不排序，用于 latePendingRequests 的 scope 匹配（保持登记时的顺序语义）；
+  // 刷新去重由 useLayoutEffect 里的 directoriesKeyRef 内容 key 负责
   if (!directories || directories.length === 0) return '__global__'
   return directories.join('|')
 }
@@ -1112,8 +1114,27 @@ export function useGlobalEvents(directories?: string[]) {
           flushPendingRequests()
         },
 
-        onSessionIdle: data => {
+        onSessionIdle: (data, facts) => {
           const scopedId = scope(data.sessionID)
+          const prevStatus = activeSessionStore.getSnapshot().statusMap[scopedId]
+          const wasBusy = prevStatus && (prevStatus.type === 'busy' || prevStatus.type === 'retry')
+
+          activeSessionStore.updateStatus(scopedId, { type: 'idle' })
+
+          // Toast — 与 onSessionStatus 一致的 completed 通知
+          // 防止 session.status idle 事件丢失时用户收不到完成提示
+          if (wasBusy && !belongsToCurrentSession(scopedId)) {
+            const meta = activeSessionStore.getSessionMeta(scopedId)
+            const sessionLabel = meta?.title || data.sessionID.slice(0, 8)
+            notificationStore.push('completed', sessionLabel, 'Session completed', scopedId, meta?.directory, facts?.id)
+          } else if (
+            wasBusy &&
+            isSessionDirectlyOpen(scopedId) &&
+            soundStore.getSnapshot().currentSessionEnabled
+          ) {
+            playNotificationSoundDeduped('completed')
+          }
+
           messageStore.handleSessionIdle(scopedId)
           childSessionStore.markIdle(scopedId)
           dispatchToConsumers(scopedId, cb => cb.onSessionIdle?.(scopedId))
@@ -1276,6 +1297,7 @@ export function useGlobalEvents(directories?: string[]) {
           const sessionLabel = meta?.title || form.sessionID.slice(0, 8)
           const desc = form.title || 'AI is waiting for your input'
 
+          // Active 列表：注册 pending request（登记归属目录，供回复失败后的补偿查询路由）
           activeSessionStore.addPendingRequest(form.id, scopedId, 'question', desc)
           if (activeFetchVersions.get(serverId) !== 0) {
             latePendingRequests.set(form.id, {
@@ -1345,6 +1367,14 @@ export function useGlobalEvents(directories?: string[]) {
           // 24h 窗口与「不再提示」由 store 判定
           if (data.status.type === 'retry') {
             usageExceededStore.report(data.status.action)
+          }
+
+          // 确保 messageStore / childSessionStore 也收到 idle 信号
+          // 防止 session.idle 事件丢失时 messageStore 卡在 streaming
+          if (data.status.type === 'idle') {
+            messageStore.handleSessionIdle(scopedId)
+            childSessionStore.markIdle(scopedId)
+            dispatchToConsumers(scopedId, cb => cb.onSessionIdle?.(scopedId))
           }
 
           // Toast — session 从 busy/retry 变成 idle 时弹 completed 通知

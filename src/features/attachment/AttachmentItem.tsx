@@ -3,7 +3,8 @@ import { useTranslation } from 'react-i18next'
 import { CloseIcon, ChevronDownIcon, CopyIcon, CheckIcon, DownloadIcon, ExpandIcon, RetryIcon } from '../../components/Icons'
 import { getAttachmentIcon, hasExpandableContent } from './utils'
 import { formatFileSize } from '../../utils/formatUtils'
-import { getMaterialIconUrl } from '../../utils/materialIcons'
+import { getMaterialIconName } from '../../utils/materialIcons'
+import { MaterialIcon } from '../../components/MaterialIcon'
 import { useDelayedRender } from '../../hooks/useDelayedRender'
 import { AttachmentDetailModal } from './AttachmentDetailModal'
 import { clipboardErrorHandler, copyTextToClipboard } from '../../utils'
@@ -45,8 +46,8 @@ function AttachmentItemComponent({
 
   // file/folder 使用 material icon，其他类型用通用 SVG 图标
   const useMaterialIcon = attachment.type === 'file' || attachment.type === 'folder'
-  const materialIconUrl = useMaterialIcon
-    ? getMaterialIconUrl(
+  const materialIcon = useMaterialIcon
+    ? getMaterialIconName(
         attachment.relativePath || attachment.displayName,
         attachment.type === 'folder' ? 'directory' : 'file',
       )
@@ -85,19 +86,8 @@ function AttachmentItemComponent({
           />
         )}
         <div className="relative flex items-center gap-1.5 w-full min-w-0">
-        {materialIconUrl ? (
-          <img
-            src={materialIconUrl}
-            alt=""
-            width={14}
-            height={14}
-            className="shrink-0"
-            loading="lazy"
-            decoding="async"
-            onError={e => {
-              e.currentTarget.style.visibility = 'hidden'
-            }}
-          />
+        {materialIcon ? (
+          <MaterialIcon icon={materialIcon} size={14} className="shrink-0" />
         ) : (
           <span
             className={`${colorClass} flex items-center justify-center w-4 h-4 shrink-0 [&>svg]:w-3.5 [&>svg]:h-3.5`}

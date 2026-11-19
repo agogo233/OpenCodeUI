@@ -73,22 +73,33 @@ Visit `http://localhost:3000`.
 BACKEND_URL=your-server.com:4096 PORT=8080 docker compose -f docker-compose.standalone.yml up -d
 ```
 
-| Environment Variable | Default                     | Description                                      |
-| -------------------- | --------------------------- | ------------------------------------------------ |
-| `BACKEND_URL`        | `host.docker.internal:4096` | opencode serve address (without protocol prefix) |
-| `PORT`               | `3000`                      | Frontend listening port                          |
+| Environment Variable       | Default                     | Description                                                   |
+| -------------------------- | --------------------------- | ------------------------------------------------------------- |
+| `BACKEND_URL`              | `host.docker.internal:4096` | opencode serve address (without protocol prefix)              |
+| `PORT`                     | `3000`                      | Frontend listening port                                       |
+| `OPENCODE_SERVER_USERNAME` | `opencode`                  | Backend Basic auth username (keep in sync with backend)       |
+| `OPENCODE_SERVER_PASSWORD` | (empty)                     | Backend Basic auth password; when set, both API and UI require login; empty means no auth anywhere |
 
 **When the backend enables password auth (`OPENCODE_SERVER_PASSWORD`):**
 
-After you enter the username/password in the frontend's server connection dialog, the frontend automatically attaches an `Authorization: Basic <base64>` header to every request. The built-in Caddy config explicitly forwards this header, so no extra setup is needed.
+Browsers do not automatically attach credentials to terminal WebSocket connections, so the password is held by the frontend container: the `OPENCODE_SERVER_USERNAME`/`OPENCODE_SERVER_PASSWORD` values from `.env` are converted into a Basic header, injected uniformly by Caddy when proxying. No configuration is needed in the browser or the OpenCodeUI UI, and the terminal connects directly. When unset, the value is not exported, Caddy injects no `Authorization` header at all, and the passwordless scenario behaves exactly like accessing the backend directly.
 
-If you use a custom Caddyfile (or hit 401 auth failures), add this to the `reverse_proxy` block:
+**The mobile-only entry `/mobile/*` (for opencode-mobile) does not proxy-hold credentials:**
+
+The app sends its own `Authorization: Basic` header from the connection settings (username/password matching `OPENCODE_SERVER_USERNAME`/`OPENCODE_SERVER_PASSWORD`), and the backend validates it uniformly. Requests without credentials are rejected with 401 by the backend. This prevents the `/mobile` entry from bypassing the page-level Basic Auth. When the frontend is accessed via a LAN IP, the Origin rewrite (`header_up Origin`) for terminal WebSockets is still applied on this entry.
+
+If you use a custom Caddyfile, the same pattern is required in the `handle_path /api/*` block (`OPENCODE_AUTH_BASIC` is exported by the startup command, with value `base64(username:password)`; when not exported the expression does not match, and the branch without an auth header is used automatically):
 
 ```caddyfile
 handle_path /api/* {
+	@with_auth expression `{env.OPENCODE_AUTH_BASIC} != ""`
+	reverse_proxy @with_auth your-opencode-serve:4096 {
+		header_up Host {upstream_hostport}
+		header_up Authorization "Basic {env.OPENCODE_AUTH_BASIC}"
+		flush_interval -1
+	}
 	reverse_proxy your-opencode-serve:4096 {
 		header_up Host {upstream_hostport}
-		header_up Authorization {http.request.header.Authorization}
 		flush_interval -1
 	}
 }
@@ -166,6 +177,16 @@ docker compose exec backend python -V
 ```
 
 The `gateway` still retains a separate volume `opencode-router-data` for storing dynamic routing state.
+
+### Page Access Authentication
+
+In the main deployment (gateway architecture), `OPENCODE_SERVER_PASSWORD` doubles as the page access credential: when it is set, the UI prompts for Basic auth in the browser before entering, and the API/terminal reuse the same credentials automatically (no extra password entry in the UI). Therefore:
+
+- **Use it behind HTTPS only** — over plain HTTP the credentials can be sniffed;
+- **Do not configure a different server password in the OpenCodeUI settings**, otherwise requests from the UI will override the browser's automatic credentials and fail with 401;
+- To change the credential, update the same `.env` entry and run `docker compose up -d`; clearing it disables both page auth and backend auth;
+- Applies to both `docker-compose.yml` (gateway architecture) and `docker-compose.standalone.yml`: in standalone deployments the same setting enables page Basic auth, sharing the same credentials as the backend; the simple/nginx image has no such logic, so the setting will not add page auth there;
+- The preview port `6659` has no page auth (its URLs carry a random token); keep it bound to `127.0.0.1` for public deployments. `/routes` and `/preview/*` are guarded by the gateway's built-in router using the same credentials.
 
 ### Environment Variables
 
@@ -264,6 +285,65 @@ preview.example.com {
 ```
 
 > **Important**: SSE requires buffering to be disabled. Nginx needs `proxy_buffering off`, Caddy needs `flush_interval -1`.
+
+## Reasonix Web UI Reverse Proxy (Optional)
+
+The frontend image ships an isolated site block from `docker/Caddyfile.reasonix` (default `:3001`) that fully proxies the Web UI bundled with [DeepSeek-Reasonix](https://github.com/esengine/DeepSeek-Reasonix) `reasonix serve`.
+
+Reasonix's pages and API live on root-absolute paths, so it must be proxied on its **own port as a whole site** — it cannot be mounted under a `/reasonix/*` path suffix. Authentication is handled by reasonix serve itself (the proxy adds no lock and rewrites no Host/Origin; the token-for-cookie flow via URL fragment relies on pass-through).
+
+```yaml
+# docker-compose.standalone.yml (frontend service)
+ports:
+  - '${PORT:-3000}:3000'
+  - '${REASONIX_PORT:-3001}:3001'
+environment:
+  # When reasonix runs on the host, set REASONIX_URL=host.docker.internal:8787 in .env
+  # (compose default 127.0.0.1:8787 = disabled)
+  - REASONIX_URL=${REASONIX_URL:-127.0.0.1:8787}
+```
+
+```bash
+# Start reasonix on the host (token mode must be explicit; serve defaults to none)
+reasonix serve --addr 0.0.0.0:8787 --auth token --token <long-random-string> --behind-proxy
+
+# Open in a browser (the token is exchanged for an HttpOnly cookie via the #token=... URL fragment)
+http://<IP>:3001/#token=<token>
+```
+
+| Auth mode | Command | Access |
+| --- | --- | --- |
+| token | `--auth token` (random per launch unless fixed with `--token`) | `http://<IP>:3001/#token=<token>` |
+| password | `--auth password --password <secret>` | login page |
+| none (serve default) | reads are open, writes still need the launch token; avoid on untrusted networks | direct access |
+
+See the `REASONIX_*` section in `.env.example`: the default `127.0.0.1:8787` means disabled (hitting `:3001` yields 502); when running on the host use `reasonix serve --addr 0.0.0.0:8787`.
+
+For containerized deployment (this repo's `docker/Dockerfile.reasonix`, with the `opencodeui-reasonix` image published by CI) you must define the reasonix service in compose **first**, then set `REASONIX_URL=http://reasonix:8787` — reversing the order makes the frontend fail to start because the upstream hostname cannot be resolved. Set the token via `REASONIX_TOKEN=<long-random-string>` in `.env` (injected into the `command` below by compose interpolation):
+
+```yaml
+  reasonix:
+    image: ghcr.io/<owner>/opencodeui-reasonix:latest
+    restart: unless-stopped
+    volumes:
+      - ./workspace:/workspace        # project root (shares the real directory with backend)
+      - ./reasonix-home:/reasonix-home
+    environment:
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+    # command: replaces CMD only (i.e. the reasonix args); the image ENTRYPOINT
+    # (entrypoint-reasonix.sh) provisions credentials first, then execs these
+    command: ["serve", "--addr", "0.0.0.0:8787", "--auth", "token", "--token", "${REASONIX_TOKEN}", "--behind-proxy"]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8787/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - opencode-net
+```
+
+When bound to a non-loopback address, Reasonix's web-based provider setup page is unavailable, so credentials must be pre-provisioned: the image ENTRYPOINT (`entrypoint-reasonix.sh`) copies the in-image `/defaults/config.toml` into `REASONIX_HOME` at startup and writes `DEEPSEEK_API_KEY` to `/reasonix-home/.env` (see `docker/reasonix-config.toml`).
 
 ## Local Development
 

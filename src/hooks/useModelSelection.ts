@@ -59,7 +59,14 @@ export function useModelSelection({ models, sessionId = null }: UseModelSelectio
   const skipPersistenceRef = useRef<string | null>(null)
 
   const persistedModel = selectedModelKey ? findModelByKey(models, selectedModelKey) : undefined
-  const currentModel = useMemo(() => persistedModel ?? models[0], [models, persistedModel])
+  const currentModel = useMemo(() => {
+    if (!persistedModel && import.meta.env.DEV && selectedModelKey && models.length > 0) {
+      console.warn(
+        `[useModelSelection] Model "${selectedModelKey}" not found, falling back to "${getModelKey(models[0])}".`,
+      )
+    }
+    return persistedModel ?? models[0]
+  }, [models, persistedModel, selectedModelKey])
   const resolvedModelKey = currentModel ? getModelKey(currentModel) : null
   const resolvedSelectedVariant = useMemo(() => {
     if (!resolvedModelKey) return undefined

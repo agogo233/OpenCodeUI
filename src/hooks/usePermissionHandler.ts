@@ -14,7 +14,7 @@ import {
   type PermissionReply,
   type FormAnswer,
 } from '../api'
-import { activeSessionStore } from '../store'
+import { activeSessionStore, notificationStore } from '../store'
 import { makeSessionKey } from '../utils/sessionKey'
 import { isNotFoundError } from '../utils/sessionErrors'
 import { permissionErrorHandler } from '../utils'
@@ -173,6 +173,14 @@ export function usePermissionHandler(serverId: string): UsePermissionHandlerResu
         }
 
         permissionErrorHandler('reply after retries', error)
+        // 回复失败要让用户知道：静默失败会被误以为已同意/已拒绝
+        notificationStore.push(
+          'error',
+          'Permission reply failed',
+          'The reply did not reach the server. Please retry.',
+          sessionId ?? '',
+          directory,
+        )
 
         return false
       } finally {
@@ -227,6 +235,13 @@ export function usePermissionHandler(serverId: string): UsePermissionHandlerResu
         }
 
         permissionErrorHandler('form reply after retries', error)
+        // 表单回复失败要让用户知道：对话框仍开着可重试，但要有失败反馈
+        notificationStore.push(
+          'error',
+          'Form reply failed',
+          'The reply did not reach the server. Please retry.',
+          form.sessionID,
+        )
         return false
       } finally {
         replyingIdsRef.current.delete(formId)

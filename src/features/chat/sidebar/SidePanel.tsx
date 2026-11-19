@@ -1519,6 +1519,11 @@ export function SidePanel({
           {/* Active Sessions Tab */}
           {sidebarTab === 'active' && (
             <div className="flex-1 overflow-y-auto custom-scrollbar px-2 pb-3">
+              {(connectionDisplay === 'error' || connectionDisplay === 'disconnected') && (
+                <div className="mx-1 mb-2 rounded-lg border border-warning-100/30 bg-warning-100/10 px-2.5 py-1.5 text-[length:var(--fs-xxs)] text-warning-100">
+                  {t('sidebar.activeStatusStale')}
+                </div>
+              )}
               {mergedBusySessions.length === 0 && notifications.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-12 text-text-400 opacity-60">
                   <p className="text-[length:var(--fs-sm)]">{t('sidebar.noActiveSessions')}</p>

@@ -73,22 +73,33 @@ docker compose -f docker-compose.standalone.yml up -d
 BACKEND_URL=your-server.com:4096 PORT=8080 docker compose -f docker-compose.standalone.yml up -d
 ```
 
-| 环境变量      | 默认值                      | 说明                                |
-| ------------- | --------------------------- | ----------------------------------- |
-| `BACKEND_URL` | `host.docker.internal:4096` | opencode serve 地址（不含协议前缀） |
-| `PORT`        | `3000`                      | 前端监听端口                        |
+| 环境变量                   | 默认值                      | 说明                                          |
+| -------------------------- | --------------------------- | --------------------------------------------- |
+| `BACKEND_URL`              | `host.docker.internal:4096` | opencode serve 地址（不含协议前缀）           |
+| `PORT`                     | `3000`                      | 前端监听端口                                  |
+| `OPENCODE_SERVER_USERNAME` | `opencode`                  | 后端 Basic 认证用户名（与后端容器保持一致）   |
+| `OPENCODE_SERVER_PASSWORD` | 空                          | 后端 Basic 认证密码；非空时接口与页面均要求登录，为空则全站免密 |
 
 **后端开启密码认证时（`OPENCODE_SERVER_PASSWORD`）：**
 
-前端在服务器连接界面填入 用户名/密码 后会为每个请求自动携带 `Authorization: Basic <base64>` 头。镜像内置的 Caddy 已显式透传该头，无需额外配置。
+浏览器不会为终端 WebSocket 自动携带认证凭据，因此密码由前端容器代持：把 `.env` 里的 `OPENCODE_SERVER_USERNAME`/`OPENCODE_SERVER_PASSWORD` 换算成 Basic 头，由 Caddy 在反代时统一注入。浏览器和 OpenCodeUI 界面均无需任何配置，终端可直接连接。未设置密码时不导出该值，Caddy 不注入任何 `Authorization` 头，无密码场景与直接访问后端完全一致。
 
-若你使用自定义 Caddyfile（或遇到 401 认证失败），在 `reverse_proxy` 块中添加：
+**手机端（opencode-mobile）专用入口 `/mobile/*` 不做凭据代持：**
+
+App 在连接配置中自带 `Authorization: Basic`（用户名/密码与 `OPENCODE_SERVER_USERNAME`/`OPENCODE_SERVER_PASSWORD` 一致），由后端统一校验；未填写凭据的请求会被后端 401 拒绝。这样可以避免 `/mobile` 入口绕过页面级 Basic Auth。若你的前端经局域网 IP 访问，终端 WebSocket 的来源改写（`header_up Origin`）在该入口同样保留。
+
+若你使用自定义 Caddyfile，`handle_path /api/*` 块中需要相同写法（`OPENCODE_AUTH_BASIC` 由启动命令导出，值为 `base64(用户名:密码)`；未导出时表达式不匹配，自动走不带认证头的分支）：
 
 ```caddyfile
 handle_path /api/* {
+	@with_auth expression `{env.OPENCODE_AUTH_BASIC} != ""`
+	reverse_proxy @with_auth your-opencode-serve:4096 {
+		header_up Host {upstream_hostport}
+		header_up Authorization "Basic {env.OPENCODE_AUTH_BASIC}"
+		flush_interval -1
+	}
 	reverse_proxy your-opencode-serve:4096 {
 		header_up Host {upstream_hostport}
-		header_up Authorization {http.request.header.Authorization}
 		flush_interval -1
 	}
 }
@@ -168,6 +179,16 @@ docker compose -f docker-compose.yml -f docker-compose.host.yml up -d
 - `/:/host`
 
 只在明确需要这些能力时开启。公网部署时务必设置 `OPENCODE_SERVER_PASSWORD`。
+
+### 页面访问认证
+
+主部署方式下，`OPENCODE_SERVER_PASSWORD` 同时是页面访问口令：设置为非空后，打开 UI 会先弹出浏览器 Basic 认证窗口，通过后才进入界面（接口与终端复用同一套凭据自动带出，界面内无需再填密码）。因此请遵循：
+
+- **只在 HTTPS 反代之后使用**，明文 HTTP 下口令可被窃听；
+- **不要在 OpenCodeUI 设置里另填一个不同的服务器密码**，否则界面发出的请求会覆盖浏览器自动携带的凭据，导致接口 401；
+- 修改口令 = 改 `.env` 里同一项后 `docker compose up -d`；清空即同时关闭页面认证与后端认证；
+- `docker-compose.yml`（gateway 架构）与 `docker-compose.standalone.yml` 均生效：standalone 部署下设置该项同样会启用页面 Basic 认证，与后端共用同一套凭据；simple/nginx 镜像没有此逻辑，设置该项不会给页面加认证；
+- 预览端口 `6659` 不带页面认证（靠 URL 中的随机 token 区分），公网暴露时请配合绑定 `127.0.0.1` 使用；`/routes`、`/preview/*` 由网关内置路由服务按同一套账号口令校验。
 
 ### 从源码本地构建（可选）
 
@@ -314,6 +335,65 @@ preview.example.com {
 ```
 
 > **重要**：SSE 要求禁用缓冲。Nginx 需 `proxy_buffering off`，Caddy 需 `flush_interval -1`。
+
+## Reasonix Web UI 反代（可选）
+
+前端镜像内置 `docker/Caddyfile.reasonix` 独立站点块（默认 `:3001`），整站反代 [DeepSeek-Reasonix](https://github.com/esengine/DeepSeek-Reasonix) `reasonix serve` 自带的 Web UI。
+
+reasonix 的页面与 API 全部挂在根绝对路径，因此必须**独占端口整站反代**，不能挂 `/reasonix/*` 路径后缀；认证由 reasonix serve 自身负责（反代不加锁、不改写 Host/Origin，token 经 URL fragment 换 HttpOnly cookie 的流程依赖透传）。
+
+```yaml
+# docker-compose.standalone.yml（frontend 服务）
+ports:
+  - '${PORT:-3000}:3000'
+  - '${REASONIX_PORT:-3001}:3001'
+environment:
+  # 宿主机运行 reasonix 时在 .env 设 REASONIX_URL=host.docker.internal:8787
+  # （compose 默认 127.0.0.1:8787 = 未启用）
+  - REASONIX_URL=${REASONIX_URL:-127.0.0.1:8787}
+```
+
+```bash
+# 宿主机启动 reasonix（token 模式需显式指定；serve 默认 none）
+reasonix serve --addr 0.0.0.0:8787 --auth token --token <长随机串> --behind-proxy
+
+# 浏览器访问（token 经 URL fragment #token=... 自动换 HttpOnly cookie）
+http://<IP>:3001/#token=<token>
+```
+
+| 认证模式 | 命令要点 | 访问方式 |
+| --- | --- | --- |
+| token | `--auth token`（不带 `--token` 时每次启动随机生成，`--token` 固定则重启不变） | `http://<IP>:3001/#token=<token>` |
+| password | `--auth password --password <口令>` | 打开即登录页 |
+| none（serve 默认） | 仅读操作开放，写操作仍需 launch token，不可信网络勿用 | 直接访问 |
+
+环境变量见 `.env.example` 的 `REASONIX_*` 段：默认 `127.0.0.1:8787` = 未启用（访问 `:3001` 得 502）；宿主机运行需 `reasonix serve --addr 0.0.0.0:8787`。
+
+容器化部署（本仓库 `docker/Dockerfile.reasonix`，CI 自动发布 `opencodeui-reasonix` 镜像）需**先**在 compose 中定义 reasonix 服务，再设 `REASONIX_URL=http://reasonix:8787`——顺序颠倒会导致 frontend 启动时解析不到上游而整体失败。token 在 `.env` 中设 `REASONIX_TOKEN=<长随机串>`（compose 渲染时注入下方 `command`）：
+
+```yaml
+  reasonix:
+    image: ghcr.io/<owner>/opencodeui-reasonix:latest
+    restart: unless-stopped
+    volumes:
+      - ./workspace:/workspace        # 项目根（与 backend 共用真实目录）
+      - ./reasonix-home:/reasonix-home
+    environment:
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+    # command: 只替换 CMD（即 reasonix 的参数）；镜像 ENTRYPOINT 的
+    # entrypoint-reasonix.sh 先预置凭据，再 exec 以下参数
+    command: ["serve", "--addr", "0.0.0.0:8787", "--auth", "token", "--token", "${REASONIX_TOKEN}", "--behind-proxy"]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8787/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - opencode-net
+```
+
+容器绑定非回环地址时 reasonix 的 Web 端 provider 配置页不可用，凭据须预置：镜像 ENTRYPOINT（`entrypoint-reasonix.sh`）启动时把镜像内 `/defaults/config.toml` 复制到 `REASONIX_HOME`，并将 `DEEPSEEK_API_KEY` 写入 `/reasonix-home/.env`（见 `docker/reasonix-config.toml`）。
 
 ## 本地开发
 

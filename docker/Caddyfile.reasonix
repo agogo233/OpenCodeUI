@@ -1,0 +1,38 @@
+# OpenCode WebUI - Reasonix Web UI 反代（独立站点）
+# ============================================
+# 整站反代 reasonix serve 自带的 Web UI（SPA + 自有 API/SSE/WebSocket）。
+#
+# reasonix 的页面与 API 全部挂在根绝对路径（/、/submit、/events、/approve …），
+# 因此必须独占端口（或子域名）整站反代，不能挂 /reasonix/* 这类路径后缀：
+# 页面里的 JS 会请求根路径，落到 OpenCodeUI 的 SPA fallback 上直接坏掉。
+#
+# 环境变量：
+#   REASONIX_LISTEN - 监听地址，默认 :3001（IP 直连 http://<IP>:3001）
+#   REASONIX_URL    - reasonix serve 上游地址，默认 127.0.0.1:8787
+#                     （= 未启用，访问 :3001 得 502；用 IP 字面量避免
+#                      Caddy 静态上游在启动时因主机名解析失败而拒绝启动）
+#                     容器化 reasonix 时设 http://reasonix:8787；
+#                     宿主机运行时设 host.docker.internal:8787，
+#                     并给 frontend 服务加 extra_hosts + 上游 --addr 0.0.0.0
+#
+# 认证由 reasonix serve 自身负责，本反代不加锁、不改写 Host/Origin：
+# token 模式经 URL fragment（#token=...）换 HttpOnly cookie（reasonix_token）
+# 的流程依赖原始头透传，改写会破坏登录。
+#   --auth token       需显式指定（serve 默认 none，仅 web 子命令默认 token）；
+#                      不带 --token 时每次启动随机生成，浏览器打开
+#                      http://<IP>:3001/#token=<token>
+#   --token <预共享>    固定 token，便于记住访问链接
+#   --auth password    登录页认证（--password，或 --hash-password 生成摘要后写入配置）
+#   --auth none        serve 默认；仅读操作开放，写操作仍需 launch token，
+#                      不可信网络勿用
+# 推荐搭配 --behind-proxy（消费 Caddy 自动注入的 X-Forwarded-For/Proto）。
+#
+# 由 docker/Caddyfile、docker/Caddyfile.auth、docker/Caddyfile.standalone
+# import，三个变体共用。
+
+{$REASONIX_LISTEN::3001} {
+	reverse_proxy {$REASONIX_URL:127.0.0.1:8787} {
+		# SSE（GET /events）需要逐事件立即透传；WebSocket 由 reverse_proxy 自动处理
+		flush_interval -1
+	}
+}
