@@ -626,18 +626,28 @@ export const ChatPane = memo(function ChatPane({
   }, [inputRestoreContent, restoreAgentFromMessage])
 
   const restoredAgentSessionRef = useRef<string | null>(null)
+  const agentRestoreWarnedRef = useRef('')
   useEffect(() => {
     if (!routeSessionId || restoredAgentSessionRef.current === routeSessionId) return
     // 同模型恢复：等会话加载完（空会话以 loadState 为准）
     if (messages.length === 0 && loadState !== 'loaded') return
 
+    const agent = messageStore.getSessionState(routeSessionId)?.agent
+    // 会话尚未带 agent：等 session.agent.selected 事件补发，保持可重试
+    if (!agent) return
+    // 恢复失败（agent 不在可选列表）不落锁，后续加载/事件到达仍可重试；
+    // 按 session:agent 去重 warn，避免事件流重复推送时刷屏
+    if (!restoreAgentFromMessage(agent)) {
+      const warnKey = `${routeSessionId}:${agent}`
+      if (agentRestoreWarnedRef.current !== warnKey) {
+        agentRestoreWarnedRef.current = warnKey
+        console.warn(`[agent-restore] agent "${agent}" not in selectable agents; keeping current selection`)
+      }
+      return
+    }
     restoredAgentSessionRef.current = routeSessionId
-    // 同模型恢复：v2 的 agent 也是会话级状态
-    restoreAgentFromMessage(messageStore.getSessionState(routeSessionId)?.agent)
     // Streaming only changes message content; agent restoration follows session/load boundaries.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [routeSessionId, messages.length, loadState, restoreAgentFromMessage])
-
 
   // ============================================
   // Focus handling

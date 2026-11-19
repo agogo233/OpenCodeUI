@@ -151,9 +151,10 @@ vi.mock('../hooks', () => ({
     animateRedo: vi.fn(),
   }),
   useDirectory: () => ({ currentDirectory: '/workspace/demo' }),
-  // agents 现在来自共享 store（useAgents）；测试中给固定列表
+  // agents 现在来自共享 store（useAgents）；测试中给固定列表（name 为显示名，
+  // id 为归一化 key，两者不同以便验证 restoreAgentFromMessage 的归一化）
   useAgents: () => ({
-    agents: [{ name: 'build', mode: 'primary', hidden: false }],
+    agents: [{ id: 'build', name: 'Build', mode: 'primary', hidden: false }],
     isLoading: false,
     error: null,
     refetch: vi.fn(() => Promise.resolve()),
@@ -830,5 +831,44 @@ describe('useChatSession busy UI signal', () => {
     const sendArgs = sendMessageAsyncMock.mock.calls.at(-1)?.[0] as { delivery?: string }
     expect(sendArgs.delivery).toBeUndefined()
     upsertSpy.mockRestore()
+  })
+})
+
+describe('useChatSession restoreAgentFromMessage', () => {
+  const renderChatSession = () =>
+    renderHook(() =>
+      useChatSession({
+        paneId: 'pane-1',
+        chatAreaRef: { current: null },
+        currentModel: { id: 'model-1', providerID: 'provider-1', variants: [] } as never,
+        refetchModels: vi.fn(async () => {}),
+        sessionId: 'session-1',
+        navigateToSession: vi.fn(),
+        navigateHome: vi.fn(),
+      }),
+    )
+
+  it('matches by id or display name and applies the normalized id', () => {
+    const { result } = renderChatSession()
+
+    result.current.setSelectedAgent('')
+
+    // 按 id 匹配
+    expect(result.current.restoreAgentFromMessage('build')).toBe(true)
+    expect(result.current.selectedAgent).toBe('build')
+
+    // 按显示名匹配：落库的是归一化后的 id
+    result.current.setSelectedAgent('')
+    expect(result.current.restoreAgentFromMessage('Build')).toBe(true)
+    expect(result.current.selectedAgent).toBe('build')
+  })
+
+  it('returns false for unknown agents without changing the selection', () => {
+    const { result } = renderChatSession()
+
+    result.current.setSelectedAgent('build')
+
+    expect(result.current.restoreAgentFromMessage('ghost')).toBe(false)
+    expect(result.current.selectedAgent).toBe('build')
   })
 })

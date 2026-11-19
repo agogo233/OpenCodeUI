@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { activeSessionStore } from './activeSessionStore'
 
 describe('activeSessionStore scoped refresh handling', () => {
@@ -137,6 +137,84 @@ describe('activeSessionStore scoped refresh handling', () => {
       message: 'retrying',
       next: 1000,
     })
+  })
+
+  it('dedupes same-value status events into a single notification', () => {
+    activeSessionStore.initialize({
+      'local::root': { type: 'busy' },
+    })
+    const listener = vi.fn()
+    const unsubscribe = activeSessionStore.subscribe(listener)
+    try {
+      const baseline = listener.mock.calls.length
+
+      // 同值 busy 重复推送：不重复通知（避免订阅端无谓重渲染）
+      activeSessionStore.updateStatus('local::root', { type: 'busy' })
+      expect(listener).toHaveBeenCalledTimes(baseline)
+
+      // retry 参数变化：重新通知
+      activeSessionStore.updateStatus('local::root', {
+        type: 'retry',
+        attempt: 1,
+        message: 'retrying',
+        next: 1000,
+      })
+      expect(listener).toHaveBeenCalledTimes(baseline + 1)
+
+      // 同参 retry 重复：不再通知
+      activeSessionStore.updateStatus('local::root', {
+        type: 'retry',
+        attempt: 1,
+        message: 'retrying',
+        next: 1000,
+      })
+      expect(listener).toHaveBeenCalledTimes(baseline + 1)
+    } finally {
+      unsubscribe()
+    }
+  })
+
+  it('skips idle events for sessions that were never busy', () => {
+    const listener = vi.fn()
+    const unsubscribe = activeSessionStore.subscribe(listener)
+    try {
+      activeSessionStore.updateStatus('local::ghost', { type: 'idle' })
+
+      expect(listener).not.toHaveBeenCalled()
+      expect(activeSessionStore.getSnapshot().statusMap['local::ghost']).toBeUndefined()
+    } finally {
+      unsubscribe()
+    }
+  })
+
+  it('records in-flight idle events for unknown sessions so the snapshot cannot revive them', () => {
+    // 断线重连的拉取窗口开启时，本地从未记录过的会话推来 idle（抓取快照时
+    // 它还在跑，快照里是 busy）：窗口内 idle 必须先记账、在快照应用时覆盖，
+    // 否则已结束的会话会被旧快照复活成 busy
+    activeSessionStore.beginStatusSnapshot('local')
+    activeSessionStore.updateStatus('local::ghost', { type: 'idle' })
+
+    activeSessionStore.applyServerStatusSnapshot('local', {
+      'local::ghost': { type: 'busy' },
+    })
+    activeSessionStore.endStatusSnapshot('local')
+
+    expect(activeSessionStore.getSnapshot().statusMap['local::ghost']).toBeUndefined()
+  })
+
+  it('keeps processing idle events while a deferred entry exists', () => {
+    // pending 未回复 → idle 被 defer（会话仍显示 busy）；重复 idle 事件
+    // 不得被「无变化」早退吞掉，deferred 记账必须维持
+    activeSessionStore.addPendingRequest('req-1', 'local::root', 'permission', 'edit: src/app.tsx')
+    activeSessionStore.updateStatus('local::root', { type: 'idle' })
+    expect(activeSessionStore.getSnapshot().statusMap['local::root']).toEqual({ type: 'busy' })
+
+    activeSessionStore.updateStatus('local::root', { type: 'idle' })
+    expect(activeSessionStore.getSnapshot().statusMap['local::root']).toEqual({ type: 'busy' })
+
+    // pending 回复后，暂缓的 idle 落地：会话移出活跃列表
+    activeSessionStore.resolvePendingRequest('req-1')
+    expect(activeSessionStore.getSnapshot().statusMap['local::root']).toBeUndefined()
   })
 
   it('drops a replayed pending request after it has been replied', () => {

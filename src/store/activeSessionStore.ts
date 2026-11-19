@@ -73,6 +73,21 @@ function isSameBusySessions(a: ActiveSessionEntry[], b: ActiveSessionEntry[]): b
   return true
 }
 
+/** 同值状态判定：用于 updateStatus 去重，避免重复事件触发无谓通知 */
+function isDifferentStatus(prev: SessionStatus | undefined, next: SessionStatus): boolean {
+  if (!prev) return true
+  if (prev.type !== next.type) return true
+  // prev.type === 'retry' 同时承担类型收窄（next.type 已是 retry）
+  if (next.type === 'retry' && prev.type === 'retry') {
+    return (
+      prev.attempt !== next.attempt ||
+      prev.message !== next.message ||
+      prev.next !== next.next
+    )
+  }
+  return false
+}
+
 // ============================================
 // Store
 // ============================================
@@ -365,7 +380,24 @@ class ActiveSessionStore {
   // ============================================
 
   updateStatus(sessionId: string, status: SessionStatus) {
+    const prev = this.state.statusMap[sessionId]
+
+    // 快照拉取窗口内的事件先记账（官方 activeUpdates 同款）：
+    // applyServerStatusSnapshot 用它们覆盖旧快照。必须先于任何早退执行——
+    // 否则窗口内「本地无条目会话」的 idle 事件会被丢弃，快照应用后
+    // 已结束的会话会被旧快照复活成 busy（卡 busy 回归）
+    const sep = sessionId.indexOf('::')
+    if (sep > 0) {
+      const flight = this.statusSnapshotFlights.get(sessionId.slice(0, sep))
+      if (flight) flight.updates.set(sessionId, status)
+    }
+
+    // 无条目且无 deferred 记账时，idle 不会产生任何状态变化：跳过，
+    // 避免重复 idle 事件（双通道上报）触发无谓重渲染
+    if (status.type === 'idle' && !prev && !this.deferredIdleSessions.has(sessionId)) return
+
     const newMap = { ...this.state.statusMap }
+    let next: SessionStatus | undefined
 
     if (status.type === 'idle') {
       if (this.hasPendingForSession(sessionId)) {
@@ -376,19 +408,18 @@ class ActiveSessionStore {
       }
     } else if (status.type === 'retry') {
       this.deferredIdleSessions.delete(sessionId)
-      newMap[sessionId] = { ...status }
+      next = { ...status }
+      newMap[sessionId] = next
     } else {
       this.deferredIdleSessions.delete(sessionId)
-      newMap[sessionId] = { type: 'busy' }
+      next = { type: 'busy' }
+      newMap[sessionId] = next
     }
 
-    // 快照拉取窗口内的事件先记账（官方 activeUpdates 同款）：
-    // applyServerStatusSnapshot 用它们覆盖旧快照
-    const sep = sessionId.indexOf('::')
-    if (sep > 0) {
-      const flight = this.statusSnapshotFlights.get(sessionId.slice(0, sep))
-      if (flight) flight.updates.set(sessionId, status)
-    }
+    // 同值事件去重（busy→busy、retry 同参重复）：状态表内容未变则不重建
+    // state、不通知。deferred 清理已在上面完成——尤其要先清 deferred 再早退，
+    // 否则 resolvePendingRequest 会把服务端已确认 busy 的会话错误移出活跃列表
+    if (next && !isDifferentStatus(prev, next)) return
 
     this.state = { ...this.state, statusMap: newMap }
     this.notify()
