@@ -1453,7 +1453,7 @@ export function useGlobalEvents(directories?: string[]) {
     })
 
     // 健康检查兜底轮询：SSE 已连上的服务器跳过（连接状态本身就是活的，
-    // 再每 10s 打一次 /api/info 只是白白制造请求 + 重渲染）。断连/建连中
+    // 再每 10s 打一次 /global/health 只是白白制造请求 + 重渲染）。断连/建连中
     // 的服务器才需要主动探，节奏放慢到 30s——SSE 重连退避已经覆盖了恢复。
     const healthPollTimer = setInterval(() => {
       if (disposed) return

@@ -21,7 +21,7 @@ beforeAll(() => {
 })
 
 describe.skipIf(!LIVE)('live v2 server e2e', () => {
-  it('health check passes against /api/info', async () => {
+  it('health check passes against /global/health', async () => {
     const health = await serverStore.checkHealth(SERVER_ID)
     expect(health.status).toBe('online')
     expect(health.version).toBeTruthy()

@@ -307,7 +307,7 @@ export function SidePanel({
   const notifications = useNotifications()
   const unreadNotificationCount = useUnreadNotificationCount()
 
-  // 状态点与设置页同源：直接读目标服务器的健康状态（/api/info），不看 SSE。
+  // 状态点与设置页同源：直接读目标服务器的健康状态（/global/health），不看 SSE。
   // 目标服务器优先取焦点会话所属服务器——切到别的服务器的会话时也能对上，
   // 不会再去盯 active server 那条不相关的连接。
   const footerServerId = selectedSessionId

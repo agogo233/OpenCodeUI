@@ -2,7 +2,6 @@
 // Server Store - 多后端服务器配置管理
 // ============================================
 
-import { toAbsoluteBaseUrl } from '../api/http'
 import { API_BASE_URL } from '../constants'
 import { isTauri } from '../utils/tauri'
 
@@ -1148,20 +1147,20 @@ class ServerStore {
     const server = this.withRuntimeServerUrl(storedServer)
     const checkSeq = (this.healthCheckSeqMap.get(serverId) ?? 0) + 1
     this.healthCheckSeqMap.set(serverId, checkSeq)
-    // v2 没有 v1 的 /global/health；官方客户端用 server.info()
-    // （GET /api/info，返回 { version, pid, urls, paths }）做健康探测。
-    // v2 服务器会对未知路径回退到 SPA HTML，因此打到 v1 路径会 200 + text/html。
+    // v2 的健康端点是 GET /global/health（GlobalApi 提供，返回
+    // { healthy: true, version }，无需实例上下文）；/api/info 属于实例路由，
+    // 在部分后端构建上不可用。v2 服务器会对未知路径回退到 SPA HTML，因此
+    // 打错路径会得到 200 + text/html 而不是 404，务必探真实存在的端点。
     //
     // 必须探**当前生效地址**而非 `server.url`（后者只是第一行的镜像）：
     // 多地址服务器切到备用入口后，实际请求全走 getServerBaseUrl，
     // 健康灯却去敲主地址，主地址死、备用活着就会显示红叉——
     // 面板说连不上，实际用得好好的。
-    // 与 SDK 同款解析：@opencode/client 用 new URL(绝对路径, baseUrl) 构造
-    // 请求，base 里的路径会被丢弃。standalone 部署 local 的 url 是相对前缀
-    // `/api`，字符串拼接会得到 `/api/api/info`（双前缀），经反代剥前缀后
-    // 打到后端不存在的 `/api/info` 上，健康检查因此误报「返回 HTML」。
-    const base = toAbsoluteBaseUrl(this.getActiveEndpointUrl(serverId))
-    const healthUrl = base ? new URL('/api/info', base).toString() : '/api/info'
+    //
+    // standalone 部署 local 的 url 是相对前缀 `/api`，Caddy 反代会剥掉一层
+    // `/api`，浏览器侧拼 `/api/global/health`，到后端正好是 `/global/health`；
+    // 直连后端的服务器拼出来就是 `http://host:4096/global/health`。
+    const healthUrl = `${this.getActiveEndpointUrl(serverId)}/global/health`
 
     const commitHealth = (health: ServerHealth) => {
       if (this.healthCheckSeqMap.get(serverId) === checkSeq) {
@@ -1220,8 +1219,8 @@ class ServerStore {
             latency,
             lastCheck: Date.now(),
             error: contentType.includes('text/html')
-              ? 'Server returned HTML instead of OpenCode server info JSON. Check the URL path.'
-              : 'Server did not return OpenCode server info JSON',
+              ? 'Server returned HTML instead of OpenCode health JSON. Check the URL path.'
+              : 'Server did not return OpenCode health JSON',
             details,
           }
           return commitHealth(health)
@@ -1235,13 +1234,13 @@ class ServerStore {
             status: 'error',
             latency,
             lastCheck: Date.now(),
-            error: 'Invalid OpenCode server info JSON',
+            error: 'Invalid OpenCode health JSON',
             details,
           }
           return commitHealth(health)
         }
 
-        // v2 的 server info 没有 healthy 字段：能返回 version 即视为健康
+        // /global/health 返回 { healthy: true, version }：能返回 version 即视为健康
         if (!isRecord(data) || typeof data.version !== 'string' || !data.version.trim()) {
           const health: ServerHealth = {
             status: 'error',
@@ -1306,13 +1305,13 @@ class ServerStore {
    *
    * 与 checkHealth 的区别：**不写 healthMap、不通知订阅方**。它是 per-endpoint
    * 的事实采集，读写它的只有探测循环；把结果塞进 per-server 的 healthMap 会污染
-   * 服务器卡片上的健康灯。探测端点用 GET /api/info（无副作用，且能同时验证
+   * 服务器卡片上的健康灯。探测端点用 GET /global/health（无副作用，且能同时验证
    * 服务端身份——返回 401 说明地址可达但凭据不对，也算「可达」）。
    *
    * @returns 可达时带延迟；不可达返回 null（超时/网络错误/非 JSON 响应）
    */
   async probeEndpoint(url: string, auth: ServerAuth | undefined, timeoutMs = 4000): Promise<number | null> {
-    const target = `${url.replace(/\/+$/, '')}/api/info`
+    const target = `${url.replace(/\/+$/, '')}/global/health`
     const controller = new AbortController()
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
     const startTime = Date.now()

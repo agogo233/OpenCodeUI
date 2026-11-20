@@ -482,7 +482,7 @@ export const ChatPane = memo(function ChatPane({
       `Status: ${activeServerHealth.status}`,
       activeServerHealth.error ? `Error: ${activeServerHealth.error}` : '',
       activeServerHealth.status === 'error' || activeServerHealth.status === 'offline'
-        ? 'Expected GET /api/info to return OpenCode server info JSON.'
+        ? 'Expected GET /global/health to return OpenCode health JSON.'
         : '',
     ].filter(Boolean)
 

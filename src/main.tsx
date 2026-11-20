@@ -149,7 +149,7 @@ async function initializeNativeDesktopService() {
 
   /**
    * 页面刷新 / webview 重载：本机运行时地址已从 sessionStorage 恢复，
-   * 服务通常还活着。这里只探一次 /api/info，活着就直接复用——不调用
+   * 服务通常还活着。这里只探一次 /global/health，活着就直接复用——不调用
    * `start_opencode_service`（探测子进程 → 认领注册表 → 必要时 spawn），
    * 也不设 `starting`，首屏立刻能用恢复的地址发请求。
    *

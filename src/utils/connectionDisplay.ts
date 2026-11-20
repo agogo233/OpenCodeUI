@@ -2,7 +2,7 @@
 // 侧边栏连接状态点的显示口径
 //
 // 状态点表达「服务器是否可用」，直接复用设置页的服务器健康状态
-// （serverStore.healthMap，来自 GET /api/info），不再看 SSE 长连接状态。
+// （serverStore.healthMap，来自 GET /global/health），不再看 SSE 长连接状态。
 //
 // 原因：移动端切后台、Wi-Fi ↔ 蜂窝切换、系统省电都会让长连接比 HTTP
 // 断得频繁，但服务端通常是好的。之前会出现「消息正常在流、状态点却是灰的」，

@@ -518,10 +518,10 @@ describe('serverStore health check', () => {
     vi.unstubAllGlobals()
   })
 
-  it('marks a valid OpenCode server info response as online', async () => {
-    // v2 的 /api/info 返回 { version, pid, urls, paths }，没有 healthy 字段
+  it('marks a valid OpenCode health response as online', async () => {
+    // v2 的 /global/health 返回 { healthy: true, version }，没有 pid/urls 等字段
     vi.mocked(fetch).mockResolvedValueOnce(
-      jsonResponse({ version: '2.0.14', pid: 1234, urls: [], paths: { tmp: '/tmp' } }),
+      jsonResponse({ healthy: true, version: '2.0.14' }),
     )
     const { serverStore } = await import('./serverStore')
 
@@ -570,7 +570,7 @@ describe('serverStore health check', () => {
     vi.mocked(fetch)
       .mockImplementationOnce(() => staleResponse.promise)
       .mockResolvedValueOnce(
-        jsonResponse({ version: '2.0.14', pid: 1234, urls: [], paths: { tmp: '/tmp' } }),
+        jsonResponse({ healthy: true, version: '2.0.14' }),
       )
 
     const { serverStore } = await import('./serverStore')
@@ -614,7 +614,7 @@ describe('serverStore health check', () => {
     serverStore.setActiveEndpoint(server.id, 'https://live.test')
 
     vi.mocked(fetch).mockResolvedValueOnce(
-      jsonResponse({ version: '2.0.14', pid: 1234, urls: [], paths: { tmp: '/tmp' } }),
+      jsonResponse({ healthy: true, version: '2.0.14' }),
     )
 
     const health = await serverStore.checkHealth(server.id)
@@ -622,28 +622,30 @@ describe('serverStore health check', () => {
     expect(health.status).toBe('online')
     // 确认请求真的打在备用地址上
     const requestedUrl = vi.mocked(fetch).mock.calls.at(-1)?.[0]
-    expect(String(requestedUrl)).toBe('https://live.test/api/info')
+    expect(String(requestedUrl)).toBe('https://live.test/global/health')
   })
 
   /**
-   * 回归：standalone 镜像把 local 的 url 烤成相对前缀 `/api`。
-   * 健康检查若按字符串拼接会得到 `/api/api/info`（双前缀），经反代剥前缀
-   * 后打到后端不存在的路径上，返回 SPA HTML 被误判为「返回 HTML 不健康」。
-   * 必须与 SDK 的 new URL 语义一致：按页面 origin 解析后拼 `/api/info`。
+   * 回归：standalone 镜像把 local 的 url 烤成相对前缀 `/api`，Caddy 反代会
+   * 剥掉一层 `/api`。健康检查必须拼 `/api/global/health`，到后端正好是
+   * `/global/health`（v2 的健康端点）；拼成 `/api/api/info` 或 `/api/info`
+   * 都会打到不存在的路径上，被后端的 SPA 回退返回 HTML 而误判。
    */
-  it('local 相对 /api 地址不得产生双 /api 前缀', async () => {
+  it('local 相对 /api 地址拼接后必须命中 /global/health', async () => {
     const { serverStore } = await import('./serverStore')
     serverStore.updateServer('local', { url: '/api' })
 
     vi.mocked(fetch).mockResolvedValueOnce(
-      jsonResponse({ version: '2.0.14', pid: 1234, urls: [], paths: { tmp: '/tmp' } }),
+      jsonResponse({ healthy: true, version: '2.0.14' }),
     )
 
     const health = await serverStore.checkHealth('local')
 
     expect(health.status).toBe('online')
+    // getUnifiedFetch 在非 Tauri 下直接透传 globalThis.fetch，mock 收到的
+    // 就是相对串；浏览器再按页面 origin 解析成 /api/global/health
     const requestedUrl = vi.mocked(fetch).mock.calls.at(-1)?.[0]
-    expect(String(requestedUrl)).toBe(`${window.location.origin}/api/info`)
+    expect(String(requestedUrl)).toBe('/api/global/health')
   })
 })
 
@@ -801,7 +803,7 @@ describe('serverStore SSE 连接与健康状态收敛', () => {
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue(
-        jsonResponse({ version: '2.0.14', pid: 1234, urls: [], paths: { tmp: '/tmp' } }),
+        jsonResponse({ healthy: true, version: '2.0.14' }),
       ),
     )
     const { serverStore } = await import('./serverStore')
