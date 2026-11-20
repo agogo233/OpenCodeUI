@@ -15,22 +15,16 @@
 	# OPENCODE_SERVER_USERNAME/PASSWORD 一致），由后端统一校验。
 	handle_path /mobile/* {
 		reverse_proxy {$BACKEND_URL:host.docker.internal:4096} {
-			header_up Host {upstream_hostport}
-			header_up Origin "http://localhost:3000"
 			flush_interval -1
 		}
 	}
 
 	# API 反代（strip /api 前缀，SSE 需要 flush_interval -1）
 	# 认证与上游一致：透传客户端自带的 Authorization 头，由后端校验。
-	# 后端对终端 WebSocket 握手有来源校验（只放行回环地址），经局域网
-	# IP 访问会 403 导致终端连接失败；这里把请求来源统一改写为回环
-	# 地址使其通过校验，安全性由后端 Basic 认证兜底。
+	# 后端对终端 WebSocket 握手做来源校验：保留浏览器真实 Origin/Host
+	# （同源自洽）即可通过，经局域网 IP 访问也成立；跨站请求被 403。
 	handle_path /api/* {
 		reverse_proxy {$BACKEND_URL:host.docker.internal:4096} {
-			header_up Host {upstream_hostport}
-			header_up Authorization {http.request.header.Authorization}
-			header_up Origin "http://localhost:3000"
 			flush_interval -1
 		}
 	}

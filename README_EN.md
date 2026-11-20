@@ -78,24 +78,23 @@ BACKEND_URL=your-server.com:4096 PORT=8080 docker compose -f docker-compose.stan
 
 **When the backend enables password auth (`OPENCODE_SERVER_PASSWORD`):**
 
-The auth model matches upstream: the frontend container does not hold backend credentials. Enter the username/password matching the backend in OpenCodeUI Settings → Servers → Local (default username `opencode`); every request sent by the UI automatically carries `Authorization: Basic` and is validated by the backend. Requests with missing or wrong credentials are rejected with 401. Terminal WebSockets pass the backend origin check via the Caddy Origin rewrite (`header_up Origin`), so access via a LAN IP works too.
+The auth model matches upstream: the frontend container does not hold backend credentials. Enter the username/password matching the backend in OpenCodeUI Settings → Servers → Local (default username `opencode`); every request sent by the UI automatically carries `Authorization: Basic` and is validated by the backend. Requests with missing or wrong credentials are rejected with 401. Terminal WebSockets pass the backend same-origin check using the browser's real Origin, so access via a LAN IP works too.
 
 **The mobile-only entry `/mobile/*` (for opencode-mobile):**
 
-The app sends its own `Authorization: Basic` header from the connection settings (username/password matching the backend `OPENCODE_SERVER_USERNAME`/`OPENCODE_SERVER_PASSWORD`), and the backend validates it uniformly. Requests without credentials are rejected with 401 by the backend. When the frontend is accessed via a LAN IP, the Origin rewrite (`header_up Origin`) for terminal WebSockets is still applied on this entry.
+The app sends its own `Authorization: Basic` header from the connection settings (username/password matching the backend `OPENCODE_SERVER_USERNAME`/`OPENCODE_SERVER_PASSWORD`), and the backend validates it uniformly. Requests without credentials are rejected with 401 by the backend.
 
-If you use a custom Caddyfile, the same pass-through pattern is required in the `handle_path /api/*` block (credentials are supplied by the client and validated by the backend; `header_up Origin` passes the backend's origin check for terminal WebSockets):
+If you use a custom Caddyfile, keep the default pass-through in the `handle_path /api/*` block (credentials are supplied by the client and validated by the backend; the browser's real Origin/Host are same-origin consistent and pass the backend's origin check for terminal WebSockets):
 
 ```caddyfile
 handle_path /api/* {
 	reverse_proxy your-opencode-serve:4096 {
-		header_up Host {upstream_hostport}
-		header_up Authorization {http.request.header.Authorization}
-		header_up Origin "http://localhost:3000"
 		flush_interval -1
 	}
 }
 ```
+
+> Note: if there is another proxy in front of Caddy that rewrites the Host header (e.g. nginx's `proxy_set_header Host $proxy_host`), the backend's same-origin check for terminal WebSockets will fail with 403. Make that layer preserve the original Host, or explicitly allow the frontend origin via `opencode serve --cors <frontend-origin>`.
 
 Mount the custom config via `docker-compose.standalone.yml`:
 

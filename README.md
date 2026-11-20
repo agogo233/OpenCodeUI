@@ -78,24 +78,23 @@ BACKEND_URL=your-server.com:4096 PORT=8080 docker compose -f docker-compose.stan
 
 **后端开启密码认证时（`OPENCODE_SERVER_PASSWORD`）：**
 
-认证模型与上游一致：前端容器不代持后端凭据。在 OpenCodeUI 的「设置 → 服务器 → Local」中填入与后端一致的用户名/密码（默认用户名 `opencode`），界面发出的所有请求会自动携带 `Authorization: Basic`，由后端统一校验；未填写或填错的请求会被后端 401 拒绝。终端 WebSocket 经 Caddy 改写来源（`header_up Origin`）通过后端的来源校验，局域网 IP 访问也可正常连接。
+认证模型与上游一致：前端容器不代持后端凭据。在 OpenCodeUI 的「设置 → 服务器 → Local」中填入与后端一致的用户名/密码（默认用户名 `opencode`），界面发出的所有请求会自动携带 `Authorization: Basic`，由后端统一校验；未填写或填错的请求会被后端 401 拒绝。终端 WebSocket 以浏览器真实来源通过后端的同源校验，局域网 IP 访问也可正常连接。
 
 **手机端（opencode-mobile）专用入口 `/mobile/*`：**
 
-App 在连接配置中自带 `Authorization: Basic`（用户名/密码与后端 `OPENCODE_SERVER_USERNAME`/`OPENCODE_SERVER_PASSWORD` 一致），由后端统一校验；未填写凭据的请求会被后端 401 拒绝。若你的前端经局域网 IP 访问，终端 WebSocket 的来源改写（`header_up Origin`）在该入口同样保留。
+App 在连接配置中自带 `Authorization: Basic`（用户名/密码与后端 `OPENCODE_SERVER_USERNAME`/`OPENCODE_SERVER_PASSWORD` 一致），由后端统一校验；未填写凭据的请求会被后端 401 拒绝。
 
-若你使用自定义 Caddyfile，`handle_path /api/*` 块中需要相同的透传写法（凭据由客户端自带，后端统一校验；`header_up Origin` 用于通过后端对终端 WebSocket 的来源校验）：
+若你使用自定义 Caddyfile，`handle_path /api/*` 块保持默认透传即可（凭据由客户端自带，后端统一校验；浏览器真实 Origin/Host 同源自洽，可通过后端对终端 WebSocket 的来源校验）：
 
 ```caddyfile
 handle_path /api/* {
 	reverse_proxy your-opencode-serve:4096 {
-		header_up Host {upstream_hostport}
-		header_up Authorization {http.request.header.Authorization}
-		header_up Origin "http://localhost:3000"
 		flush_interval -1
 	}
 }
 ```
+
+> 注意：如果 Caddy 之前还有会改写 Host 头的多级代理（如 nginx 的 `proxy_set_header Host $proxy_host`），后端对终端 WebSocket 的同源校验会失败（403）。请让该层保留原始 Host，或用 `opencode serve --cors <前端来源>` 显式放行前端来源。
 
 通过 `docker-compose.standalone.yml` 挂载自定义配置：
 
