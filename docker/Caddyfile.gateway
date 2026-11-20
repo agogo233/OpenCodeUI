@@ -7,9 +7,8 @@
 	# API（SSE + WebSocket 自动处理）
 	handle_path /api/* {
 		reverse_proxy opencode-backend:4096 {
-			# 后端对终端 WebSocket 握手有来源校验（只放行回环地址），
-			# 统一改写来源使其通过；后端本身有认证保护。
-			header_up Origin "http://localhost:3000"
+			# 后端对终端 WebSocket 握手做来源校验：保留浏览器真实
+			# Origin/Host（同源自洽）即可通过；跨站请求被后端 403。
 			flush_interval -1
 		}
 	}
