@@ -127,10 +127,8 @@ export async function getPtyConnectUrl(
       : undefined
   const formatted = formatPathForApi(directory, serverId)
 
-  // 与 SDK 同款语义：绝对路径引用会丢弃 base 里的路径。standalone 下
-  // httpBase 是 `<origin>/api`，相对引用 `api/pty/...` 会拼出 `/api/api/...`
-  // 双前缀，终端 WS 握手会落到 SPA 回退页上失败。
-  const url = new URL(`/api/pty/${encodeURIComponent(ptyId)}/connect`, httpBase)
+  const base = new URL(httpBase.endsWith('/') ? httpBase : `${httpBase}/`)
+  const url = new URL(`api/pty/${encodeURIComponent(ptyId)}/connect`, base)
   if (formatted) url.searchParams.set('location[directory]', formatted)
   if (cursor !== undefined) url.searchParams.set('cursor', String(cursor))
 
