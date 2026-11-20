@@ -624,6 +624,27 @@ describe('serverStore health check', () => {
     const requestedUrl = vi.mocked(fetch).mock.calls.at(-1)?.[0]
     expect(String(requestedUrl)).toBe('https://live.test/api/info')
   })
+
+  /**
+   * 回归：standalone 镜像把 local 的 url 烤成相对前缀 `/api`。
+   * 健康检查若按字符串拼接会得到 `/api/api/info`（双前缀），经反代剥前缀
+   * 后打到后端不存在的路径上，返回 SPA HTML 被误判为「返回 HTML 不健康」。
+   * 必须与 SDK 的 new URL 语义一致：按页面 origin 解析后拼 `/api/info`。
+   */
+  it('local 相对 /api 地址不得产生双 /api 前缀', async () => {
+    const { serverStore } = await import('./serverStore')
+    serverStore.updateServer('local', { url: '/api' })
+
+    vi.mocked(fetch).mockResolvedValueOnce(
+      jsonResponse({ version: '2.0.14', pid: 1234, urls: [], paths: { tmp: '/tmp' } }),
+    )
+
+    const health = await serverStore.checkHealth('local')
+
+    expect(health.status).toBe('online')
+    const requestedUrl = vi.mocked(fetch).mock.calls.at(-1)?.[0]
+    expect(String(requestedUrl)).toBe(`${window.location.origin}/api/info`)
+  })
 })
 
 // ============================================

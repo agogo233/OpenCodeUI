@@ -2,6 +2,7 @@
 // Server Store - 多后端服务器配置管理
 // ============================================
 
+import { toAbsoluteBaseUrl } from '../api/http'
 import { API_BASE_URL } from '../constants'
 import { isTauri } from '../utils/tauri'
 
@@ -1155,7 +1156,12 @@ class ServerStore {
     // 多地址服务器切到备用入口后，实际请求全走 getServerBaseUrl，
     // 健康灯却去敲主地址，主地址死、备用活着就会显示红叉——
     // 面板说连不上，实际用得好好的。
-    const healthUrl = `${this.getActiveEndpointUrl(serverId)}/api/info`
+    // 与 SDK 同款解析：@opencode/client 用 new URL(绝对路径, baseUrl) 构造
+    // 请求，base 里的路径会被丢弃。standalone 部署 local 的 url 是相对前缀
+    // `/api`，字符串拼接会得到 `/api/api/info`（双前缀），经反代剥前缀后
+    // 打到后端不存在的 `/api/info` 上，健康检查因此误报「返回 HTML」。
+    const base = toAbsoluteBaseUrl(this.getActiveEndpointUrl(serverId))
+    const healthUrl = base ? new URL('/api/info', base).toString() : '/api/info'
 
     const commitHealth = (health: ServerHealth) => {
       if (this.healthCheckSeqMap.get(serverId) === checkSeq) {
