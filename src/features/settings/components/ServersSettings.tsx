@@ -67,6 +67,7 @@ function ServerItem({
     return (
       <EditServerForm
         server={server}
+        credentialsOnly={server.isDefault}
         onSave={updates => {
           onEdit(updates)
           setEditing(false)
@@ -134,33 +135,31 @@ function ServerItem({
             {subscribed ? <PlugIcon size={13} /> : <CircleIcon size={11} className="opacity-50" />}
           </button>
           <ServerHealthButton health={health} onCheck={onCheckHealth} />
+          <button
+            type="button"
+            className="p-1.5 rounded-md text-text-400 hover:text-accent-main-100 hover:bg-accent-main-100/10 transition-colors"
+            onClick={e => {
+              e.stopPropagation()
+              setEditing(true)
+            }}
+            title={t('servers.editServer')}
+            aria-label={t('servers.editServer')}
+          >
+            <PencilIcon size={13} />
+          </button>
           {!server.isDefault && (
-            <>
-              <button
-                type="button"
-                className="p-1.5 rounded-md text-text-400 hover:text-accent-main-100 hover:bg-accent-main-100/10 transition-colors"
-                onClick={e => {
-                  e.stopPropagation()
-                  setEditing(true)
-                }}
-                title={t('servers.editServer')}
-                aria-label={t('servers.editServer')}
-              >
-                <PencilIcon size={13} />
-              </button>
-              <button
-                type="button"
-                className="p-1.5 rounded-md text-text-400 hover:text-danger-100 hover:bg-danger-100/10 transition-colors"
-                onClick={e => {
-                  e.stopPropagation()
-                  setConfirmDelete(true)
-                }}
-                title={t('common:remove')}
-                aria-label={t('common:remove')}
-              >
-                <TrashIcon size={13} />
-              </button>
-            </>
+            <button
+              type="button"
+              className="p-1.5 rounded-md text-text-400 hover:text-danger-100 hover:bg-danger-100/10 transition-colors"
+              onClick={e => {
+                e.stopPropagation()
+                setConfirmDelete(true)
+              }}
+              title={t('common:remove')}
+              aria-label={t('common:remove')}
+            >
+              <TrashIcon size={13} />
+            </button>
           )}
         </div>
       </div>
@@ -188,10 +187,13 @@ function ServerItem({
 
 function EditServerForm({
   server,
+  credentialsOnly = false,
   onSave,
   onCancel,
 }: {
   server: ServerConfig
+  /** true = 只编辑凭据（Local 地址固定，不可改名称/地址） */
+  credentialsOnly?: boolean
   onSave: (updates: { name: string; url: string; username?: string; password?: string }) => void
   onCancel: () => void
 }) {
@@ -200,12 +202,24 @@ function EditServerForm({
   const [url, setUrl] = useState(server.url)
   const [username, setUsername] = useState(server.auth?.username || '')
   const [password, setPassword] = useState(server.auth?.password || '')
-  const [showAuth, setShowAuth] = useState(!!server.auth?.password)
+  const [showAuth, setShowAuth] = useState(credentialsOnly || !!server.auth?.password)
   const [error, setError] = useState('')
   const showHttpsIpWarning = isHttpsIpUrl(url)
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
+    if (credentialsOnly) {
+      // Local：standalone 镜像里地址是相对路径 /api，过不了下面的 new URL
+      // 校验，也不应诱导用户改成写死 IP 的绝对地址；名称/地址原样带回，
+      // updateServer 合并后等价于仅更新 auth
+      onSave({
+        name: server.name,
+        url: server.url,
+        username: password.trim() ? username.trim() || 'opencode' : undefined,
+        password: password.trim() || undefined,
+      })
+      return
+    }
     const trimmedName = name.trim().slice(0, SERVER_NAME_MAX_LENGTH)
     if (!trimmedName) {
       setError(t('servers.nameRequired'))
@@ -236,43 +250,49 @@ function EditServerForm({
       onSubmit={handleSubmit}
       className="p-3 rounded-lg border border-accent-main-100/30 bg-accent-main-100/[0.02] space-y-2.5"
     >
-      <div>
-        <label className="block text-[length:var(--fs-xs)] font-medium text-text-300 mb-1">{t('servers.name')}</label>
-        <input
-          type="text"
-          value={name}
-          maxLength={SERVER_NAME_MAX_LENGTH}
-          onChange={e => {
-            setName(e.target.value.slice(0, SERVER_NAME_MAX_LENGTH))
-            setError('')
-          }}
-          placeholder={t('servers.namePlaceholder')}
-          className={inputCls}
-          autoFocus
-        />
-      </div>
-      <div>
-        <label className="block text-[length:var(--fs-xs)] font-medium text-text-300 mb-1">{t('servers.url')}</label>
-        <input
-          type="text"
-          value={url}
-          onChange={e => {
-            setUrl(e.target.value)
-            setError('')
-          }}
-          placeholder={t('servers.urlPlaceholder')}
-          className={`${inputCls} font-mono`}
-        />
-      </div>
+      {!credentialsOnly && (
+        <>
+          <div>
+            <label className="block text-[length:var(--fs-xs)] font-medium text-text-300 mb-1">{t('servers.name')}</label>
+            <input
+              type="text"
+              value={name}
+              maxLength={SERVER_NAME_MAX_LENGTH}
+              onChange={e => {
+                setName(e.target.value.slice(0, SERVER_NAME_MAX_LENGTH))
+                setError('')
+              }}
+              placeholder={t('servers.namePlaceholder')}
+              className={inputCls}
+              autoFocus
+            />
+          </div>
+          <div>
+            <label className="block text-[length:var(--fs-xs)] font-medium text-text-300 mb-1">{t('servers.url')}</label>
+            <input
+              type="text"
+              value={url}
+              onChange={e => {
+                setUrl(e.target.value)
+                setError('')
+              }}
+              placeholder={t('servers.urlPlaceholder')}
+              className={`${inputCls} font-mono`}
+            />
+          </div>
+        </>
+      )}
 
-      <button
-        type="button"
-        onClick={() => setShowAuth(!showAuth)}
-        className="flex items-center gap-1.5 text-[length:var(--fs-xs)] text-accent-main-100 hover:text-accent-main-200 transition-colors"
-      >
-        <KeyIcon size={10} />
-        {showAuth ? t('servers.hideAuth') : t('servers.addAuth')}
-      </button>
+      {!credentialsOnly && (
+        <button
+          type="button"
+          onClick={() => setShowAuth(!showAuth)}
+          className="flex items-center gap-1.5 text-[length:var(--fs-xs)] text-accent-main-100 hover:text-accent-main-200 transition-colors"
+        >
+          <KeyIcon size={10} />
+          {showAuth ? t('servers.hideAuth') : t('servers.addAuth')}
+        </button>
+      )}
 
       {showAuth && (
         <>
@@ -287,6 +307,7 @@ function EditServerForm({
               }}
               placeholder={t('servers.usernamePlaceholder')}
               className={inputCls}
+              autoFocus={credentialsOnly}
             />
           </div>
           <div>
@@ -305,7 +326,7 @@ function EditServerForm({
         </>
       )}
 
-      {showHttpsIpWarning && (
+      {!credentialsOnly && showHttpsIpWarning && (
         <div className="text-[length:var(--fs-xs)] text-warning-100 bg-warning-bg border border-warning-100/20 rounded-md px-2.5 py-2 leading-relaxed">
           {t('servers.httpsIpWarning')}
         </div>
