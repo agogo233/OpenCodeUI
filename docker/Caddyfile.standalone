@@ -1,11 +1,9 @@
 # OpenCode WebUI - 纯前端独立部署
 # 静态文件 + API 反代到外部 opencode serve
 #
-# 页面级 Basic Auth：仅在 PAGE_AUTH_HASH 非空时启用（由启动命令在
-# OPENCODE_SERVER_PASSWORD 非空时现算 bcrypt 摘要导出），凭据与后端认证共用同一套：
-#   PAGE_AUTH_USERNAME - 账号（来自 OPENCODE_SERVER_USERNAME）
-#   PAGE_AUTH_HASH     - 密码的 bcrypt 摘要
-# 为空时不启用页面认证，与原免密行为完全一致。
+# 认证模型与上游一致：不代持后端凭据。客户端（网页设置里填写的账号密码、
+# App 连接配置）自带 Authorization: Basic，由后端统一校验；无凭据请求
+# 被后端 401 拒绝。
 
 {
 	grace_period 3s
@@ -13,9 +11,8 @@
 
 :3000 {
 	# opencode-mobile 专用入口：只剥 /mobile，保留 /api 前缀原样直通后端。
-	# 不代持后端凭据：App 在连接配置中自带 Authorization: Basic（与
-	# OPENCODE_SERVER_USERNAME/PASSWORD 一致），由后端统一校验；无凭据
-	# 请求被后端 401 拒绝，避免此入口绕过页面级 Basic Auth。
+	# App 在连接配置中自带 Authorization: Basic（与
+	# OPENCODE_SERVER_USERNAME/PASSWORD 一致），由后端统一校验。
 	handle_path /mobile/* {
 		reverse_proxy {$BACKEND_URL:host.docker.internal:4096} {
 			header_up Host {upstream_hostport}
@@ -25,40 +22,17 @@
 	}
 
 	# API 反代（strip /api 前缀，SSE 需要 flush_interval -1）
+	# 认证与上游一致：透传客户端自带的 Authorization 头，由后端校验。
+	# 后端对终端 WebSocket 握手有来源校验（只放行回环地址），经局域网
+	# IP 访问会 403 导致终端连接失败；这里把请求来源统一改写为回环
+	# 地址使其通过校验，安全性由后端 Basic 认证兜底。
 	handle_path /api/* {
-		# 后端 Basic 认证由前端容器代持：compose 把 OPENCODE_SERVER_PASSWORD
-		# 换算成 base64 写入 OPENCODE_AUTH_BASIC（见启动命令）。
-		# 浏览器不给终端 WebSocket 自动携带认证凭据，透传客户端头在终端
-		# 场景等于没有头，会 401 导致终端无法连接。
-		# 未设置 OPENCODE_AUTH_BASIC（即后端未启用密码）时不注入任何
-		# Authorization 头，与直接访问无认证后端完全一致。
-		# 后端对终端 WebSocket 握手有来源校验（只放行回环地址），经局域网
-		# IP 访问会 403 导致终端连接失败；这里把请求来源统一改写为回环
-		# 地址使其通过校验，安全性由上述 Basic 认证兜底。
-		@with_auth expression `{env.OPENCODE_AUTH_BASIC} != ""`
-		reverse_proxy @with_auth {$BACKEND_URL:host.docker.internal:4096} {
-			header_up Host {upstream_hostport}
-			header_up Authorization "Basic {env.OPENCODE_AUTH_BASIC}"
-			header_up Origin "http://localhost:3000"
-			flush_interval -1
-		}
 		reverse_proxy {$BACKEND_URL:host.docker.internal:4096} {
 			header_up Host {upstream_hostport}
+			header_up Authorization {http.request.header.Authorization}
 			header_up Origin "http://localhost:3000"
 			flush_interval -1
 		}
-	}
-
-	# 前端静态文件（页面级 Basic Auth：PAGE_AUTH_HASH 非空时启用，
-	# 与后端认证共用同一套凭据；为空时不启用，保持向后兼容）
-	@page_auth expression `{env.PAGE_AUTH_HASH} != ""`
-	handle @page_auth {
-		basic_auth bcrypt "OpenCodeUI" {
-			{$PAGE_AUTH_USERNAME} {$PAGE_AUTH_HASH}
-		}
-		root * /srv
-		file_server
-		try_files {path} /index.html
 	}
 
 	handle {
@@ -71,5 +45,5 @@
 }
 
 # Reasonix Web UI 反代（独立站点 :3001，可选，见 Caddyfile.reasonix）
-# 注意：不继承页面 Basic Auth，认证由 reasonix serve 自身负责
+# 认证由 reasonix serve 自身负责
 import /etc/caddy/Caddyfile.reasonix

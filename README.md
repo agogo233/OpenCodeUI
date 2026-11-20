@@ -75,29 +75,23 @@ BACKEND_URL=your-server.com:4096 PORT=8080 docker compose -f docker-compose.stan
 | -------------------------- | --------------------------- | --------------------------------------------- |
 | `BACKEND_URL`              | `host.docker.internal:4096` | opencode serve 地址（不含协议前缀）           |
 | `PORT`                     | `3000`                      | 前端监听端口                                  |
-| `OPENCODE_SERVER_USERNAME` | `opencode`                  | 后端 Basic 认证用户名（与后端容器保持一致）   |
-| `OPENCODE_SERVER_PASSWORD` | 空                          | 后端 Basic 认证密码；非空时接口与页面均要求登录，为空则全站免密 |
 
 **后端开启密码认证时（`OPENCODE_SERVER_PASSWORD`）：**
 
-浏览器不会为终端 WebSocket 自动携带认证凭据，因此密码由前端容器代持：把 `.env` 里的 `OPENCODE_SERVER_USERNAME`/`OPENCODE_SERVER_PASSWORD` 换算成 Basic 头，由 Caddy 在反代时统一注入。浏览器和 OpenCodeUI 界面均无需任何配置，终端可直接连接。未设置密码时不导出该值，Caddy 不注入任何 `Authorization` 头，无密码场景与直接访问后端完全一致。
+认证模型与上游一致：前端容器不代持后端凭据。在 OpenCodeUI 的「设置 → 服务器 → Local」中填入与后端一致的用户名/密码（默认用户名 `opencode`），界面发出的所有请求会自动携带 `Authorization: Basic`，由后端统一校验；未填写或填错的请求会被后端 401 拒绝。终端 WebSocket 经 Caddy 改写来源（`header_up Origin`）通过后端的来源校验，局域网 IP 访问也可正常连接。
 
-**手机端（opencode-mobile）专用入口 `/mobile/*` 不做凭据代持：**
+**手机端（opencode-mobile）专用入口 `/mobile/*`：**
 
-App 在连接配置中自带 `Authorization: Basic`（用户名/密码与 `OPENCODE_SERVER_USERNAME`/`OPENCODE_SERVER_PASSWORD` 一致），由后端统一校验；未填写凭据的请求会被后端 401 拒绝。这样可以避免 `/mobile` 入口绕过页面级 Basic Auth。若你的前端经局域网 IP 访问，终端 WebSocket 的来源改写（`header_up Origin`）在该入口同样保留。
+App 在连接配置中自带 `Authorization: Basic`（用户名/密码与后端 `OPENCODE_SERVER_USERNAME`/`OPENCODE_SERVER_PASSWORD` 一致），由后端统一校验；未填写凭据的请求会被后端 401 拒绝。若你的前端经局域网 IP 访问，终端 WebSocket 的来源改写（`header_up Origin`）在该入口同样保留。
 
-若你使用自定义 Caddyfile，`handle_path /api/*` 块中需要相同写法（`OPENCODE_AUTH_BASIC` 由启动命令导出，值为 `base64(用户名:密码)`；未导出时表达式不匹配，自动走不带认证头的分支）：
+若你使用自定义 Caddyfile，`handle_path /api/*` 块中需要相同的透传写法（凭据由客户端自带，后端统一校验；`header_up Origin` 用于通过后端对终端 WebSocket 的来源校验）：
 
 ```caddyfile
 handle_path /api/* {
-	@with_auth expression `{env.OPENCODE_AUTH_BASIC} != ""`
-	reverse_proxy @with_auth your-opencode-serve:4096 {
-		header_up Host {upstream_hostport}
-		header_up Authorization "Basic {env.OPENCODE_AUTH_BASIC}"
-		flush_interval -1
-	}
 	reverse_proxy your-opencode-serve:4096 {
 		header_up Host {upstream_hostport}
+		header_up Authorization {http.request.header.Authorization}
+		header_up Origin "http://localhost:3000"
 		flush_interval -1
 	}
 }
@@ -185,7 +179,7 @@ docker compose -f docker-compose.yml -f docker-compose.host.yml up -d
 - **只在 HTTPS 反代之后使用**，明文 HTTP 下口令可被窃听；
 - **不要在 OpenCodeUI 设置里另填一个不同的服务器密码**，否则界面发出的请求会覆盖浏览器自动携带的凭据，导致接口 401；
 - 修改口令 = 改 `.env` 里同一项后 `docker compose up -d`；清空即同时关闭页面认证与后端认证；
-- `docker-compose.yml`（gateway 架构）与 `docker-compose.standalone.yml` 均生效：standalone 部署下设置该项同样会启用页面 Basic 认证，与后端共用同一套凭据；simple/nginx 镜像没有此逻辑，设置该项不会给页面加认证；
+- 仅 `docker-compose.yml`（gateway 架构）生效：standalone 部署没有页面 Basic 认证，凭据在 OpenCodeUI「设置 → 服务器」中按服务器填写（Local 填后端同款账号密码即可）；simple/nginx 镜像同样没有页面认证逻辑；
 - 预览端口 `6659` 不带页面认证（靠 URL 中的随机 token 区分），公网暴露时请配合绑定 `127.0.0.1` 使用；`/routes`、`/preview/*` 由网关内置路由服务按同一套账号口令校验。
 
 ### 从源码本地构建（可选）
