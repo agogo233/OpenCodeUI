@@ -9,8 +9,6 @@
 # 环境变量：
 #   BACKEND_URL                 - opencode serve 地址（默认 host.docker.internal:4096）
 #   PORT                        - 前端监听端口（默认 3000）
-#   OPENCODE_SERVER_USERNAME    - 后端 Basic 认证用户名（默认 opencode）
-#   OPENCODE_SERVER_PASSWORD    - 后端 Basic 认证密码；为空则后端免密、不做代持
 #   REASONIX_URL                - reasonix serve 上游（默认 127.0.0.1:8787 = 未启用；
 #                                宿主机运行 reasonix 时设 host.docker.internal:8787，
 #                                需 reasonix serve --addr 0.0.0.0:8787，见 docker/Caddyfile.reasonix）
@@ -26,43 +24,10 @@ services:
       - '${PORT:-3000}:3000'
       # Reasonix Web UI 反代：取消注释后经 http://<IP>:3001 访问 reasonix serve
       # - '${REASONIX_PORT:-3001}:3001'
-    command:
-      - sh
-      - -c
-      - |
-        if [ -n "$${OPENCODE_SERVER_PASSWORD:-}" ]; then
-          BASIC_AUTH_USERNAME="$${OPENCODE_SERVER_USERNAME:-opencode}"
-          case "$$BASIC_AUTH_USERNAME" in
-            ''|*[!A-Za-z0-9._@-]*) echo "entrypoint: invalid OPENCODE_SERVER_USERNAME (allowed: A-Za-z0-9._@-), refusing to start" >&2; exit 1 ;;
-          esac
-          # 密码含换行会导致 Basic 凭据跨行错位，直接拒绝启动（fail loud）
-          if [ "$$(printf '%s' "$${OPENCODE_SERVER_PASSWORD}" | wc -l)" != "0" ]; then
-            echo "entrypoint: OPENCODE_SERVER_PASSWORD must not contain a newline, refusing to start" >&2
-            exit 1
-          fi
-          OPENCODE_AUTH_BASIC="$$(printf '%s:%s' "$$BASIC_AUTH_USERNAME" "$${OPENCODE_SERVER_PASSWORD}" | base64 | tr -d '\n')"
-          export OPENCODE_AUTH_BASIC
-          # 同一套凭据启用页面级 Basic Auth（Caddyfile.standalone 的 @page_auth）
-          PAGE_AUTH_USERNAME="$$BASIC_AUTH_USERNAME"
-          export PAGE_AUTH_USERNAME
-          PAGE_AUTH_HASH="$$(printf '%s\n' "$${OPENCODE_SERVER_PASSWORD}" | caddy hash-password --algorithm bcrypt)" || {
-            echo "entrypoint: failed to hash OPENCODE_SERVER_PASSWORD" >&2
-            exit 1
-          }
-          case "$$PAGE_AUTH_HASH" in
-            '$'*) ;;
-            *)
-              echo "entrypoint: unexpected caddy hash-password output, refusing to start" >&2
-              exit 1
-              ;;
-          esac
-          export PAGE_AUTH_HASH
-        fi
-        exec caddy run --config /etc/caddy/Caddyfile.standalone
+    # 覆盖镜像默认 CMD：standalone 无页面认证，绕过 entrypoint-frontend.sh 的页面认证分支
+    command: ['caddy', 'run', '--config', '/etc/caddy/Caddyfile.standalone']
     environment:
       - BACKEND_URL=${BACKEND_URL:-host.docker.internal:4096}
-      - OPENCODE_SERVER_USERNAME=${OPENCODE_SERVER_USERNAME:-opencode}
-      - OPENCODE_SERVER_PASSWORD=${OPENCODE_SERVER_PASSWORD:-}
       - REASONIX_URL=${REASONIX_URL:-127.0.0.1:8787}
       - REASONIX_LISTEN=${REASONIX_LISTEN:-:3001}
     # Linux 需要 host.docker.internal 支持
