@@ -11,7 +11,7 @@
 
 :3000 {
 	# opencode-mobile 专用入口：只剥 /mobile，保留 /api 前缀原样直通后端。
-	# App 在连接配置中自带 Authorization: Basic（与
+	# App 在连接配置中自带 Authorization: Basic（与后端进程的
 	# OPENCODE_SERVER_USERNAME/PASSWORD 一致），由后端统一校验。
 	handle_path /mobile/* {
 		reverse_proxy {$BACKEND_URL:host.docker.internal:4096} {
