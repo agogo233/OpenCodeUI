@@ -398,14 +398,13 @@ export async function uploadAttachment(
     const body: Blob = ArrayBuffer.isView(payload)
       ? new Blob([payload.slice().buffer as ArrayBuffer])
       : payload
-    const base = getApiBaseUrl(serverId).replace(/\/+$/, '')
-
-    // 目录缺省时不带 location，交给服务端回落自己的默认工作目录
+    // 与 SDK 同款语义：绝对路径引用丢弃 base 里的路径，避免 standalone 下
+    // base 已含 `/api` 前缀时拼出 `/api/api/...` 双前缀
     const params = new URLSearchParams({ path: target })
     if (directory) params.set('location[directory]', directory)
 
     const resolved = await writeWithXhr({
-      url: `${base}/api/experimental/fs/write?${params}`,
+      url: new URL(`/api/experimental/fs/write?${params}`, getApiBaseUrl(serverId)).toString(),
       body,
       authorization: getAuthHeader(serverId)['Authorization'],
       onProgress: options.onProgress,
