@@ -3,6 +3,8 @@
 # docker/entrypoint-frontend.sh 选用，凭据与后端认证共用同一套：
 #   PAGE_AUTH_USERNAME - 账号（来自 OPENCODE_SERVER_USERNAME）
 #   PAGE_AUTH_HASH     - 密码的 bcrypt 摘要（由启动时口令现算）
+# realm 固定为 "Secure Area"，与后端 opencode 的 WWW-Authenticate 一致：浏览器按
+# 来源+realm 缓存 Basic 凭据，一致才能一次登录同时通过页面与 /api（上游改 realm 需同步）。
 # 未启用时请继续使用默认 Caddyfile，不要手动改选本文件。
 
 {
@@ -16,7 +18,7 @@
     }
 
     handle {
-        basic_auth bcrypt "OpenCodeUI" {
+        basic_auth bcrypt "Secure Area" {
             {$PAGE_AUTH_USERNAME} {$PAGE_AUTH_HASH}
         }
         root * /srv
