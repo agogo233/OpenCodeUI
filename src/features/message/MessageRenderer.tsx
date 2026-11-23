@@ -558,12 +558,12 @@ interface UserMessageViewProps {
   onEntryGrowComplete?: (messageId: string) => void
 }
 
-/** PC 精细指针：默认隐藏，悬浮消息/聚焦时显示；触控优先设备始终显示 */
+/** PC 精细指针：默认隐藏，悬浮消息/聚焦时显示；触控设备（含 hover 能力误报）始终显示 */
 function useMessageActionBarClass() {
   const { preferTouchUi } = useInputCapabilities()
   return preferTouchUi
     ? 'flex items-center gap-1 transition-opacity'
-    : 'flex items-center gap-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-within:opacity-100 pointer-events-none group-hover:pointer-events-auto group-focus-within:pointer-events-auto focus-within:pointer-events-auto transition-opacity'
+    : 'flex items-center gap-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-within:opacity-100 pointer-events-none group-hover:pointer-events-auto group-focus-within:pointer-events-auto focus-within:pointer-events-auto transition-opacity [@media(hover:none)]:opacity-100 [@media(hover:none)]:pointer-events-auto'
 }
 
 const UserMessageView = memo(function UserMessageView({
