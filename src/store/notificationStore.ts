@@ -276,6 +276,32 @@ class NotificationStore {
     return removed
   }
 
+  /** 一键清理指定类型通知（历史条目 + 活动 toast）；返回移除的历史条数 */
+  clearByTypes(types: NotificationType[]): number {
+    const typesToRemove = new Set(types)
+    const kept: NotificationEntry[] = []
+    let removed = 0
+    for (const n of this.state.notifications) {
+      if (typesToRemove.has(n.type)) {
+        removed++
+        continue
+      }
+      kept.push(n)
+    }
+    const removedToasts = this.state.toasts.filter(t => typesToRemove.has(t.notification.type))
+    if (removed === 0 && removedToasts.length === 0) return 0
+    const removedToastIds = new Set(removedToasts.map(t => t.notification.id))
+    removedToastIds.forEach(id => this.clearToastTimer(id))
+    this.state = {
+      ...this.state,
+      notifications: kept,
+      toasts: this.state.toasts.filter(t => !removedToastIds.has(t.notification.id)),
+    }
+    this.persist()
+    this.notify()
+    return removed
+  }
+
   /**
    * 把指定会话“未固化”的占位标题落实为最新真标题（幂等：已固化条目不再覆盖）。
    * 由 SSE session.created / session.updated 触发；真标题是历史记录，固化后不再变化

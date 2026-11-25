@@ -70,6 +70,64 @@ describe('notificationStore.dedupeBySession', () => {
   })
 })
 
+describe('notificationStore.clearByTypes', () => {
+  beforeEach(() => {
+    localStorage.clear()
+    notificationStore.clearAll()
+    // 单例 toast 跨 describe 残留，需一并清除保证隔离
+    notificationStore.dismissAllToasts()
+  })
+
+  it('removes only completed and permission entries, keeps question and error', () => {
+    notificationStore.push('completed', 'A', 'Session completed', 's1')
+    notificationStore.push('permission', 'B — Permission', 'bash: ls', 's2')
+    notificationStore.push('question', 'C — Question', 'waiting', 's3')
+    notificationStore.push('error', 'Session error', 'boom', 's4')
+
+    const removed = notificationStore.clearByTypes(['completed', 'permission'])
+    const list = notificationStore.getSnapshot().notifications
+
+    expect(removed).toBe(2)
+    expect(list.map(n => n.type)).toEqual(['error', 'question'])
+    expect(storedCount()).toBe(2)
+  })
+
+  it('also dismisses active toasts of the cleared types', () => {
+    notificationStore.push('completed', 'A', 'Session completed', 's1')
+    notificationStore.push('question', 'B — Question', 'waiting', 's2')
+
+    notificationStore.clearByTypes(['completed'])
+
+    const toasts = notificationStore.getSnapshot().toasts
+    expect(toasts).toHaveLength(1)
+    expect(toasts[0].notification.type).toBe('question')
+  })
+
+  it('returns 0 and skips persist/notify when nothing matches', () => {
+    notificationStore.push('question', 'A — Question', 'waiting', 's1')
+
+    const subscriber = vi.fn()
+    const unsubscribe = notificationStore.subscribe(subscriber)
+    const setItemSpy = vi.spyOn(Storage.prototype, 'setItem')
+
+    expect(notificationStore.clearByTypes(['completed', 'permission'])).toBe(0)
+    expect(subscriber).not.toHaveBeenCalled()
+    expect(setItemSpy).not.toHaveBeenCalled()
+    expect(storedCount()).toBe(1)
+
+    unsubscribe()
+    setItemSpy.mockRestore()
+  })
+
+  it('persists removal to localStorage', () => {
+    notificationStore.push('completed', 'A', 'Session completed', 's1')
+    notificationStore.push('completed', 'B', 'Session completed', 's2')
+
+    expect(notificationStore.clearByTypes(['completed'])).toBe(2)
+    expect(storedCount()).toBe(0)
+  })
+})
+
 const RAW_ID = 'sess_abcdef12'
 const SCOPED_ID = `local::${RAW_ID}`
 const PLACEHOLDER = 'New session - 2026-11-25T02:09:10.229Z'

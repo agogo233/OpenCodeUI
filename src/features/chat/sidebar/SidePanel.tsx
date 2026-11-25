@@ -50,6 +50,9 @@ import { getDirectoryName, isSameDirectory, normalizeToForwardSlash } from '../.
 import { makeSessionKey, splitSessionKey } from '../../../utils/sessionKey'
 import { uiErrorHandler } from '../../../utils'
 
+/** 一键清理按钮可清除的通知类型：agent 完成 + 自动审判（权限） */
+const CLEARABLE_NOTIFICATION_TYPES: NotificationEntry['type'][] = ['completed', 'permission']
+
 // 侧边栏设计模式：
 // - 按钮结构统一，不因 expanded/collapsed 改变 DOM
 // - 按钮内容使用 -translate-x-2 让图标在收起时居中
@@ -1648,6 +1651,14 @@ export function SidePanel({
                         >
                           {t('sidebar.dedupe')}
                         </button>
+                        {notifications.some((n: NotificationEntry) => CLEARABLE_NOTIFICATION_TYPES.includes(n.type)) && (
+                          <button
+                            className="text-[length:var(--fs-xxs)] text-text-400 hover:text-text-200 px-1.5 py-0.5 rounded-md hover:bg-bg-200 transition-all duration-150 active:scale-95"
+                            onClick={() => notificationStore.clearByTypes(CLEARABLE_NOTIFICATION_TYPES)}
+                          >
+                            {t('sidebar.clearDoneReview')}
+                          </button>
+                        )}
                       </div>
                     </div>
                   )}
@@ -1702,6 +1713,14 @@ export function SidePanel({
                         >
                           {t('sidebar.dedupe')}
                         </button>
+                        {notifications.some((n: NotificationEntry) => CLEARABLE_NOTIFICATION_TYPES.includes(n.type)) && (
+                          <button
+                            className="text-[length:var(--fs-xxs)] text-text-400 hover:text-text-200 px-1.5 py-0.5 rounded-md hover:bg-bg-200 transition-all duration-150 active:scale-95"
+                            onClick={() => notificationStore.clearByTypes(CLEARABLE_NOTIFICATION_TYPES)}
+                          >
+                            {t('sidebar.clearDoneReview')}
+                          </button>
+                        )}
                       </div>
                     </div>
                   )}

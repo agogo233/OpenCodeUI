@@ -135,6 +135,7 @@
     "notifications": "Notifications",
     "readAll": "Read all",
     "dedupe": "Dedupe",
+    "clearDoneReview": "Clear done/review",
     "removeProject": "Remove Project",
     "removeProjectConfirm": "Remove this project folder from the list? Files won't be deleted.",
     "contextUsage": "Context Usage",

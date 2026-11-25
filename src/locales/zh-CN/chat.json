@@ -135,6 +135,7 @@
     "notifications": "通知",
     "readAll": "全部已读",
     "dedupe": "去重",
+    "clearDoneReview": "清理完成/审判",
     "removeProject": "移除项目",
     "removeProjectConfirm": "确定从列表中移除此项目文件夹？文件不会被删除。",
     "contextUsage": "上下文用量",
