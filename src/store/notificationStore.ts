@@ -226,6 +226,23 @@ class NotificationStore {
     this.notify()
   }
 
+  /** 同一会话仅保留最新一条（强合并）；sessionId 为空的条目不参与合并。返回移除条数 */
+  dedupeBySession(): number {
+    const seen = new Set<string>()
+    const kept: NotificationEntry[] = []
+    for (const n of this.state.notifications) {
+      if (n.sessionId && seen.has(n.sessionId)) continue
+      if (n.sessionId) seen.add(n.sessionId)
+      kept.push(n)
+    }
+    const removed = this.state.notifications.length - kept.length
+    if (removed === 0) return 0
+    this.state = { ...this.state, notifications: kept }
+    this.persist()
+    this.notify()
+    return removed
+  }
+
   // ============================================
   // Toast 管理
   // ============================================

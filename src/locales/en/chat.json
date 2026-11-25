@@ -134,6 +134,7 @@
     "activeStatusStale": "Connection interrupted — active statuses may be stale",
     "notifications": "Notifications",
     "readAll": "Read all",
+    "dedupe": "Dedupe",
     "removeProject": "Remove Project",
     "removeProjectConfirm": "Remove this project folder from the list? Files won't be deleted.",
     "contextUsage": "Context Usage",

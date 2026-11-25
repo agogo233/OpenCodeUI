@@ -1642,6 +1642,12 @@ export function SidePanel({
                         >
                           {t('common:clear')}
                         </button>
+                        <button
+                          className="text-[length:var(--fs-xxs)] text-text-400 hover:text-text-200 px-1.5 py-0.5 rounded-md hover:bg-bg-200 transition-all duration-150 active:scale-95"
+                          onClick={() => notificationStore.dedupeBySession()}
+                        >
+                          {t('sidebar.dedupe')}
+                        </button>
                       </div>
                     </div>
                   )}
@@ -1689,6 +1695,12 @@ export function SidePanel({
                           onClick={() => notificationStore.clearAll()}
                         >
                           {t('common:clear')}
+                        </button>
+                        <button
+                          className="text-[length:var(--fs-xxs)] text-text-400 hover:text-text-200 px-1.5 py-0.5 rounded-md hover:bg-bg-200 transition-all duration-150 active:scale-95"
+                          onClick={() => notificationStore.dedupeBySession()}
+                        >
+                          {t('sidebar.dedupe')}
                         </button>
                       </div>
                     </div>
