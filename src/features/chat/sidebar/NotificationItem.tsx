@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { CheckIcon, AlertCircleIcon, CloseIcon, HandIcon, QuestionIcon } from '../../../components/Icons'
-import { notificationStore } from '../../../store/notificationStore'
+import { isSettleableEntry, notificationStore } from '../../../store/notificationStore'
 import { useInputCapabilities } from '../../../hooks/useInputCapabilities'
 import { formatNotificationTime } from './sidebarUtils'
 import type { NotificationEntry } from '../../../store/notificationStore'
@@ -31,7 +31,10 @@ interface NotificationItemProps {
 export function NotificationItem({ entry, resolvedSession, onSelect }: NotificationItemProps) {
   const { t } = useTranslation(['chat', 'common'])
   const { preferTouchUi } = useInputCapabilities()
-  const displayTitle = resolvedSession?.title || entry.title || entry.sessionId.slice(0, 12) + '...'
+  // 未固化（占位）标题让位给会话当前真标题；数据层 settle 后 entry.title 锁定，不再随 lookup 抖动
+  const displayTitle = isSettleableEntry(entry)
+    ? resolvedSession?.title || entry.title || entry.sessionId.slice(0, 12) + '...'
+    : entry.title
   const directory = resolvedSession?.directory || entry.directory
   const [showActions, setShowActions] = useState(false)
   const [hasFocusWithin, setHasFocusWithin] = useState(false)

@@ -9,6 +9,7 @@
 // 由 useGlobalEvents 统一推送，不再由 activeSessionStore 管通知
 
 import { useSyncExternalStore } from 'react'
+import { sessionKeyToSessionId } from '../utils/sessionKey'
 
 // ============================================
 // Types
@@ -56,6 +57,38 @@ const EXIT_ANIMATION_MS = 200
 const STORAGE_KEY = 'opencode:notifications'
 const TOAST_ENABLED_KEY = 'opencode:toast-enabled'
 const MAX_NOTIFICATIONS = 50
+
+// 各类型通知的标题组合后缀（与 useGlobalEvents push 调用处的既有组合格式一致）
+const TITLE_SUFFIX: Record<NotificationType, string> = {
+  completed: '',
+  error: '',
+  permission: ' — Permission',
+  question: ' — Question',
+}
+
+// 后端默认初始标题（会话创建时生成、后续被总结标题替换），视为“未固化”占位标题
+const PLACEHOLDER_TITLE_PATTERN = /^New session - \d{4}-\d{2}-\d{2}T/
+
+// ============================================
+// 占位标题判定（固化语义）
+// ============================================
+
+/** 占位标题：空值或后端 “New session” 初始标题 */
+export function isSessionTitlePlaceholder(title?: string): boolean {
+  if (!title) return true
+  return PLACEHOLDER_TITLE_PATTERN.test(title)
+}
+
+/**
+ * entry.title 是“未固化”占位（空 / New session 初始标题 / 原始会话 ID 截断含组合后缀形式），
+ * 可被 settleSessionTitles 升级为真标题；已固化真标题的条目返回 false
+ */
+export function isSettleableEntry(entry: NotificationEntry): boolean {
+  if (isSessionTitlePlaceholder(entry.title)) return true
+  const rawId8 = sessionKeyToSessionId(entry.sessionId).slice(0, 8)
+  if (!rawId8) return false
+  return entry.title === rawId8 + TITLE_SUFFIX[entry.type]
+}
 
 // ============================================
 // localStorage helpers
@@ -241,6 +274,24 @@ class NotificationStore {
     this.persist()
     this.notify()
     return removed
+  }
+
+  /**
+   * 把指定会话“未固化”的占位标题落实为最新真标题（幂等：已固化条目不再覆盖）。
+   * 由 SSE session.created / session.updated 触发；真标题是历史记录，固化后不再变化
+   */
+  settleSessionTitles(sessionId: string, sessionTitle?: string): void {
+    if (!sessionId || isSessionTitlePlaceholder(sessionTitle)) return
+    let changed = false
+    const notifications = this.state.notifications.map(n => {
+      if (n.sessionId !== sessionId || !isSettleableEntry(n)) return n
+      changed = true
+      return { ...n, title: sessionTitle + TITLE_SUFFIX[n.type] }
+    })
+    if (!changed) return
+    this.state = { ...this.state, notifications }
+    this.persist()
+    this.notify()
   }
 
   // ============================================

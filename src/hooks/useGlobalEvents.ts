@@ -580,6 +580,8 @@ export function useGlobalEvents(directories?: string[]) {
 
           // 更新 session meta 供 active tab 使用
           activeSessionStore.setSessionMeta(scopedId, session.title, session.directory)
+          // 真标题到达：固化通知历史中的占位标题（幂等，仅覆盖未固化条目）
+          notificationStore.settleSessionTitles(scopedId, session.title)
 
           // 清理过期缓存
           cleanupExpired(pendingPermissions)
@@ -644,6 +646,8 @@ export function useGlobalEvents(directories?: string[]) {
           const scopedId = scope(session.id)
           // 更新 session meta 供 active tab 使用
           activeSessionStore.setSessionMeta(scopedId, session.title, session.directory)
+          // 真标题到达：固化通知历史中的占位标题（幂等，仅覆盖未固化条目）
+          notificationStore.settleSessionTitles(scopedId, session.title)
           if (session.parentID) {
             childSessionStore.registerChildSession(session, serverId)
           }

@@ -14,6 +14,14 @@ vi.mock('../../../store/notificationStore', () => ({
     markRead: markReadMock,
     dismiss: dismissMock,
   },
+  // 与 store 内逻辑一致的占位判定：空 / "New session" 初始标题 / 原始 ID 截断（含类型后缀）
+  isSettleableEntry: (entry: NotificationEntry) => {
+    if (!entry.title || /^New session - \d{4}-\d{2}-\d{2}T/.test(entry.title)) return true
+    const rawId8 = (entry.sessionId.includes('::') ? entry.sessionId.slice(entry.sessionId.indexOf('::') + 2) : entry.sessionId).slice(0, 8)
+    if (!rawId8) return false
+    const suffix = entry.type === 'permission' ? ' — Permission' : entry.type === 'question' ? ' — Question' : ''
+    return entry.title === rawId8 + suffix
+  },
 }))
 
 vi.mock('../../../hooks/useInputCapabilities', () => ({
@@ -69,5 +77,20 @@ describe('NotificationItem', () => {
 
     expect(markReadMock).toHaveBeenCalledWith('notif-1')
     expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ id: 'session-1' }))
+  })
+
+  it('shows the resolved session title while the entry title is still a placeholder', () => {
+    const onSelect = vi.fn()
+    const placeholderEntry = { ...entry, title: 'New session - 2026-11-25T02:09:10.229Z' }
+    render(
+      <NotificationItem
+        entry={placeholderEntry}
+        resolvedSession={{ ...resolvedSession, title: 'Fix login bug' }}
+        onSelect={onSelect}
+      />,
+    )
+
+    expect(screen.getByText('Fix login bug')).toBeInTheDocument()
+    expect(screen.queryByText('New session - 2026-11-25T02:09:10.229Z')).not.toBeInTheDocument()
   })
 })

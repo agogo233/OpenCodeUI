@@ -16,8 +16,8 @@ export function ActiveSessionItem({ entry, resolvedSession, isSelected, onSelect
   const { t } = useTranslation(['chat', 'common'])
   const isRetry = entry.status.type === 'retry'
   const pending = entry.pendingAction
-  // 标题优先从 resolvedSession 取，然后 fallback 到 entry.title（sessionMeta），最后截取 ID
-  const displayTitle = resolvedSession?.title || entry.title || entry.sessionId.slice(0, 12) + '...'
+  // SSE session meta 比列表 API 新：优先 meta 标题，lookup 仅作兜底（消除新旧标题回退交替）
+  const displayTitle = entry.title || resolvedSession?.title || entry.sessionId.slice(0, 12) + '...'
   // 目录优先从 resolvedSession 取
   const directory = resolvedSession?.directory || entry.directory
 

@@ -20,6 +20,7 @@ const {
   getFocusedSessionIdMock,
   getSessionAndDescendantsMock,
   notificationPushMock,
+  notificationSettleMock,
   playNotificationSoundDedupedMock,
   getSoundSnapshotMock,
   isSystemEnabledMock,
@@ -64,6 +65,7 @@ const {
   getFocusedSessionIdMock: vi.fn<() => string | null>(() => null),
   getSessionAndDescendantsMock: vi.fn((sessionId: string) => [sessionId]),
   notificationPushMock: vi.fn(),
+  notificationSettleMock: vi.fn(),
   playNotificationSoundDedupedMock: vi.fn(),
   isSystemEnabledMock: vi.fn((type: string) => type !== 'permission'),
   applyServerConnectedTimestampMock: vi.fn(),
@@ -186,6 +188,7 @@ vi.mock('../store/activeSessionStore', () => ({
 vi.mock('../store/notificationStore', () => ({
   notificationStore: {
     push: notificationPushMock,
+    settleSessionTitles: notificationSettleMock,
   },
 }))
 
@@ -224,6 +227,7 @@ describe('useGlobalEvents', () => {
     getFocusedSessionIdMock.mockReset()
     getSessionAndDescendantsMock.mockReset()
     notificationPushMock.mockReset()
+    notificationSettleMock.mockReset()
     playNotificationSoundDedupedMock.mockReset()
     getSoundSnapshotMock.mockReset()
     isSystemEnabledMock.mockReset()
@@ -615,8 +619,29 @@ describe('useGlobalEvents', () => {
     expect(consumerAskedMock).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'question-2', sessionID: 'local::child-session' }),
     )
+    expect(notificationSettleMock).toHaveBeenCalledWith('local::child-session', 'Child Session')
 
     unregister()
+  })
+
+  it('settles notification placeholder titles when session.updated arrives with a real title', async () => {
+    let callbacks: Parameters<typeof subscribeToEventsMock>[0] | undefined
+    subscribeToEventsMock.mockImplementation(cb => {
+      callbacks = cb
+      return vi.fn()
+    })
+
+    renderHook(() => useGlobalEvents())
+
+    await waitFor(() => expect(callbacks).toBeDefined())
+
+    callbacks!.onSessionUpdated?.({
+      id: 'background-session',
+      title: 'Fix login bug',
+      directory: '/workspace',
+    } as never)
+
+    expect(notificationSettleMock).toHaveBeenCalledWith('local::background-session', 'Fix login bug')
   })
 
   it('approves already waiting permissions when global full auto pending sweep is enabled', async () => {
